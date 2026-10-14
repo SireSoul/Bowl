@@ -9,8 +9,7 @@ archetype ECS, hot reload of assets and shaders, and in-game dev tools.
 ## Status
 
 Early but real: everything below builds, is tested, and runs (verified on macOS/Metal). CI builds and tests on
-Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md) for what's next and [docs/vs-halley.md](docs/vs-halley.md)
-for an honest comparison with Halley.
+Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md) for what's next.
 
 | Module | What it does |
 | --- | --- |
@@ -95,5 +94,4 @@ ph_add_game(my_game ASSETS assets)
 ## Docs
 
 - [docs/architecture.md](docs/architecture.md): how the pieces fit, and the rules (threading, determinism, assets)
-- [docs/vs-halley.md](docs/vs-halley.md): feature-by-feature comparison
 - [docs/roadmap.md](docs/roadmap.md): what's next
