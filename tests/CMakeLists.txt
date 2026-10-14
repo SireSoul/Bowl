@@ -7,12 +7,13 @@ add_executable(ph_tests
     test_jobs.cpp
     test_math.cpp
     test_schedule.cpp
-    test_shaderc.cpp)
-target_link_libraries(ph_tests PRIVATE ph_core ph_ecs ph_platform ph_audio doctest::doctest)
+    test_shaderc.cpp
+    test_text.cpp)
+target_link_libraries(ph_tests PRIVATE ph_core ph_ecs ph_platform ph_gfx ph_audio doctest::doctest)
+target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}")
 if(TARGET ph_shaderc)
     target_link_libraries(ph_tests PRIVATE ph_shaderc)
-    target_compile_definitions(ph_tests PRIVATE PH_TEST_SHADERC=1
-        PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}")
+    target_compile_definitions(ph_tests PRIVATE PH_TEST_SHADERC=1)
 endif()
 ph_configure_target(ph_tests)
 # doctest's own std forward declarations break on recent MSVC STLs.

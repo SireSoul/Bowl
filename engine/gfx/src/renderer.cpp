@@ -30,7 +30,8 @@ bool Renderer::init(GpuDevice& device, AssetManager& assets) {
     linear_ = SDL_CreateGPUSampler(device.handle(), &s);
 
     const u8 white[4] = {255, 255, 255, 255};
-    white_ = device.create_texture({1, 1, white, true, Filter::Nearest, "white"});
+    white_ = device.create_texture({.width = 1, .height = 1, .rgba8 = white, .premultiplied = true,
+                                    .filter = Filter::Nearest, .name = "white"});
 
     if (!nearest_ || !linear_ || !white_) {
         error("renderer: failed to create samplers/textures: {}", SDL_GetError());

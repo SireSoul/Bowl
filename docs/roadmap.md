@@ -4,7 +4,8 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 
 ## M1: make a game with it (content basics)
 - Texture atlases and sprite sheets: a packer in `tools/`, animated sprites (frame timing, events)
-- Text: TTF fonts via SDF glyph atlases, a `draw_text` on the sprite batch, UTF-8, outlines
+- ~~Text: TTF fonts, `draw_text`, UTF-8, kerning, wrapping, alignment~~ (done). Still to do: outlines/shadows, SDF for
+  smoothly scaling text, font fallback chains for CJK/emoji, rich text markup
 - Tilemaps: Tiled (`.tmx`) import, chunked rendering, collision layers
 - Audio formats: OGG Vorbis/Opus streaming for music, crossfades, per-bus effects (low-pass, reverb)
 - Collision/physics: shapes, broadphase grid, overlap queries as ECS systems

@@ -29,6 +29,8 @@ DevTools::DevTools(Engine& engine) : engine_(engine) {
     style.FontScaleDpi = scale;
     style.WindowRounding = 6;
     style.FrameRounding = 4;
+    if (auto font = engine.assets().resolve("engine/fonts/Roboto-Medium.ttf"))
+        io.Fonts->AddFontFromFileTTF(font->string().c_str(), 15.0f);
 
     ImGui_ImplSDL3_InitForSDLGPU(engine.window().handle());
     ImGui_ImplSDLGPU3_InitInfo init{};

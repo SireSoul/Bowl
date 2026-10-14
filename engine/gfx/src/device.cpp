@@ -77,7 +77,7 @@ std::unique_ptr<Texture> GpuDevice::create_texture(const TextureDesc& desc) {
         error("gpu: texture '{}' has no pixels", desc.name);
         return nullptr;
     }
-    bool mips = desc.filter == Filter::Linear && std::max(desc.width, desc.height) > 1;
+    bool mips = desc.filter == Filter::Linear && desc.mipmaps && std::max(desc.width, desc.height) > 1;
     u32 levels = mips ? static_cast<u32>(std::bit_width(std::max(desc.width, desc.height))) : 1;
 
     SDL_GPUTextureCreateInfo info{};
@@ -94,15 +94,34 @@ std::unique_ptr<Texture> GpuDevice::create_texture(const TextureDesc& desc) {
         return nullptr;
     }
     if (!desc.name.empty()) SDL_SetGPUTextureName(device_, texture, std::string(desc.name).c_str());
+    upload_pixels(texture, desc.width, desc.height, desc.rgba8, desc.premultiplied, mips);
 
-    u32 bytes = desc.width * desc.height * 4;
+    auto t = std::unique_ptr<Texture>(new Texture());
+    t->device_ = this;
+    t->texture_ = texture;
+    t->width_ = desc.width;
+    t->height_ = desc.height;
+    t->filter_ = desc.filter;
+    t->mipmapped_ = mips;
+    t->id_ = next_texture_id.fetch_add(1, std::memory_order_relaxed);
+    return t;
+}
+
+bool GpuDevice::update_texture(Texture& texture, const void* rgba8, bool premultiplied) {
+    return upload_pixels(texture.texture_, texture.width_, texture.height_, rgba8, premultiplied, texture.mipmapped_);
+}
+
+bool GpuDevice::upload_pixels(SDL_GPUTexture* texture, u32 width, u32 height, const void* rgba8, bool premultiplied,
+                              bool mips) {
+    u32 bytes = width * height * 4;
     SDL_GPUTransferBufferCreateInfo tinfo{SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, bytes, 0};
     SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_, &tinfo);
+    if (!transfer) return false;
     auto* dst = static_cast<u8*>(SDL_MapGPUTransferBuffer(device_, transfer, false));
-    if (desc.premultiplied) {
-        std::memcpy(dst, desc.rgba8, bytes);
+    if (premultiplied) {
+        std::memcpy(dst, rgba8, bytes);
     } else {
-        const auto* src = static_cast<const u8*>(desc.rgba8);
+        const auto* src = static_cast<const u8*>(rgba8);
         for (u32 i = 0; i < bytes; i += 4) {
             u32 a = src[i + 3];
             dst[i + 0] = static_cast<u8>((src[i + 0] * a + 127) / 255);
@@ -115,26 +134,18 @@ std::unique_ptr<Texture> GpuDevice::create_texture(const TextureDesc& desc) {
 
     SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
     SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
-    SDL_GPUTextureTransferInfo src_info{transfer, 0, desc.width, desc.height};
+    SDL_GPUTextureTransferInfo src_info{transfer, 0, width, height};
     SDL_GPUTextureRegion region{};
     region.texture = texture;
-    region.w = desc.width;
-    region.h = desc.height;
+    region.w = width;
+    region.h = height;
     region.d = 1;
     SDL_UploadToGPUTexture(copy, &src_info, &region, false);
     SDL_EndGPUCopyPass(copy);
     if (mips) SDL_GenerateMipmapsForGPUTexture(cmd, texture);
-    SDL_SubmitGPUCommandBuffer(cmd);
+    bool ok = SDL_SubmitGPUCommandBuffer(cmd);
     SDL_ReleaseGPUTransferBuffer(device_, transfer);
-
-    auto t = std::unique_ptr<Texture>(new Texture());
-    t->device_ = this;
-    t->texture_ = texture;
-    t->width_ = desc.width;
-    t->height_ = desc.height;
-    t->filter_ = desc.filter;
-    t->id_ = next_texture_id.fetch_add(1, std::memory_order_relaxed);
-    return t;
+    return ok;
 }
 
 std::unique_ptr<Shader> GpuDevice::create_shader(const ShaderBundle& bundle, std::string_view name) {

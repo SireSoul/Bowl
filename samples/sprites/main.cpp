@@ -8,12 +8,14 @@
 // Run with --frames N to quit after N frames (used for automated smoke runs).
 
 #include "ph/app/main.hpp"
+#include "ph/gfx/text.hpp"
 
 #if PH_DEV_TOOLS
 #include <imgui.h>
 #endif
 
 #include <cmath>
+#include <format>
 #include <vector>
 
 using namespace ph;
@@ -77,6 +79,7 @@ public:
         input.bind("up", {InputBinding::key(Key::W), InputBinding::key(Key::Up), InputBinding::axis(GamepadAxis::LeftY, -1)});
         input.bind("down", {InputBinding::key(Key::S), InputBinding::key(Key::Down), InputBinding::axis(GamepadAxis::LeftY, +1)});
 
+        font_ = engine.assets().load<gfx::Font>("engine/fonts/Roboto-Medium.ttf");
         ball_ = engine.assets().add("generated/ball", make_ball_texture(engine.gpu()));
         blip_ = engine.assets().add("generated/blip", make_blip());
 
@@ -143,6 +146,28 @@ public:
         const Rect& b = engine.world().resource<Arena>().bounds;
         batch_.draw_rect({b.x - 4, b.bottom(), b.w + 8, 4}, Color::hex(0x6b7cff), 1e9f);
         engine.renderer().submit(batch_);
+
+        // Screen-space HUD on its own camera, drawn after the world.
+        if (!font_) return;
+        Vec2 screen = engine.window().size();
+        ui_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None);
+        gfx::TextStyle title{.size = 28, .color = Color::white(), .raster_scale = engine.window().pixel_density()};
+        gfx::draw_text(ui_, *font_, "PLACEHOLDERENGINENAME", {24, 20}, title);
+        gfx::TextStyle body = title;
+        body.size = 16;
+        body.color = Color::hex(0xb8c0ff);
+        std::string stats = std::format("{} sprites  ·  {} draw calls  ·  tick {}", engine.world().query<const Look>().count(),
+                                        engine.renderer().stats().draw_calls, engine.tick());
+        gfx::draw_text(ui_, *font_, stats, {24, 58}, body);
+        gfx::TextStyle help = body;
+        help.align = gfx::TextAlign::Center;
+        help.max_width = 520;
+        help.color = Color::hex(0xffffff, 0.7f);
+        gfx::draw_text(ui_, *font_,
+                       "Hold the left mouse button (or A) to spawn sprites. WASD or the left stick moves the camera, "
+                       "the wheel zooms, C clears, F1 opens the dev overlay.",
+                       {screen.x * 0.5f, screen.y - 46}, help);
+        engine.renderer().submit(ui_);
     }
 
     void dev_ui(Engine& engine) override {
@@ -187,7 +212,7 @@ private:
                 p[0] = p[1] = p[2] = static_cast<u8>(150 + 105 * light);
                 p[3] = static_cast<u8>(a * 255);
             }
-        return gpu.create_texture({n, n, pixels.data(), false, gfx::Filter::Linear, "ball"});
+        return gpu.create_texture({.width = n, .height = n, .rgba8 = pixels.data(), .name = "ball"});
     }
 
     static std::unique_ptr<audio::Sound> make_blip() {
@@ -201,8 +226,9 @@ private:
     }
 
     Asset<gfx::Texture> ball_;
+    Asset<gfx::Font> font_;
     Asset<audio::Sound> blip_;
-    gfx::SpriteBatch batch_;
+    gfx::SpriteBatch batch_, ui_;
     int spawn_rate_ = 40;
     bool initialized_camera_ = false;
     static constexpr u32 palette_[] = {0xff5c8a, 0xffb84d, 0xffe066, 0x5cd6a9, 0x4dc3ff, 0x9d7bff};

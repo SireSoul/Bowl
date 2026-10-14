@@ -24,7 +24,8 @@ struct TextureDesc {
     u32 height = 0;
     const void* rgba8 = nullptr; // width*height*4 bytes, straight alpha unless premultiplied is set
     bool premultiplied = false;
-    Filter filter = Filter::Linear; // Linear also builds mipmaps
+    Filter filter = Filter::Linear;
+    bool mipmaps = true; // only with Linear filtering
     std::string_view name;
 };
 
@@ -46,6 +47,7 @@ private:
     SDL_GPUTexture* texture_ = nullptr;
     u32 width_ = 0, height_ = 0, id_ = 0;
     Filter filter_ = Filter::Linear;
+    bool mipmapped_ = false;
 };
 
 // One compiled shader stage on the GPU. Loaded as an asset from "<path>" -> "<path>.phsh" (or, in dev builds,
@@ -88,12 +90,16 @@ public:
     bool vsync() const { return vsync_; }
 
     std::unique_ptr<Texture> create_texture(const TextureDesc& desc);
+    // Replaces all pixels of a texture (same size), e.g. a growing glyph atlas. Rebuilds mipmaps if it has them.
+    bool update_texture(Texture& texture, const void* rgba8, bool premultiplied);
     std::unique_ptr<Shader> create_shader(const ShaderBundle& bundle, std::string_view name);
 
     // Uploads raw bytes into a buffer through a temporary transfer buffer, on its own command buffer.
     bool upload(SDL_GPUBuffer* buffer, const void* data, u32 size, u32 offset = 0);
 
 private:
+    bool upload_pixels(SDL_GPUTexture* texture, u32 width, u32 height, const void* rgba8, bool premultiplied, bool mips);
+
     SDL_GPUDevice* device_ = nullptr;
     SDL_Window* window_ = nullptr;
     std::string driver_;
@@ -101,7 +107,7 @@ private:
     bool vsync_ = true;
 };
 
-// Registers Texture (PNG/JPG/TGA/BMP via stb_image) and Shader loaders with the asset manager.
+// Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader and Font (.ttf/.otf) loaders with the asset manager.
 // default_filter: Nearest for pixel art, Linear (with mipmaps) for everything else.
 void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter default_filter = Filter::Linear);
 

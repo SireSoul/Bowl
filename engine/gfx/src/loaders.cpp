@@ -24,6 +24,7 @@
 
 #include "ph/core/file.hpp"
 #include "ph/gfx/renderer.hpp"
+#include "ph/gfx/text.hpp"
 
 #include <string>
 
@@ -109,6 +110,14 @@ void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter defa
     assets.register_loader<Shader>([&device](AssetLoadContext& ctx) { return load_shader(ctx, device); });
     assets.register_loader<Texture>(
         [&device, default_filter](AssetLoadContext& ctx) { return load_texture(ctx, device, default_filter); });
+    assets.register_loader<Font>([&device](AssetLoadContext& ctx) -> std::unique_ptr<Font> {
+        auto bytes = ctx.read(ctx.path());
+        if (!bytes) {
+            log_asset_error(ctx.path(), "Font", "file not found in any mount");
+            return nullptr;
+        }
+        return Font::from_memory(&device, std::move(*bytes), ctx.path());
+    });
 }
 
 } // namespace ph::gfx
