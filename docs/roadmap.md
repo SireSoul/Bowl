@@ -20,7 +20,7 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - ~~Serialization: JSON for reflected types, world save/load, prefabs, entity references remapped on load~~ (done).
   Still to do: prefab and scene *assets* (hot-reloaded files), binary format for big worlds, save-file migrations
 - ~~Entity inspector: select, edit fields live, duplicate, destroy, copy as JSON, save/load the world~~ (done)
-- Relationships: parent/child transforms
+- ~~Relationships: parent/child `Transform2D` hierarchy, cycle-safe reparenting, recursive destroy~~ (done)
 
 ## M3: look great
 - Post-processing chain on the off-screen scene target: bloom, color grading, vignette

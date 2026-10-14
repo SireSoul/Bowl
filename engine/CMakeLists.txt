@@ -37,6 +37,7 @@ ph_module(core
 ph_module(ecs
     SOURCES
         ecs/src/archetype.cpp
+        ecs/src/hierarchy.cpp
         ecs/src/schedule.cpp
         ecs/src/world.cpp
         ecs/src/world_io.cpp

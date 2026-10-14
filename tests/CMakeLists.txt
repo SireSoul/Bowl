@@ -4,6 +4,7 @@ add_executable(ph_tests
     test_audio.cpp
     test_collision.cpp
     test_ecs.cpp
+    test_hierarchy.cpp
     test_input.cpp
     test_jobs.cpp
     test_json.cpp
