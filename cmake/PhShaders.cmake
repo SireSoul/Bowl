@@ -43,12 +43,30 @@ endfunction()
 #   <exe dir>/engine/...  engine assets (compiled shaders)
 #   <exe dir>/assets/...  the game's assets, with its shaders compiled
 # Dev builds read assets straight from the source folders instead, so edits hot-reload.
+# With PH_MACOS_BUNDLES (on in the release preset) a macOS game is a .app with these folders in Contents/Resources.
+# `cmake --install <build dir> --prefix <folder>` lays out a shippable copy of every game.
+#   BUNDLE_ID com.example.game   macOS bundle identifier (default: com.placeholderenginename.<target>)
 function(ph_add_game target)
-    cmake_parse_arguments(ARG "" "ASSETS" "" ${ARGN})
+    cmake_parse_arguments(ARG "" "ASSETS;BUNDLE_ID" "" ${ARGN})
     target_link_libraries(${target} PRIVATE ph::engine)
     ph_configure_target(${target})
 
-    set(dest "$<TARGET_FILE_DIR:${target}>")
+    set(bundle OFF)
+    if(APPLE AND NOT IOS AND PH_MACOS_BUNDLES)
+        set(bundle ON)
+        if(NOT ARG_BUNDLE_ID)
+            string(TOLOWER "com.placeholderenginename.${target}" ARG_BUNDLE_ID)
+        endif()
+        set_target_properties(${target} PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_BUNDLE_NAME "${target}"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "${ARG_BUNDLE_ID}"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}")
+        set(dest "$<TARGET_BUNDLE_CONTENT_DIR:${target}>/Resources")
+    else()
+        set(dest "$<TARGET_FILE_DIR:${target}>")
+    endif()
     set(commands
         COMMAND ${CMAKE_COMMAND} -E make_directory "${PH_ENGINE_ASSET_BUILD_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${PH_ENGINE_ASSET_SOURCE_DIR}" "${dest}/engine"
@@ -69,4 +87,15 @@ function(ph_add_game target)
     add_dependencies(${target}_assets ph_engine_assets)
     add_dependencies(${target} ${target}_assets)
     set_target_properties(${target}_assets PROPERTIES FOLDER assets)
+
+    # Install: the executable (or .app) plus its asset folders, ready to zip and ship.
+    if(bundle)
+        install(TARGETS ${target} BUNDLE DESTINATION .)
+    else()
+        install(TARGETS ${target} RUNTIME DESTINATION ${target})
+        install(DIRECTORY "${dest}/engine" DESTINATION ${target})
+        if(ARG_ASSETS)
+            install(DIRECTORY "${dest}/assets" DESTINATION ${target})
+        endif()
+    endif()
 endfunction()

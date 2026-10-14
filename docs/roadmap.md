@@ -39,7 +39,8 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - Tracy profiler integration (GPU + CPU timelines)
 
 ## M5: everywhere
-- Packaging: macOS .app, Windows installer, Linux AppImage/Flatpak, Steam Deck checks
+- ~~Packaging: release builds with static SDL, macOS .app bundles, `cmake --install` layouts~~ (done). Still to do:
+  app icons, code signing + notarization, Windows installer, Linux AppImage/Flatpak, Steam Deck checks
 - iOS and Android projects (SDL3 already supports them; needs bundle and asset packaging)
 - Web build (Emscripten + WebGPU once SDL_GPU supports it)
 - Consoles through SDL's console ports (needs developer agreements)

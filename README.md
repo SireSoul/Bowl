@@ -53,7 +53,14 @@ Samples: `sprites` (ECS stress test, text HUD, animation, audio) and `isometric`
 around).
 
 Presets: `dev` (optimized + debug info + dev tools, the day-to-day build), `debug`, `release` (shipping: no dev tools,
-precompiled shaders only).
+precompiled shaders, SDL linked statically, `.app` bundles on macOS).
+
+To ship, build `release` and install it into a folder. Every game lands there as a self-contained `.app` (macOS) or
+an executable with its `engine/` and `assets/` folders (Windows, Linux):
+
+```bash
+cmake --install build/release --prefix dist
+```
 
 Command-line flags for any game: `--frames N` (quit after N frames), `--screenshot out.png` (what's on screen, overlay
 included), `--overlay` (open the dev overlay at startup), `--no-vsync`, `--driver vulkan|metal|direct3d12`.

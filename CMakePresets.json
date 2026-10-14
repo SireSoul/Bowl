@@ -22,9 +22,14 @@
     },
     {
       "name": "release",
-      "displayName": "Release (shipping: no dev tools, precompiled shaders only)",
+      "displayName": "Release (shipping: no dev tools, precompiled shaders, static SDL, macOS .app bundles)",
       "inherits": "base",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "PH_DEV_TOOLS": "OFF" }
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PH_DEV_TOOLS": "OFF",
+        "PH_FETCH_SDL": "ON",
+        "PH_MACOS_BUNDLES": "ON"
+      }
     }
   ],
   "buildPresets": [
