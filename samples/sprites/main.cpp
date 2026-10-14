@@ -8,6 +8,7 @@
 // Run with --frames N to quit after N frames (used for automated smoke runs).
 
 #include "ph/app/main.hpp"
+#include "ph/gfx/sprite_sheet.hpp"
 #include "ph/gfx/text.hpp"
 
 #if PH_DEV_TOOLS
@@ -40,6 +41,9 @@ struct Look {
 };
 struct Lifetime {
     f32 seconds = 0;
+};
+struct Banner {
+    int slot = 0; // position in the row of animated sprites
 };
 
 // --- resources -------------------------------------------------------------------------------------------------------
@@ -106,6 +110,22 @@ public:
         });
 
         spawn(engine, {0, 0}, 2000);
+
+        // Animated sprites: a procedural 8-frame sheet, stepped by a parallel system in the frame schedule.
+        auto sheet = std::make_unique<gfx::SpriteSheet>(
+            gfx::SpriteSheet::grid(engine.assets().add("generated/spinner", make_spinner_texture(engine.gpu())), 64,
+                                   64, 8, 0.07f));
+        sheet->animations.push_back({"bounce", 0, 7, gfx::SpriteAnimation::Direction::PingPong});
+        spinner_ = engine.assets().add("generated/spinner.sheet", std::move(sheet));
+        for (int i = 0; i < 5; ++i) {
+            gfx::SpriteAnimator anim;
+            anim.sheet = spinner_;
+            anim.play(i % 2 ? "bounce" : "default");
+            anim.speed = 0.6f + 0.2f * static_cast<f32>(i);
+            engine.world().create(Banner{i}, anim);
+        }
+        engine.frame_schedule().par_each<gfx::SpriteAnimator>(
+            "animate", [](SystemContext& ctx, Entity, gfx::SpriteAnimator& a) { a.update(ctx.dt); });
     }
 
     void fixed_update(Engine& engine, f32) override {
@@ -159,6 +179,11 @@ public:
         std::string stats = std::format("{} sprites  ·  {} draw calls  ·  tick {}", engine.world().query<const Look>().count(),
                                         engine.renderer().stats().draw_calls, engine.tick());
         gfx::draw_text(ui_, *font_, stats, {24, 58}, body);
+        engine.world().each<const Banner, const gfx::SpriteAnimator>([&](const Banner& b, const gfx::SpriteAnimator& a) {
+            Vec2 at{screen.x - 340 + 64.0f * static_cast<f32>(b.slot), 48};
+            Vec2 scale = b.slot == 4 ? Vec2{-0.8f, 0.8f} : Vec2{0.8f, 0.8f}; // the last one is mirrored
+            gfx::draw_frame(ui_, *a.sheet, a.frame, at, scale);
+        });
         gfx::TextStyle help = body;
         help.align = gfx::TextAlign::Center;
         help.max_width = 520;
@@ -215,6 +240,27 @@ private:
         return gpu.create_texture({.width = n, .height = n, .rgba8 = pixels.data(), .name = "ball"});
     }
 
+    // Eight 64x64 frames of a three-armed pinwheel turning, in one 512x64 strip.
+    static std::unique_ptr<gfx::Texture> make_spinner_texture(gfx::GpuDevice& gpu) {
+        constexpr u32 cell = 64, frames = 8, w = cell * frames;
+        std::vector<u8> pixels(w * cell * 4, 0);
+        for (u32 f = 0; f < frames; ++f)
+            for (u32 y = 0; y < cell; ++y)
+                for (u32 x = 0; x < cell; ++x) {
+                    f32 dx = (static_cast<f32>(x) + 0.5f) / cell * 2 - 1, dy = (static_cast<f32>(y) + 0.5f) / cell * 2 - 1;
+                    f32 r = std::sqrt(dx * dx + dy * dy);
+                    f32 angle = std::atan2(dy, dx) - tau * static_cast<f32>(f) / (frames * 3);
+                    f32 arm = 0.5f + 0.5f * std::cos(angle * 3);
+                    f32 a = saturate((0.9f - r) * 20) * saturate((arm - 0.55f) * 6 + (0.25f - r) * 8);
+                    u8* p = &pixels[(y * w + f * cell + x) * 4];
+                    p[0] = static_cast<u8>(255 * saturate(0.6f + 0.4f * dx));
+                    p[1] = static_cast<u8>(255 * saturate(0.5f + 0.5f * r));
+                    p[2] = 255;
+                    p[3] = static_cast<u8>(a * 255);
+                }
+        return gpu.create_texture({.width = w, .height = cell, .rgba8 = pixels.data(), .name = "spinner"});
+    }
+
     static std::unique_ptr<audio::Sound> make_blip() {
         std::vector<f32> mono(static_cast<usize>(audio::Sound::sample_rate * 0.08f));
         for (usize i = 0; i < mono.size(); ++i) {
@@ -227,6 +273,7 @@ private:
 
     Asset<gfx::Texture> ball_;
     Asset<gfx::Font> font_;
+    Asset<gfx::SpriteSheet> spinner_;
     Asset<audio::Sound> blip_;
     gfx::SpriteBatch batch_, ui_;
     int spawn_rate_ = 40;

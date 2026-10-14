@@ -51,6 +51,7 @@ ph_module(gfx
         gfx/src/device.cpp
         gfx/src/loaders.cpp
         gfx/src/renderer.cpp
+        gfx/src/sprite_sheet.cpp
         gfx/src/sprites.cpp
         gfx/src/text.cpp
     PUBLIC_DEPS ph_core SDL3::SDL3
