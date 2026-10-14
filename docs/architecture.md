@@ -2,16 +2,18 @@
 
 ```
 engine/
-  core/      no SDL. types, math, log, assert, jobs, profiler, file watcher, assets, shader bundle format
+  core/      no SDL. types, math, log, assert, jobs, profiler, file watcher, assets, JSON, UTF-8, shader bundles
   ecs/       World, Archetype, Query, CommandBuffer, Schedule              (core)
   platform/  Window, Input                                                  (core, SDL3)
-  gfx/       GpuDevice, Texture, Shader, SpriteBatch, Camera2D, Renderer    (core, SDL3, stb)
-  audio/     AudioEngine, Sound                                             (core, SDL3)
+  gfx/       GpuDevice, Texture, Shader, SpriteBatch, Camera2D, Renderer,   (core, SDL3, stb)
+             Font + draw_text, SpriteSheet + SpriteAnimator, Tilemap
+  audio/     AudioEngine, Sound, Music (streamed OGG)                       (core, SDL3, stb)
+  physics/   collision shapes, sweeps, raycasts, SpatialHash, move_and_slide (core)
   app/       Engine, Game, main loop, DevTools                              (all)
-  assets/    engine assets (shaders), mounted as "engine/"
+  assets/    engine assets (shaders, the Roboto font), mounted as "engine/"
 tools/shaderc  GLSL -> .phsh compiler (library + CLI)
-samples/       example games
-tests/         doctest unit tests + ECS benchmark
+samples/       sprites (ECS stress test, HUD, animation), isometric (y-sorted map, collision)
+tests/         doctest unit tests (+ data/ fixtures) and an ECS benchmark
 ```
 
 Each module is a static library with a public `include/ph/<module>/` folder. `ph::engine` links everything.
@@ -96,6 +98,18 @@ and on every save.
 folders before the build output, so edits hot-reload. `Asset<T>` handles are shared: a reload swaps the value in place
 and bumps `version()`. A failed reload keeps the old value. Loaders read through `AssetLoadContext`, which records every
 file touched (including shader `#include`s) as a reload trigger. Assets made in code go through `assets.add(path, ptr)`.
+
+Built-in asset types:
+
+| Type | Files | Notes |
+| --- | --- | --- |
+| `gfx::Texture` | .png .jpg .tga .bmp | premultiplied on load; mipmapped unless the game is pixel art |
+| `gfx::Shader` | .vert/.frag (.glsl or .phsh) | load by path without extension |
+| `gfx::Font` | .ttf .otf | glyphs rasterized on demand |
+| `gfx::SpriteSheet` | Aseprite .json | loads its PNG too |
+| `gfx::Tilemap` | Tiled .tmj (+ .tsj) | loads tileset and image-layer PNGs too; edits to the map, its tilesets or images hot-reload |
+| `audio::Sound` | .wav .ogg | fully decoded, for effects |
+| `audio::Music` | .ogg | streamed |
 
 At runtime, `ph_add_game(target ASSETS dir)` lays out next to the executable:
 
