@@ -15,6 +15,8 @@ if(TARGET ph_shaderc)
         PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}")
 endif()
 ph_configure_target(ph_tests)
+# doctest's own std forward declarations break on recent MSVC STLs.
+target_compile_definitions(ph_tests PRIVATE DOCTEST_CONFIG_USE_STD_HEADERS)
 set_target_properties(ph_tests PROPERTIES FOLDER tests)
 add_test(NAME ph_tests COMMAND ph_tests)
 

@@ -24,7 +24,7 @@ for an honest comparison with Halley.
 
 ## Build
 
-Needs CMake 3.24+ and a C++20 compiler (MSVC 2022, Clang 16+, GCC 13+). Every other dependency is downloaded at a
+Needs CMake 3.25+ and a C++20 compiler (MSVC 2022, Clang 16+, GCC 13+). Every other dependency is downloaded at a
 pinned version with a checked SHA-256. An installed SDL3 is used if present; otherwise it's built from source.
 
 ```bash

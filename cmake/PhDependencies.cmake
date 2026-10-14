@@ -6,8 +6,9 @@ set(FETCHCONTENT_QUIET ON)
 # Some dependencies still declare ancient cmake_minimum_required versions that CMake 4 refuses.
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
+# SYSTEM: third-party headers never trip our warning flags (-Wshadow etc. with -Werror on CI).
 function(ph_fetch name url sha256)
-    FetchContent_Declare(${name} URL ${url} URL_HASH SHA256=${sha256} DOWNLOAD_EXTRACT_TIMESTAMP TRUE ${ARGN})
+    FetchContent_Declare(${name} URL ${url} URL_HASH SHA256=${sha256} DOWNLOAD_EXTRACT_TIMESTAMP TRUE SYSTEM ${ARGN})
 endfunction()
 
 # --- SDL3: window, input, audio, GPU (Vulkan / Metal / D3D12), filesystem, threads ----------------------------------
