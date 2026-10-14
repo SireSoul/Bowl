@@ -52,6 +52,25 @@ TEST_CASE("shaderc: the sprite fragment shader") {
     CHECK(r.bundle.uniform_buffers == 0);
 }
 
+TEST_CASE("shaderc: HLSL for D3D12 uses SDL's register spaces") {
+    auto vs = compile_engine_shader("sprite.vert.glsl");
+    REQUIRE(vs.ok);
+    const auto* v = vs.bundle.find(ShaderBlobFormat::Hlsl);
+    REQUIRE(v);
+    std::string vsrc(v->code.begin(), v->code.end());
+    CHECK(vsrc.find("register(t0, space0)") != std::string::npos); // sprite storage buffer
+    CHECK(vsrc.find("register(b0, space1)") != std::string::npos); // camera uniforms
+
+    auto fs = compile_engine_shader("post/final.frag.glsl");
+    REQUIRE(fs.ok);
+    CHECK(fs.bundle.samplers == 3);
+    const auto* f = fs.bundle.find(ShaderBlobFormat::Hlsl);
+    REQUIRE(f);
+    std::string fsrc(f->code.begin(), f->code.end());
+    for (const char* reg : {"register(t0, space2)", "register(t2, space2)", "register(s2, space2)", "register(b0, space3)"})
+        CHECK(fsrc.find(reg) != std::string::npos);
+}
+
 TEST_CASE("shaderc: errors are reported, not thrown") {
     shaderc::CompileOptions options;
     options.name = "broken.frag.glsl";

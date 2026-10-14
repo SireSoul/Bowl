@@ -10,7 +10,7 @@ add_library(ph::shaderc ALIAS ph_shaderc)
 target_include_directories(ph_shaderc PUBLIC include)
 target_link_libraries(ph_shaderc
     PUBLIC ph_core
-    PRIVATE glslang glslang-default-resource-limits spirv-cross-msl spirv-cross-glsl spirv-cross-core)
+    PRIVATE glslang glslang-default-resource-limits spirv-cross-msl spirv-cross-hlsl spirv-cross-glsl spirv-cross-core)
 ph_configure_target(ph_shaderc)
 set_target_properties(ph_shaderc PROPERTIES FOLDER tools)
 

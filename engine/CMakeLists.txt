@@ -64,6 +64,9 @@ if(PH_DEV_TOOLS)
     target_link_libraries(ph_gfx PRIVATE ph_shaderc)
     target_compile_definitions(ph_gfx PRIVATE PH_RUNTIME_SHADER_COMPILER=1)
 endif()
+if(WIN32)
+    target_link_libraries(ph_gfx PRIVATE d3dcompiler) # HLSL -> DXBC for the D3D12 backend
+endif()
 
 ph_module(audio
     SOURCES

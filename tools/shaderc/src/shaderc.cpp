@@ -5,6 +5,7 @@
 #include <SPIRV/GlslangToSpv.h>
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
+#include <spirv_hlsl.hpp>
 #include <spirv_msl.hpp>
 
 #include <algorithm>
@@ -194,6 +195,37 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
         bundle.blobs.push_back(std::move(msl_blob));
     } catch (const std::exception& e) {
         result.log += std::format("{}: SPIR-V -> MSL failed: {}\n", options.name, e.what());
+        return result;
+    }
+
+    // --- SPIR-V -> HLSL (Shader Model 5.1) for D3D12, in SDL_GPU's register layout ---------------------------------
+    // t[n]/s[n] in the resource set's space, b[n] in the uniform set's space; storage textures and buffers follow the
+    // sampled textures in t[]. Descriptor set numbers already equal SDL's spaces.
+    try {
+        spirv_cross::CompilerHLSL hlsl(spirv);
+        spirv_cross::CompilerHLSL::Options hlsl_options;
+        hlsl_options.shader_model = 51;
+        hlsl.set_hlsl_options(hlsl_options);
+        auto hbind = [&](const Resource& r, bool cbv, u32 reg) {
+            spirv_cross::HLSLResourceBinding b;
+            b.stage = model;
+            b.desc_set = r.set;
+            b.binding = r.binding;
+            if (cbv) b.cbv = {r.set, reg};
+            else b.srv = b.sampler = {r.set, reg};
+            hlsl.add_hlsl_resource_binding(b);
+        };
+        for (u32 i = 0; i < sampled.size(); ++i) hbind(sampled[i], false, i);
+        for (u32 i = 0; i < storage_images.size(); ++i) hbind(storage_images[i], false, bundle.samplers + i);
+        for (u32 i = 0; i < storage_buffers.size(); ++i)
+            hbind(storage_buffers[i], false, bundle.samplers + bundle.storage_textures + i);
+        for (u32 i = 0; i < uniforms.size(); ++i) hbind(uniforms[i], true, i);
+        std::string hlsl_source = hlsl.compile();
+        ShaderBundle::Blob hlsl_blob{ShaderBlobFormat::Hlsl, "main", {}};
+        hlsl_blob.code.assign(hlsl_source.begin(), hlsl_source.end());
+        bundle.blobs.push_back(std::move(hlsl_blob));
+    } catch (const std::exception& e) {
+        result.log += std::format("{}: SPIR-V -> HLSL failed: {}\n", options.name, e.what());
         return result;
     }
 

@@ -37,3 +37,22 @@ jobs:
 
       - name: Test
         run: ctest --preset ${{ matrix.preset }}
+
+      # Windows runners have no GPU, but D3D12 can run on WARP (Microsoft's software rasterizer): run the isometric
+      # sample on it and keep the screenshot, so the D3D12 path is exercised end to end.
+      - name: Smoke run on Direct3D 12
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse -Filter isometric.exe build/${{ matrix.preset }}/samples | Select-Object -First 1
+          & $exe.FullName --driver direct3d12 --night --frames 30 --screenshot "$PWD/d3d12-${{ matrix.preset }}.png"
+          if (-not (Test-Path "d3d12-${{ matrix.preset }}.png")) { exit 1 }
+
+      - name: Upload screenshot
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: d3d12-${{ matrix.preset }}
+          path: d3d12-${{ matrix.preset }}.png
+          if-no-files-found: warn

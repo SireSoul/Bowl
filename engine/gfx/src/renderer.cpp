@@ -276,7 +276,10 @@ void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& pa
             SDL_BindGPUVertexStorageBuffers(pass, 0, &sprite_buffer_, 1);
             bound = pipe;
         }
-        SDL_PushGPUVertexUniformData(cmd_, 0, p.view_projection.data(), sizeof(Mat4));
+        struct {
+            Mat4 view_projection;
+            u32 draw[4];
+        } camera{p.view_projection, {0, 0, 0, 0}};
         if (p.material && !p.material->uniforms.empty() && fs->uniform_buffers() > 0)
             SDL_PushGPUFragmentUniformData(cmd_, 0, p.material->uniforms.data(),
                                            static_cast<u32>(p.material->uniforms.size()));
@@ -291,7 +294,9 @@ void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& pa
                 bindings[b] = {extra->handle(), extra->filter() == Filter::Nearest ? nearest_ : linear_};
             }
             SDL_BindGPUFragmentSamplers(pass, 0, bindings, sampler_count);
-            SDL_DrawGPUPrimitives(pass, draw.count * 6, 1, draw.first * 6, 0);
+            camera.draw[0] = draw.first;
+            SDL_PushGPUVertexUniformData(cmd_, 0, &camera, sizeof camera);
+            SDL_DrawGPUPrimitives(pass, draw.count * 6, 1, 0, 0);
             ++stats_.draw_calls;
         }
     }

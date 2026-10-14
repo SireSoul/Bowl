@@ -11,7 +11,9 @@
 namespace ph {
 
 enum class ShaderStage : u32 { Vertex = 0, Fragment = 1, Compute = 2 };
-enum class ShaderBlobFormat : u32 { SpirV = 1, Msl = 2, Dxil = 3, Dxbc = 4 };
+// Hlsl is source (Shader Model 5.1, SDL's register layout); on Windows it's compiled to Dxbc when the D3D12 backend
+// runs, since the HLSL compiler ships with Windows but not with other build hosts.
+enum class ShaderBlobFormat : u32 { SpirV = 1, Msl = 2, Dxil = 3, Dxbc = 4, Hlsl = 5 };
 
 // One shader stage compiled for every GPU backend, plus the resource counts SDL_GPU needs to create it.
 // Written by ph-shaderc (build time, or at runtime in dev builds); read by the renderer. Format: little-endian u32s.
