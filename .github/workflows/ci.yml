@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+        preset: [dev, release]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages (SDL3 is built from source)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxss-dev libxfixes-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols libegl1-mesa-dev \
+            libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
+
+      - name: Cache dependency downloads
+        uses: actions/cache@v4
+        with:
+          path: build/${{ matrix.preset }}/_deps
+          key: deps-${{ matrix.os }}-${{ matrix.preset }}-${{ hashFiles('cmake/PhDependencies.cmake') }}
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} -DPH_FETCH_SDL=ON -DPH_WARNINGS_AS_ERRORS=${{ runner.os != 'Windows' && 'ON' || 'OFF' }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }} --parallel 4
+
+      - name: Test
+        run: ctest --preset ${{ matrix.preset }}
