@@ -119,6 +119,7 @@ void DevTools::draw_main() {
     ImGui::Text("tick %llu  t=%.2fs  alpha %.2f", static_cast<unsigned long long>(engine_.tick()), engine_.time(), engine_.alpha());
 
     if (ImGui::CollapsingHeader("Profiler", ImGuiTreeNodeFlags_DefaultOpen)) draw_profiler();
+    if (ImGui::CollapsingHeader("Post & lighting")) draw_post();
     if (ImGui::CollapsingHeader("Systems")) {
         draw_systems("fixed", engine_.fixed_schedule());
         draw_systems("frame", engine_.frame_schedule());
@@ -127,6 +128,31 @@ void DevTools::draw_main() {
     if (ImGui::CollapsingHeader("Assets")) draw_assets();
     if (ImGui::CollapsingHeader("Log")) draw_log();
     ImGui::End();
+}
+
+void DevTools::draw_post() {
+    gfx::PostSettings& p = engine_.renderer().post();
+    ImGui::SliderFloat("exposure", &p.exposure, 0.1f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("contrast", &p.contrast, 0.5f, 1.5f);
+    ImGui::SliderFloat("saturation", &p.saturation, 0.0f, 2.0f);
+    ImGui::ColorEdit3("tint", &p.tint.r);
+    ImGui::Checkbox("tonemap (ACES)", &p.tonemap);
+    ImGui::SeparatorText("bloom");
+    ImGui::Checkbox("bloom", &p.bloom);
+    ImGui::BeginDisabled(!p.bloom);
+    ImGui::SliderFloat("threshold", &p.bloom_threshold, 0.0f, 3.0f);
+    ImGui::SliderFloat("knee", &p.bloom_knee, 0.0f, 1.0f);
+    ImGui::SliderFloat("intensity", &p.bloom_intensity, 0.0f, 3.0f);
+    ImGui::SliderFloat("radius", &p.bloom_radius, 0.2f, 3.0f);
+    ImGui::EndDisabled();
+    ImGui::SeparatorText("vignette");
+    ImGui::SliderFloat("strength", &p.vignette, 0.0f, 1.0f);
+    ImGui::SliderFloat("radius##vignette", &p.vignette_radius, 0.0f, 1.0f);
+    ImGui::SliderFloat("softness", &p.vignette_softness, 0.01f, 1.0f);
+    ImGui::SeparatorText("lighting");
+    ImGui::Checkbox("2D lighting", &p.lighting);
+    ImGui::ColorEdit3("ambient", &p.ambient.r, ImGuiColorEditFlags_Float);
+    ImGui::Text("%u pipelines cached", engine_.renderer().stats().pipelines);
 }
 
 void DevTools::draw_profiler() {

@@ -3,6 +3,8 @@
 #include "ph/core/math.hpp"
 #include "ph/gfx/device.hpp"
 
+#include <array>
+#include <type_traits>
 #include <vector>
 
 namespace ph::gfx {
@@ -42,11 +44,35 @@ enum class SpriteSort : u8 {
     Depth,        // by depth, then texture for equal depth — the default
 };
 
+// How a batch's pixels combine with what's already drawn (colors are premultiplied).
+enum class BlendMode : u8 {
+    Alpha,    // normal transparency
+    Additive, // glows, fire, lights
+    Multiply, // shadows, tinting
+    Opaque,   // overwrite
+};
+
+// A custom look for a batch: your own fragment shader instead of the sprite shader. It receives the sprite shader's
+// outputs (location 0: vec2 uv, location 1: vec4 premultiplied color), the sprite texture at set 2 binding 0, up to
+// three extra textures at bindings 1-3, and `uniforms` (std140) at set 3 binding 0.
+struct Material {
+    Asset<Shader> fragment;
+    std::array<const Texture*, 3> textures{}; // extra textures; null slots get a white texture
+    std::vector<u8> uniforms;                 // at most 256 bytes; use set_uniforms with a std140-shaped struct
+
+    template <class T> void set_uniforms(const T& data) {
+        static_assert(std::is_trivially_copyable_v<T> && sizeof(T) <= 256 && sizeof(T) % 16 == 0,
+                      "uniform blocks are std140: pad the struct to a multiple of 16 bytes");
+        uniforms.assign(reinterpret_cast<const u8*>(&data), reinterpret_cast<const u8*>(&data) + sizeof(T));
+    }
+};
+
 // Collects sprites for one camera. Thousands of sprites cost one storage-buffer upload and one draw per texture
 // change. Fill it every frame and hand it to Renderer::submit.
 class SpriteBatch {
 public:
-    void begin(const Camera2D& camera, SpriteSort sort = SpriteSort::Depth);
+    void begin(const Camera2D& camera, SpriteSort sort = SpriteSort::Depth, BlendMode blend = BlendMode::Alpha,
+               const Material* material = nullptr);
     void draw(const Texture& texture, const SpriteInstance& sprite);
     // Convenience: a texture at its pixel size, centered at position.
     void draw(const Texture& texture, Vec2 position, Color color = Color::white(), f32 depth = 0);
@@ -63,6 +89,8 @@ private:
     friend class Renderer;
     Camera2D camera_;
     SpriteSort sort_ = SpriteSort::Depth;
+    BlendMode blend_ = BlendMode::Alpha;
+    const Material* material_ = nullptr;
     std::vector<SpriteInstance> sprites_;
     std::vector<const Texture*> textures_; // nullptr = the renderer's white texture
 };

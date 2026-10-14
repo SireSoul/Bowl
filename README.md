@@ -16,7 +16,7 @@ Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md) for what's next
 | `core` | types, math, logging, assert, job system, profiler, file watcher, asset manager with hot reload, JSON, UTF-8 |
 | `ecs` | archetype ECS: plain-struct components, cached queries, `par_each`, command buffers, hooks, resources, parallel scheduler, reflection + JSON save/load + prefabs, parent/child transforms |
 | `platform` | window, keyboard/mouse/gamepad, named actions with fixed-timestep-safe edges |
-| `gfx` | SDL_GPU device, textures (mipmapped), shaders, instanced sprite batching (one upload, one draw per texture), cameras, TTF text (UTF-8, kerning, wrap, align), Aseprite sprite sheets + animation, Tiled maps (orthogonal + isometric, y-sorted), screenshots |
+| `gfx` | SDL_GPU device, textures (mipmapped), shaders, instanced sprite batching (one upload, one draw per texture), cameras, TTF text (UTF-8, kerning, wrap, align), Aseprite sprite sheets + animation, Tiled maps (orthogonal + isometric, y-sorted), HDR + bloom + color grading + vignette, 2D lighting, custom materials and blend modes, screenshots |
 | `audio` | software mixer: 128 voices, buses, pitch, equal-power pan, looping; WAV and OGG sounds; streamed OGG music with gapless loops and crossfades |
 | `physics` | collision: rect/circle overlap + separation, swept boxes (no tunneling), raycasts, spatial hash, `move_and_slide` |
 | `app` | `Engine` + `Game`, fixed-timestep loop with interpolation, SDL3 callback entry point, Dear ImGui dev overlay |

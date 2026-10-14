@@ -30,6 +30,7 @@ private:
 #if PH_DEV_TOOLS
     void draw_main();
     void draw_profiler();
+    void draw_post();
     void draw_systems(const char* label, ecs::Schedule& schedule);
     void draw_entities();
     void draw_inspector();

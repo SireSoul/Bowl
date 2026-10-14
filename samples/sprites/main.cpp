@@ -91,6 +91,7 @@ public:
         input.bind("down", {InputBinding::key(Key::S), InputBinding::key(Key::Down), InputBinding::axis(GamepadAxis::LeftY, +1)});
 
         font_ = engine.assets().load<gfx::Font>("engine/fonts/Roboto-Medium.ttf");
+        hologram_.fragment = engine.assets().load<gfx::Shader>("shaders/hologram.frag");
         ball_ = engine.assets().add("generated/ball", make_ball_texture(engine.gpu()));
         blip_ = engine.assets().add("generated/blip", make_blip());
 
@@ -186,11 +187,19 @@ public:
         std::string stats = std::format("{} sprites  ·  {} draw calls  ·  tick {}", engine.world().query<const Look>().count(),
                                         engine.renderer().stats().draw_calls, engine.tick());
         gfx::draw_text(ui_, *font_, stats, {24, 58}, body);
-        engine.world().each<const Banner, const gfx::SpriteAnimator>([&](const Banner& b, const gfx::SpriteAnimator& a) {
-            Vec2 at{screen.x - 340 + 64.0f * static_cast<f32>(b.slot), 48};
-            Vec2 scale = b.slot == 4 ? Vec2{-0.8f, 0.8f} : Vec2{0.8f, 0.8f}; // the last one is mirrored
-            gfx::draw_frame(ui_, *a.sheet, a.frame, at, scale);
+        // The spinners use a custom material (assets/shaders/hologram.frag.glsl) with a time uniform.
+        struct HologramParams {
+            f32 time, pad[3];
+        };
+        hologram_.set_uniforms(HologramParams{static_cast<f32>(engine.time()), {}});
+        holo_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None, gfx::BlendMode::Alpha,
+                    hologram_.fragment ? &hologram_ : nullptr);
+        engine.world().each<const Banner, const gfx::SpriteAnimator>([&](const Banner& banner, const gfx::SpriteAnimator& a) {
+            Vec2 at{screen.x - 340 + 64.0f * static_cast<f32>(banner.slot), 48};
+            Vec2 scale = banner.slot == 4 ? Vec2{-0.8f, 0.8f} : Vec2{0.8f, 0.8f}; // the last one is mirrored
+            gfx::draw_frame(holo_, *a.sheet, a.frame, at, scale);
         });
+        engine.renderer().submit_ui(holo_);
         gfx::TextStyle help = body;
         help.align = gfx::TextAlign::Center;
         help.max_width = 520;
@@ -199,7 +208,7 @@ public:
                        "Hold the left mouse button (or A) to spawn sprites. WASD or the left stick moves the camera, "
                        "the wheel zooms, C clears, F1 opens the dev overlay.",
                        {screen.x * 0.5f, screen.y - 46}, help);
-        engine.renderer().submit(ui_);
+        engine.renderer().submit_ui(ui_);
     }
 
     void dev_ui(Engine& engine) override {
@@ -281,6 +290,8 @@ private:
     Asset<gfx::Texture> ball_;
     Asset<gfx::Font> font_;
     Asset<gfx::SpriteSheet> spinner_;
+    gfx::Material hologram_;
+    gfx::SpriteBatch holo_;
     Asset<audio::Sound> blip_;
     gfx::SpriteBatch batch_, ui_;
     int spawn_rate_ = 40;

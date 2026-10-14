@@ -57,6 +57,10 @@ public:
     ~Shader();
     SDL_GPUShader* handle() const { return shader_; }
     ShaderStage stage() const { return stage_; }
+    u32 samplers() const { return samplers_; }
+    u32 uniform_buffers() const { return uniform_buffers_; }
+    // Unique per shader object (never reused), for pipeline caches.
+    u32 id() const { return id_; }
 
 private:
     friend class GpuDevice;
@@ -64,6 +68,7 @@ private:
     GpuDevice* device_ = nullptr;
     SDL_GPUShader* shader_ = nullptr;
     ShaderStage stage_ = ShaderStage::Vertex;
+    u32 samplers_ = 0, uniform_buffers_ = 0, id_ = 0;
 };
 
 struct GpuDeviceDesc {

@@ -37,9 +37,11 @@ Rect Camera2D::visible_bounds() const {
 
 // --- SpriteBatch ----------------------------------------------------------------------------------------------------
 
-void SpriteBatch::begin(const Camera2D& camera, SpriteSort sort) {
+void SpriteBatch::begin(const Camera2D& camera, SpriteSort sort, BlendMode blend, const Material* material) {
     camera_ = camera;
     sort_ = sort;
+    blend_ = blend;
+    material_ = material;
     sprites_.clear();
     textures_.clear();
 }

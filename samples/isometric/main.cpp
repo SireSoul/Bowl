@@ -2,6 +2,7 @@
 //
 //   WASD / left stick   walk (in screen directions)
 //   mouse wheel         zoom
+//   N                   night: 2D lights, bloom, vignette (or start with --night)
 //   F1                  dev overlay
 //
 // The map is built in code to keep the sample self-contained; games load Tiled maps with
@@ -67,6 +68,7 @@ public:
         player_tex_ = engine.assets().add("generated/player", make_player(engine.gpu()));
         engine.renderer().set_clear_color(Color::hex(0x0d1b2a));
         engine.camera().zoom = 1.2f;
+        set_night(engine, engine.has_arg("--night"));
     }
 
     void fixed_update(Engine& engine, f32 dt) override {
@@ -89,6 +91,7 @@ public:
     }
 
     void update(Engine& engine, f32) override {
+        if (engine.input().pressed(Key::N)) set_night(engine, !night_);
         gfx::Camera2D& cam = engine.camera();
         if (engine.input().wheel() != 0) cam.zoom = clamp(cam.zoom * std::pow(1.1f, engine.input().wheel()), 0.4f, 4.0f);
         Vec2 target = map_->cell_to_world(player_cell(engine).x, player_cell(engine).y);
@@ -106,19 +109,63 @@ public:
         s.origin = {0.5f, 0.92f};
         s.depth = feet.y + 0.5f;
         batch_.draw(*player_tex_, s);
+
+        if (night_) {
+            // Lanterns on the pillars: a small over-bright dot in the scene (HDR, so it blooms) and a warm pool of
+            // light in the light map. The player carries a torch.
+            const gfx::Texture& glow = engine.renderer().light_texture();
+            lights_.begin(engine.camera(), gfx::SpriteSort::None, gfx::BlendMode::Additive);
+            f32 flicker = 0.92f + 0.08f * std::sin(static_cast<f32>(engine.time()) * 13.0f);
+            const gfx::MapLayer& objects = map_->layers[1];
+            for (i32 y = 0; y < static_cast<i32>(map_size); ++y)
+                for (i32 x = 0; x < static_cast<i32>(map_size); ++x) {
+                    if ((objects.at(x, y) & gfx::tile_gid_mask) != Pillar) continue;
+                    Vec2 base = map_->cell_to_world(static_cast<f32>(x), static_cast<f32>(y)) + Vec2{0, tile_h};
+                    Vec2 lamp = base - Vec2{0, image_h - 14.0f};
+                    gfx::SpriteInstance dot;
+                    dot.position = lamp;
+                    dot.size = {14, 14};
+                    dot.color = {5.0f, 3.2f, 1.4f, 1}; // brighter than white: this is what blooms
+                    dot.depth = base.y + 0.1f;
+                    batch_.draw(glow, dot);
+                    gfx::SpriteInstance pool;
+                    pool.position = base - Vec2{0, 30};
+                    pool.size = Vec2{300, 210} * flicker;
+                    pool.color = {0.62f, 0.38f, 0.18f, 1};
+                    lights_.draw(glow, pool);
+                }
+            gfx::SpriteInstance torch;
+            torch.position = feet - Vec2{0, 20};
+            torch.size = {420, 300};
+            torch.color = {0.7f, 0.66f, 0.55f, 1};
+            lights_.draw(glow, torch);
+            engine.renderer().submit_light(lights_);
+        }
         engine.renderer().submit(batch_);
 
         if (!font_) return;
         ui_.begin(gfx::Camera2D::screen(engine.window().size()), gfx::SpriteSort::None);
         gfx::TextStyle style{.size = 18, .raster_scale = engine.window().pixel_density()};
         Vec2 c = player_cell(engine);
-        gfx::draw_text(ui_, *font_, std::format("Isometric · cell {:.0f}, {:.0f} · WASD to walk, wheel to zoom", c.x, c.y),
+        gfx::draw_text(ui_, *font_, std::format("Isometric · cell {:.0f}, {:.0f} · WASD to walk, wheel to zoom, N for night", c.x, c.y),
                        {20, 18}, style);
-        engine.renderer().submit(ui_);
+        engine.renderer().submit_ui(ui_);
     }
 
 private:
     Vec2 player_cell(Engine& engine) const { return lerp(player_.previous, player_.cell, engine.alpha()); }
+
+    void set_night(Engine& engine, bool night) {
+        night_ = night;
+        gfx::PostSettings& post = engine.renderer().post();
+        post.lighting = night;
+        post.ambient = {0.16f, 0.2f, 0.38f, 1};
+        post.bloom = night;
+        post.bloom_intensity = 0.9f;
+        post.vignette = night ? 0.45f : 0.0f;
+        post.saturation = night ? 0.9f : 1.0f;
+        engine.renderer().set_clear_color(night ? Color::hex(0x05080f) : Color::hex(0x0d1b2a));
+    }
 
     void build_map(Engine& engine) {
         auto map = std::make_unique<gfx::Tilemap>();
@@ -230,8 +277,9 @@ private:
     Asset<gfx::Tilemap> map_;
     Asset<gfx::Texture> player_tex_;
     Asset<gfx::Font> font_;
-    gfx::SpriteBatch batch_, ui_;
+    gfx::SpriteBatch batch_, ui_, lights_;
     Player player_;
+    bool night_ = false;
 };
 
 PH_MAIN(IsometricGame)

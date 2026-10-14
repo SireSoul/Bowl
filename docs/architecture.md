@@ -95,9 +95,25 @@ The renderer is SDL_GPU: Vulkan on Windows, Linux and Android, Metal on macOS an
 - **Sprites** use vertex pulling. Each sprite is a 64-byte record in a storage buffer, and the vertex shader builds the
   quad from `gl_VertexIndex`, so there are no vertex buffers. All sprites of a frame go up in one upload, with one
   draw call per texture run. Batches sort by depth (isometric: use the feet's y), then by texture.
-- **Blending** uses premultiplied alpha everywhere. Textures are premultiplied on load.
-- The scene renders to an off-screen target, which is blitted to the window. The dev overlay draws on top. That target
-  is where post-processing will go, and `--screenshot` reads it back.
+- **Blending** uses premultiplied alpha everywhere. Textures are premultiplied on load. Each batch picks a `BlendMode`
+  (alpha, additive, multiply, opaque).
+- **Materials:** a batch can use its own fragment shader (`gfx::Material`), with up to three extra textures and a
+  256-byte uniform block. Pipelines are created on first use and cached per (shader, target format, blend). A
+  hot-reloaded shader simply gets a new pipeline.
+
+A frame flows through these steps:
+
+```
+submit(batch)        -> scene (RGBA16F, HDR: sprite colors above 1 are allowed and glow with bloom)
+submit_light(batch)  -> light map (half resolution, additive)           [post().lighting]
+                        bloom: bright-pass, 6-level downsample + tent upsample chain  [post().bloom]
+final pass           -> scene * (ambient + light) + bloom, exposure, tonemap, saturation, contrast, tint, vignette
+submit_ui(batch)     -> drawn on the final image, untouched by lighting and post
+dev overlay          -> on top; --screenshot reads back this image; then it's blitted to the window
+```
+
+With default `PostSettings` the final pass is an exact copy, so games pay for effects only when they turn them on.
+Everything is tunable live in the overlay's "Post & lighting" panel.
 
 ## Shaders
 

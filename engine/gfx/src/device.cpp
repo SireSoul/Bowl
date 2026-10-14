@@ -181,6 +181,9 @@ std::unique_ptr<Shader> GpuDevice::create_shader(const ShaderBundle& bundle, std
     s->device_ = this;
     s->shader_ = shader;
     s->stage_ = bundle.stage;
+    s->samplers_ = bundle.samplers;
+    s->uniform_buffers_ = bundle.uniform_buffers;
+    s->id_ = next_texture_id.fetch_add(1, std::memory_order_relaxed); // shared counter: ids just need to be unique
     return s;
 }
 

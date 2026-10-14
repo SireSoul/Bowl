@@ -11,6 +11,10 @@ function(ph_configure_target target)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor
                                                  -Wno-missing-field-initializers)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            # GCC's -Wshadow also flags lambda locals that shadow the enclosing function's; match it.
+            target_compile_options(${target} PRIVATE -Wshadow-uncaptured-local)
+        endif()
         if(PH_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE -Werror)
         endif()

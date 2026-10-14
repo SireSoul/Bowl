@@ -23,9 +23,10 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - ~~Relationships: parent/child `Transform2D` hierarchy, cycle-safe reparenting, recursive destroy~~ (done)
 
 ## M3: look great
-- Post-processing chain on the off-screen scene target: bloom, color grading, vignette
-- 2D lighting: light map with normal-mapped sprites
-- Custom materials: user shaders per sprite batch, with a uniform block
+- ~~Post-processing: HDR scene, bloom, exposure/contrast/saturation/tint, ACES tonemap, vignette, UI layer~~ (done).
+  Still to do: user post-effect chain, color-grading LUTs, chromatic aberration/film grain
+- ~~2D lighting: additive light map, ambient color~~ (done). Still to do: normal-mapped sprites, shadow casting
+- ~~Custom materials: user fragment shaders per batch, extra textures, uniforms, blend modes~~ (done)
 - D3D12 shader path (SPIRV-Cross -> HLSL -> DXBC/DXIL) so Windows can fall back from Vulkan
 - Particles on the GPU (compute)
 
