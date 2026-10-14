@@ -34,6 +34,7 @@ ph_module(core
         core/src/json.cpp
         core/src/localization.cpp
         core/src/profiler.cpp
+        core/src/settings.cpp
     PUBLIC_DEPS Threads::Threads)
 
 ph_module(ecs

@@ -62,6 +62,16 @@ struct AppRunner {
         }
         if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) warn("audio: SDL audio unavailable: {}", SDL_GetError());
 
+        const std::string& app_name = e.config_.application.empty() ? e.config_.window.title : e.config_.application;
+        if (char* pref = SDL_GetPrefPath(e.config_.organization.c_str(), app_name.c_str())) {
+            e.user_data_ = pref;
+            SDL_free(pref);
+        } else {
+            e.user_data_ = std::filesystem::current_path();
+            warn("no per-user data folder ({}); using {}", SDL_GetError(), e.user_data_.string());
+        }
+        e.settings_.load(e.user_data_ / "settings.json");
+
         e.jobs_ = std::make_unique<JobSystem>(e.config_.worker_threads);
         if (!e.window_.create(e.config_.window)) return false;
         gfx::GpuDeviceDesc gpu_desc;
@@ -89,6 +99,8 @@ struct AppRunner {
         dev = std::make_unique<DevTools>(e);
         dev->set_visible(start_with_overlay);
         game->init(e);
+        // Player rebinds win over the defaults the game just set.
+        if (const json::Value* saved = e.settings_.find("input")) e.input_.load_bindings(*saved);
         if (inspect_index >= 0)
             for (const auto& a : e.world_.archetypes())
                 for (ecs::Entity ent : a->entities())
@@ -197,6 +209,7 @@ struct AppRunner {
     void shutdown() {
         if (engine) engine->scenes_.shutdown(*engine);
         if (engine && game) game->shutdown(*engine);
+        if (engine) engine->settings_.save();
         if (engine) SDL_WaitForGPUIdle(engine->gpu_.handle());
         dev.reset();
         game.reset();

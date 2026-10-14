@@ -1,10 +1,12 @@
 #pragma once
 
+#include "ph/core/json.hpp"
 #include "ph/core/math.hpp"
 #include "ph/core/types.hpp"
 
 #include <array>
 #include <bitset>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -97,6 +99,16 @@ public:
     void bind(std::string_view action, std::initializer_list<InputBinding> bindings);
     void unbind(std::string_view action);
     bool has_action(std::string_view action) const { return find(action) != nullptr; }
+    const std::vector<InputBinding>* bindings(std::string_view action) const;
+
+    // Rebinding: the first key/button/stick pushed this frame, e.g. for "press a key for Jump" screens.
+    std::optional<InputBinding> last_pressed() const { return last_pressed_; }
+    // Readable name for prompts and settings screens: "Space", "Left mouse", "Gamepad a", "Gamepad leftx+".
+    static std::string describe(const InputBinding& binding);
+    // Save/restore bindings (readable JSON: {"jump": [{"key": "Space"}, {"button": "a"}]}). Loading replaces the
+    // bindings of the actions it mentions and leaves others alone.
+    json::Value save_bindings() const;
+    void load_bindings(const json::Value& json);
     bool down(std::string_view action) const;
     bool pressed(std::string_view action) const;
     bool released(std::string_view action) const;
@@ -151,6 +163,7 @@ private:
     std::unordered_map<u64, Action> actions_;
     Context context_ = Context::Frame;
     bool block_keyboard_ = false, block_mouse_ = false;
+    std::optional<InputBinding> last_pressed_;
 };
 
 } // namespace ph

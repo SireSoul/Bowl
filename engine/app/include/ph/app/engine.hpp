@@ -6,6 +6,7 @@
 #include "ph/core/jobs.hpp"
 #include "ph/core/localization.hpp"
 #include "ph/core/log.hpp"
+#include "ph/core/settings.hpp"
 #include "ph/ecs/ecs.hpp"
 #include "ph/gfx/renderer.hpp"
 #include "ph/platform/input.hpp"
@@ -29,6 +30,9 @@ struct AppConfig {
     LogLevel log_level = LogLevel::Info;
     std::string language = "en";     // lang/<language>.json, falling back to fallback_language
     std::string fallback_language = "en";
+    // Where settings and saves live: the OS's per-user app data folder for <organization>/<application>.
+    std::string organization = "PLACEHOLDERENGINENAME";
+    std::string application;         // empty: the window title
     std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
 };
 
@@ -79,6 +83,12 @@ public:
     gfx::Camera2D& camera() { return camera_; }
     // Title screen, gameplay, menus...: run after the Game's own callbacks each frame.
     SceneStack& scenes() { return scenes_; }
+    // Player preferences, saved to user_data_path()/settings.json at exit. Controls saved under "input" (with
+    // save_controls) are applied after Game::init, so player rebinds override the game's defaults.
+    Settings& settings() { return settings_; }
+    void save_controls() { settings_.set("input", input_.save_bindings()); }
+    // A writable per-user folder for settings and save games (created on first use).
+    const std::filesystem::path& user_data_path() const { return user_data_; }
     const AppConfig& config() const { return config_; }
     // Command-line arguments (argv[1..]), including the engine's own flags.
     const std::vector<std::string>& args() const { return args_; }
@@ -111,6 +121,8 @@ private:
 
     AppConfig config_;
     std::vector<std::string> args_;
+    Settings settings_;
+    std::filesystem::path user_data_;
     Window window_;
     gfx::GpuDevice gpu_;
     audio::AudioEngine audio_;

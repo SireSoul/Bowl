@@ -46,7 +46,8 @@ concept HasHooks = requires(const T& c, T& m, const json::Value& j, Context& ctx
 };
 
 template <class T>
-concept Serializable = std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_same_v<T, std::string> ||
+concept Serializable = std::is_same_v<T, json::Value> || std::is_arithmetic_v<T> || std::is_enum_v<T> ||
+                       std::is_same_v<T, std::string> ||
                        std::is_same_v<T, Vec2> || std::is_same_v<T, Vec3> || std::is_same_v<T, Vec4> ||
                        std::is_same_v<T, Color> || std::is_same_v<T, Rect> || is_vector<T>::value ||
                        is_array<T>::value || is_optional<T>::value || is_asset<T>::value || reflect::Reflected<T> ||
@@ -69,6 +70,7 @@ template <class T> json::Value to_json(const T& v, Context& ctx) {
     static_assert(Serializable<T>, "this type can't be serialized: reflect it with PH_REFLECT or add ph_to_json/"
                                    "ph_from_json hooks");
     if constexpr (HasHooks<T>) return ph_to_json(v, ctx);
+    else if constexpr (std::is_same_v<T, json::Value>) return v;
     else if constexpr (std::is_same_v<T, bool>) return v;
     else if constexpr (std::is_enum_v<T>) return static_cast<i64>(v);
     else if constexpr (std::is_arithmetic_v<T>) return static_cast<f64>(v);
@@ -98,7 +100,10 @@ template <class T> json::Value to_json(const T& v, Context& ctx) {
 template <class T> bool from_json(const json::Value& j, T& v, Context& ctx) {
     static_assert(Serializable<T>, "this type can't be deserialized: reflect it with PH_REFLECT or add hooks");
     if constexpr (HasHooks<T>) return ph_from_json(j, v, ctx);
-    else if constexpr (std::is_same_v<T, bool>) {
+    else if constexpr (std::is_same_v<T, json::Value>) {
+        v = j;
+        return true;
+    } else if constexpr (std::is_same_v<T, bool>) {
         if (!j.is_bool()) return false;
         v = j.as_bool();
         return true;

@@ -20,6 +20,12 @@ Input::~Input() {
 void Input::set_down(u16 code, bool is_down) {
     if (code >= code_count || down_.test(code) == is_down) return;
     down_.set(code, is_down);
+    if (is_down && !last_pressed_) {
+        if (code < 256) last_pressed_ = InputBinding{InputBinding::Kind::Key, static_cast<u8>(code), -1, 1, 0.5f};
+        else if (code < mouse_base) {} // media keys etc.: not bindable
+        else if (code < pad_base) last_pressed_ = InputBinding::mouse(static_cast<MouseButton>(code - mouse_base));
+        else last_pressed_ = InputBinding::button(static_cast<GamepadButton>((code - pad_base) % 32));
+    }
     for (usize c = 0; c < 2; ++c) {
         if (is_down) pressed_[c].set(code);
         else released_[c].set(code);
@@ -33,6 +39,7 @@ int Input::pad_slot(u32 joystick_id) const {
 }
 
 void Input::begin_frame() {
+    last_pressed_.reset();
     pressed_[0].reset();
     released_[0].reset();
     mouse_delta_ = {};
@@ -117,7 +124,12 @@ void Input::handle_event(const SDL_Event& e) {
     }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
         int slot = pad_slot(e.gaxis.which);
-        if (slot >= 0 && e.gaxis.axis < 6) axes_[slot][e.gaxis.axis] = std::clamp(e.gaxis.value / 32767.0f, -1.0f, 1.0f);
+        if (slot >= 0 && e.gaxis.axis < 6) {
+            f32 v = std::clamp(e.gaxis.value / 32767.0f, -1.0f, 1.0f);
+            if (!last_pressed_ && std::abs(v) > 0.6f && std::abs(axes_[slot][e.gaxis.axis]) <= 0.6f)
+                last_pressed_ = InputBinding::axis(static_cast<GamepadAxis>(e.gaxis.axis), v > 0 ? 1.0f : -1.0f);
+            axes_[slot][e.gaxis.axis] = v;
+        }
         break;
     }
     case SDL_EVENT_WINDOW_FOCUS_LOST:
@@ -233,6 +245,105 @@ Vec2 Input::vector(std::string_view neg_x, std::string_view pos_x, std::string_v
     if (len > 1.0f) return v / len;
     // Rescale so output starts at 0 just past the dead zone.
     return v / len * ((len - dead_zone) / (1.0f - dead_zone));
+}
+
+} // namespace ph
+
+namespace ph {
+
+const std::vector<InputBinding>* Input::bindings(std::string_view action) const {
+    const Action* a = find(action);
+    return a ? &a->bindings : nullptr;
+}
+
+std::string Input::describe(const InputBinding& b) {
+    switch (b.kind) {
+    case InputBinding::Kind::Key: {
+        const char* name = SDL_GetScancodeName(static_cast<SDL_Scancode>(b.code));
+        return name && *name ? name : "Key " + std::to_string(b.code);
+    }
+    case InputBinding::Kind::Mouse: {
+        static const char* names[] = {"", "Left mouse", "Middle mouse", "Right mouse", "Mouse 4", "Mouse 5"};
+        return b.code < std::size(names) ? names[b.code] : "Mouse " + std::to_string(b.code);
+    }
+    case InputBinding::Kind::GamepadButton: {
+        const char* name = SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(b.code));
+        return std::string("Gamepad ") + (name ? name : "?");
+    }
+    case InputBinding::Kind::GamepadAxis: {
+        const char* name = SDL_GetGamepadStringForAxis(static_cast<SDL_GamepadAxis>(b.code));
+        return std::string("Gamepad ") + (name ? name : "?") + (b.direction > 0 ? "+" : "-");
+    }
+    }
+    return "?";
+}
+
+json::Value Input::save_bindings() const {
+    json::Value out;
+    out.make_object();
+    // Sorted by name so the file is stable.
+    std::vector<const Action*> sorted;
+    for (const auto& [id, a] : actions_) sorted.push_back(&a);
+    std::sort(sorted.begin(), sorted.end(), [](const Action* x, const Action* y) { return x->name < y->name; });
+    for (const Action* a : sorted) {
+        json::Value list;
+        list.make_array();
+        for (const InputBinding& b : a->bindings) {
+            json::Value j;
+            switch (b.kind) {
+            case InputBinding::Kind::Key: j.set("key", SDL_GetScancodeName(static_cast<SDL_Scancode>(b.code))); break;
+            case InputBinding::Kind::Mouse: j.set("mouse", static_cast<int>(b.code)); break;
+            case InputBinding::Kind::GamepadButton:
+                j.set("button", SDL_GetGamepadStringForButton(static_cast<SDL_GamepadButton>(b.code)));
+                break;
+            case InputBinding::Kind::GamepadAxis:
+                j.set("axis", SDL_GetGamepadStringForAxis(static_cast<SDL_GamepadAxis>(b.code)));
+                j.set("direction", b.direction);
+                j.set("threshold", b.threshold);
+                break;
+            }
+            if (b.gamepad >= 0) j.set("gamepad", static_cast<int>(b.gamepad));
+            list.push(std::move(j));
+        }
+        out.set(a->name, std::move(list));
+    }
+    return out;
+}
+
+void Input::load_bindings(const json::Value& json) {
+    for (const auto& [name, list] : json.object()) {
+        std::vector<InputBinding> parsed;
+        for (const json::Value& j : list.array()) {
+            InputBinding b;
+            b.gamepad = static_cast<i8>(j["gamepad"].as_int(-1));
+            if (j.contains("key")) {
+                SDL_Scancode sc = SDL_GetScancodeFromName(std::string(j["key"].as_string()).c_str());
+                if (sc == SDL_SCANCODE_UNKNOWN) continue;
+                b.kind = InputBinding::Kind::Key;
+                b.code = static_cast<u8>(sc);
+            } else if (j.contains("mouse")) {
+                b.kind = InputBinding::Kind::Mouse;
+                b.code = static_cast<u8>(j["mouse"].as_int(1));
+            } else if (j.contains("button")) {
+                SDL_GamepadButton gb = SDL_GetGamepadButtonFromString(std::string(j["button"].as_string()).c_str());
+                if (gb == SDL_GAMEPAD_BUTTON_INVALID) continue;
+                b.kind = InputBinding::Kind::GamepadButton;
+                b.code = static_cast<u8>(gb);
+            } else if (j.contains("axis")) {
+                SDL_GamepadAxis ga = SDL_GetGamepadAxisFromString(std::string(j["axis"].as_string()).c_str());
+                if (ga == SDL_GAMEPAD_AXIS_INVALID) continue;
+                b.kind = InputBinding::Kind::GamepadAxis;
+                b.code = static_cast<u8>(ga);
+                b.direction = j["direction"].as_float(1) >= 0 ? 1.0f : -1.0f;
+                b.threshold = j["threshold"].as_float(0.5f);
+            } else {
+                continue;
+            }
+            parsed.push_back(b);
+        }
+        unbind(name);
+        for (const InputBinding& b : parsed) bind(name, b);
+    }
 }
 
 } // namespace ph
