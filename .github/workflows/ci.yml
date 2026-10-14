@@ -29,8 +29,23 @@ jobs:
             libxss-dev libxfixes-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols libegl1-mesa-dev \
             libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev
 
+      # Compiler cache (Linux/macOS): unchanged sources, including all of SDL/glslang/SPIRV-Cross, compile from cache.
+      - name: ccache
+        if: runner.os != 'Windows'
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ${{ matrix.os }}-${{ matrix.preset }}
+          max-size: 500M
+
       - name: Configure
-        run: cmake --preset ${{ matrix.preset }} -DPH_FETCH_SDL=ON -DPH_WARNINGS_AS_ERRORS=${{ runner.os != 'Windows' && 'ON' || 'OFF' }}
+        shell: bash
+        run: |
+          launcher=""
+          if [ "$RUNNER_OS" != "Windows" ]; then
+            launcher="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
+          fi
+          cmake --preset ${{ matrix.preset }} -DPH_FETCH_SDL=ON \
+            -DPH_WARNINGS_AS_ERRORS=${{ runner.os != 'Windows' && 'ON' || 'OFF' }} $launcher
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel 4
@@ -42,7 +57,6 @@ jobs:
       # sample on it and keep the screenshot, so the D3D12 path is exercised end to end.
       - name: Smoke run on Direct3D 12
         if: runner.os == 'Windows'
-        continue-on-error: true
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Recurse -Filter isometric.exe build/${{ matrix.preset }}/samples | Select-Object -First 1
