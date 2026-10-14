@@ -9,6 +9,7 @@
 // assets.load<gfx::Tilemap>("maps/town.tmj") and draw them the same way.
 
 #include "ph/app/main.hpp"
+#include "ph/gfx/particles.hpp"
 #include "ph/gfx/text.hpp"
 #include "ph/gfx/tilemap.hpp"
 #include "ph/physics/collision.hpp"
@@ -140,8 +141,14 @@ public:
             torch.color = {0.7f, 0.66f, 0.55f, 1};
             lights_.draw(glow, torch);
             engine.renderer().submit_light(lights_);
+
+            // Fireflies: a particle system drawn additively with over-bright colors, so they bloom.
+            fireflies_.update(firefly_settings_, map_->cell_to_world(map_size / 2.0f, map_size / 2.0f), engine.delta());
+            sparks_.begin(engine.camera(), gfx::SpriteSort::None, gfx::BlendMode::Additive);
+            fireflies_.draw(sparks_, glow, firefly_settings_);
         }
         engine.renderer().submit(batch_);
+        if (night_) engine.renderer().submit(sparks_); // after the world, so they float above it
 
         if (!font_) return;
         ui_.begin(gfx::Camera2D::screen(engine.window().size()), gfx::SpriteSort::None);
@@ -277,7 +284,24 @@ private:
     Asset<gfx::Tilemap> map_;
     Asset<gfx::Texture> player_tex_;
     Asset<gfx::Font> font_;
-    gfx::SpriteBatch batch_, ui_, lights_;
+    gfx::SpriteBatch batch_, ui_, lights_, sparks_;
+    gfx::ParticleSystem fireflies_;
+    gfx::ParticleSettings firefly_settings_ = [] {
+        gfx::ParticleSettings s;
+        s.rate = 25;
+        s.lifetime_min = 3;
+        s.lifetime_max = 6;
+        s.speed_min = 4;
+        s.speed_max = 18;
+        s.spread = pi; // any direction
+        s.spawn_area = {1300, 650};
+        s.drag = 0.2f;
+        s.size_start = 7;
+        s.size_end = 4;
+        s.color_start = {2.2f, 2.6f, 0.9f, 1}; // over-bright yellow-green
+        s.color_end = {1.0f, 1.6f, 0.4f, 0};
+        return s;
+    }();
     Player player_;
     bool night_ = false;
 };

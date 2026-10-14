@@ -25,10 +25,11 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 ## M3: look great
 - ~~Post-processing: HDR scene, bloom, exposure/contrast/saturation/tint, ACES tonemap, vignette, UI layer~~ (done).
   Still to do: user post-effect chain, color-grading LUTs, chromatic aberration/film grain
-- ~~2D lighting: additive light map, ambient color~~ (done). Still to do: normal-mapped sprites, shadow casting
+- ~~2D lighting: additive light map, ambient color~~ (done). Still to do: emissive sprites that ignore the light map,
+  normal-mapped sprites, shadow casting
 - ~~Custom materials: user fragment shaders per batch, extra textures, uniforms, blend modes~~ (done)
 - D3D12 shader path (SPIRV-Cross -> HLSL -> DXBC/DXIL) so Windows can fall back from Vulkan
-- Particles on the GPU (compute)
+- ~~Particles (CPU, deterministic, reflected settings)~~ and ~~easing + tweens~~ (done). Later: GPU particles (compute)
 
 ## M4: iterate faster than anyone
 - Game-code hot reload: game logic as a shared library reloaded on rebuild, with world state kept

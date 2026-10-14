@@ -53,6 +53,7 @@ ph_module(gfx
     SOURCES
         gfx/src/device.cpp
         gfx/src/loaders.cpp
+        gfx/src/particles.cpp
         gfx/src/renderer.cpp
         gfx/src/sprite_sheet.cpp
         gfx/src/sprites.cpp
