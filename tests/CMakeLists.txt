@@ -5,6 +5,7 @@ add_executable(ph_tests
     test_ecs.cpp
     test_input.cpp
     test_jobs.cpp
+    test_json.cpp
     test_math.cpp
     test_schedule.cpp
     test_shaderc.cpp

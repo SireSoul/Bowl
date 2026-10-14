@@ -70,8 +70,11 @@ void AssetManager::notify(std::string_view path, bool ok) {
 void AssetManager::poll() {
     if (!hot_reload_) return;
     watcher_.poll();
-    for (auto& [key, entry] : entries_) {
-        if (!entry->dirty || !entry->reload) continue;
+    // Snapshot first: loaders may load other assets (a sprite sheet loads its image), which inserts into entries_.
+    std::vector<Entry*> dirty;
+    for (auto& [key, entry] : entries_)
+        if (entry->dirty && entry->reload) dirty.push_back(entry.get());
+    for (Entry* entry : dirty) {
         entry->dirty = false;
         bool ok = entry->reload(*entry);
         if (ok) info("assets: reloaded '{}'", entry->path);
@@ -81,15 +84,16 @@ void AssetManager::poll() {
 }
 
 bool AssetManager::reload(std::string_view path) {
-    bool any = false, ok = true;
-    for (auto& [key, entry] : entries_) {
-        if (entry->path != path || !entry->reload) continue;
-        any = true;
+    std::vector<Entry*> matches;
+    for (auto& [key, entry] : entries_)
+        if (entry->path == path && entry->reload) matches.push_back(entry.get());
+    bool ok = true;
+    for (Entry* entry : matches) {
         bool r = entry->reload(*entry);
         notify(entry->path, r);
         ok = ok && r;
     }
-    return any && ok;
+    return !matches.empty() && ok;
 }
 
 std::vector<AssetManager::Info> AssetManager::list() const {
