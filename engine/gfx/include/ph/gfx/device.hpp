@@ -107,8 +107,8 @@ private:
     bool vsync_ = true;
 };
 
-// Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader, Font (.ttf/.otf) and SpriteSheet (Aseprite JSON)
-// loaders with the asset manager.
+// Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader, Font (.ttf/.otf), SpriteSheet (Aseprite JSON) and
+// Tilemap (Tiled .tmj) loaders with the asset manager.
 // default_filter: Nearest for pixel art, Linear (with mipmaps) for everything else.
 void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter default_filter = Filter::Linear);
 

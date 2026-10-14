@@ -16,7 +16,7 @@ Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md) for what's next
 | `core` | types, math, logging, assert, job system, profiler, file watcher, asset manager with hot reload, JSON, UTF-8 |
 | `ecs` | archetype ECS: plain-struct components, cached queries, `par_each`, command buffers, hooks, resources, parallel scheduler |
 | `platform` | window, keyboard/mouse/gamepad, named actions with fixed-timestep-safe edges |
-| `gfx` | SDL_GPU device, textures (mipmapped), shaders, instanced sprite batching (one upload, one draw per texture), cameras, TTF text (UTF-8, kerning, wrap, align), Aseprite sprite sheets + animation, screenshots |
+| `gfx` | SDL_GPU device, textures (mipmapped), shaders, instanced sprite batching (one upload, one draw per texture), cameras, TTF text (UTF-8, kerning, wrap, align), Aseprite sprite sheets + animation, Tiled maps (orthogonal + isometric, y-sorted), screenshots |
 | `audio` | software mixer: 128 voices, buses, pitch, equal-power pan, looping; WAV and OGG sounds; streamed OGG music with gapless loops and crossfades |
 | `app` | `Engine` + `Game`, fixed-timestep loop with interpolation, SDL3 callback entry point, Dear ImGui dev overlay |
 | `tools/shaderc` | GLSL → SPIR-V + Metal compiler (library + CLI), also linked into dev builds for live shader edits |
@@ -41,6 +41,13 @@ ctest --preset dev
 ```bash
 ./build/dev/samples/sprites/sprites
 ```
+
+```bash
+./build/dev/samples/isometric/isometric
+```
+
+Samples: `sprites` (ECS stress test, text HUD, animation, audio) and `isometric` (a y-sorted isometric map you walk
+around).
 
 Presets: `dev` (optimized + debug info + dev tools, the day-to-day build), `debug`, `release` (shipping: no dev tools,
 precompiled shaders only).

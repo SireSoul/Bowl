@@ -54,6 +54,7 @@ ph_module(gfx
         gfx/src/sprite_sheet.cpp
         gfx/src/sprites.cpp
         gfx/src/text.cpp
+        gfx/src/tilemap.cpp
     PUBLIC_DEPS ph_core SDL3::SDL3
     PRIVATE_DEPS ph_stb)
 if(PH_DEV_TOOLS)

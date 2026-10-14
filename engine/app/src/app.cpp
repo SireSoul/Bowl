@@ -28,6 +28,7 @@ struct AppRunner {
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
         e.config_ = game->configure();
+        for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);
         for (int i = 1; i < argc; ++i) {
             std::string_view arg = argv[i];
             if (arg == "--frames" && i + 1 < argc) {

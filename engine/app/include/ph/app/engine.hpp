@@ -72,6 +72,13 @@ public:
     // The main world camera; its viewport follows the window.
     gfx::Camera2D& camera() { return camera_; }
     const AppConfig& config() const { return config_; }
+    // Command-line arguments (argv[1..]), including the engine's own flags.
+    const std::vector<std::string>& args() const { return args_; }
+    bool has_arg(std::string_view flag) const {
+        for (const auto& a : args_)
+            if (a == flag) return true;
+        return false;
+    }
 
     f64 time() const { return time_; }               // simulated seconds (fixed ticks * fixed_dt)
     f32 delta() const { return delta_; }             // this frame, scaled
@@ -95,6 +102,7 @@ private:
     friend class DevTools;
 
     AppConfig config_;
+    std::vector<std::string> args_;
     Window window_;
     gfx::GpuDevice gpu_;
     audio::AudioEngine audio_;

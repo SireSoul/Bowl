@@ -26,6 +26,7 @@
 #include "ph/gfx/renderer.hpp"
 #include "ph/gfx/sprite_sheet.hpp"
 #include "ph/gfx/text.hpp"
+#include "ph/gfx/tilemap.hpp"
 
 #include <string>
 
@@ -120,6 +121,7 @@ void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter defa
         return Font::from_memory(&device, std::move(*bytes), ctx.path());
     });
     register_sprite_sheet_loader(assets);
+    register_tilemap_loader(assets);
 }
 
 } // namespace ph::gfx

@@ -10,7 +10,8 @@ add_executable(ph_tests
     test_schedule.cpp
     test_shaderc.cpp
     test_sprite_sheet.cpp
-    test_text.cpp)
+    test_text.cpp
+    test_tilemap.cpp)
 target_link_libraries(ph_tests PRIVATE ph_core ph_ecs ph_platform ph_gfx ph_audio doctest::doctest)
 target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"
     PH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")

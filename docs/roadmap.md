@@ -7,7 +7,9 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   (done). Still to do: a texture atlas packer in `tools/`, Aseprite slices (hitboxes, 9-slice), animation events by name
 - ~~Text: TTF fonts, `draw_text`, UTF-8, kerning, wrapping, alignment~~ (done). Still to do: outlines/shadows, SDF for
   smoothly scaling text, font fallback chains for CJK/emoji, rich text markup
-- Tilemaps: Tiled (`.tmj` JSON) import, chunked rendering, collision layers
+- ~~Tilemaps: Tiled `.tmj`/`.tsj`, orthogonal + isometric, infinite maps, compressed layers, flips, animated tiles,
+  objects, properties, y-sorting~~ (done). Still to do: staggered/hex maps, `.tmx` XML, GPU-cached static chunks for
+  very large maps
 - ~~Audio formats: OGG Vorbis sounds, streamed music with gapless loops and crossfades~~ (done). Still to do: Opus,
   per-bus effects (low-pass, reverb), positional audio helpers
 - Collision/physics: shapes, broadphase grid, overlap queries as ECS systems
