@@ -96,6 +96,7 @@ public:
     void bind(std::string_view action, InputBinding binding);
     void bind(std::string_view action, std::initializer_list<InputBinding> bindings);
     void unbind(std::string_view action);
+    bool has_action(std::string_view action) const { return find(action) != nullptr; }
     bool down(std::string_view action) const;
     bool pressed(std::string_view action) const;
     bool released(std::string_view action) const;

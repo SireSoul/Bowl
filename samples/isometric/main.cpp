@@ -13,6 +13,7 @@
 #include "ph/gfx/text.hpp"
 #include "ph/gfx/tilemap.hpp"
 #include "ph/physics/collision.hpp"
+#include "ph/ui/ui.hpp"
 
 #include <cmath>
 
@@ -70,11 +71,15 @@ public:
         engine.renderer().set_clear_color(Color::hex(0x0d1b2a));
         engine.camera().zoom = 1.2f;
         set_night(engine, engine.has_arg("--night"));
+        ui_ctx_.style.font = font_;
+        menu_open_ = engine.has_arg("--menu");
+        if (engine.has_arg("--dialogue")) talk();
     }
 
     void fixed_update(Engine& engine, f32 dt) override {
         Player& p = player_;
         p.previous = p.cell;
+        if (menu_open_ || talking_) return; // the UI has the controls
         // Screen-relative movement: convert the screen direction into map axes (x - y is right, x + y is down).
         Vec2 dir = engine.input().vector("left", "right", "up", "down");
         Vec2 grid{dir.x + dir.y * 2.0f, dir.y * 2.0f - dir.x};
@@ -151,16 +156,50 @@ public:
         if (night_) engine.renderer().submit(sparks_); // after the world, so they float above it
 
         if (!font_) return;
-        ui_.begin(gfx::Camera2D::screen(engine.window().size()), gfx::SpriteSort::None);
+        Vec2 screen = engine.window().size();
+        ui_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None);
         gfx::TextStyle style{.size = 18, .raster_scale = engine.window().pixel_density()};
         Vec2 c = player_cell(engine);
-        gfx::draw_text(ui_, *font_, std::format("Isometric · cell {:.0f}, {:.0f} · WASD to walk, wheel to zoom, N for night", c.x, c.y),
+        gfx::draw_text(ui_, *font_,
+                       std::format("Isometric · cell {:.0f}, {:.0f} · WASD walk · wheel zoom · N night · T talk · Esc menu",
+                                   c.x, c.y),
                        {20, 18}, style);
+
+        // Game UI: a pause menu and a dialogue box, with mouse and keyboard/gamepad control.
+        ui_ctx_.begin(ui_, engine.input(), screen, engine.delta(), engine.window().pixel_density());
+        if (!talking_ && engine.input().pressed(Key::T)) talk();
+        if (!talking_ && ui_ctx_.back_pressed()) menu_open_ = !menu_open_;
+        if (menu_open_) {
+            ui_ctx_.begin_panel("menu", {screen.x * 0.5f - 170, screen.y * 0.5f - 160, 340, 0});
+            ui_ctx_.label("Paused", ui_ctx_.style.accent, 26);
+            ui_ctx_.space(4);
+            if (ui_ctx_.button("Resume")) menu_open_ = false;
+            bool night = night_;
+            if (ui_ctx_.checkbox("Night", night)) set_night(engine, night);
+            ui_ctx_.slider("Zoom", engine.camera().zoom, 0.4f, 3.0f);
+            if (ui_ctx_.button("Talk")) {
+                menu_open_ = false;
+                talk();
+            }
+            if (ui_ctx_.button("Quit")) engine.quit();
+            ui_ctx_.end_panel();
+        }
+        if (talking_ && ui_ctx_.dialogue("Guide", typewriter_)) {
+            if (++line_ < std::size(lines_)) typewriter_.start(lines_[line_]);
+            else talking_ = false;
+        }
+        ui_ctx_.end();
         engine.renderer().submit_ui(ui_);
     }
 
 private:
     Vec2 player_cell(Engine& engine) const { return lerp(player_.previous, player_.cell, engine.alpha()); }
+
+    void talk() {
+        talking_ = true;
+        line_ = 0;
+        typewriter_.start(lines_[0]);
+    }
 
     void set_night(Engine& engine, bool night) {
         night_ = night;
@@ -304,6 +343,15 @@ private:
     }();
     Player player_;
     bool night_ = false;
+    ui::Context ui_ctx_;
+    bool menu_open_ = false, talking_ = false;
+    ui::Typewriter typewriter_;
+    usize line_ = 0;
+    static constexpr const char* lines_[] = {
+        "This is the engine's dialogue box. Text appears a character at a time; press Enter, Space, the A button "
+        "or click to show it all at once.",
+        "Press again to move to the next line. Menus work the same way with the mouse, the keyboard or a gamepad.",
+    };
 };
 
 PH_MAIN(IsometricGame)

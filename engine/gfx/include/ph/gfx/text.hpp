@@ -68,6 +68,8 @@ struct TextStyle {
     // How many pixels one world unit covers, so glyphs rasterize at screen resolution. For a UI camera on a high-DPI
     // window use window.pixel_density(); for world text multiply by the camera zoom.
     f32 raster_scale = 1;
+    // Draw only the first N visible characters, with the layout of the full text (typewriter reveals). <0 = all.
+    i32 max_glyphs = -1;
 };
 
 // Draws UTF-8 text with its top-left (or top-center/right, per align) at position. '\n' breaks lines.

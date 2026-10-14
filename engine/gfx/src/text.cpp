@@ -221,6 +221,7 @@ Vec2 draw_text(SpriteBatch& batch, Font& font, std::string_view text, Vec2 posit
     f32 line_h = m.line_height() * style.line_spacing;
 
     f32 widest = 0;
+    i32 budget = style.max_glyphs;
     for (usize li = 0; li < lines.size(); ++li) {
         const Line& line = lines[li];
         widest = std::max(widest, line.width);
@@ -234,6 +235,8 @@ Vec2 draw_text(SpriteBatch& batch, Font& font, std::string_view text, Vec2 posit
             if (prev) x += font.kerning(prev, cp, px);
             const Font::Glyph& g = font.glyph(cp, px);
             if (g.visible) {
+                if (budget == 0) break;
+                if (budget > 0) --budget;
                 if (const Texture* page = font.page(g.page)) {
                     // Snap to whole raster pixels so glyphs stay crisp.
                     Vec2 at{std::round(x + g.offset.x), std::round(baseline + g.offset.y)};

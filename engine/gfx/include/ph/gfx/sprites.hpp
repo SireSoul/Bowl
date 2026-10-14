@@ -81,6 +81,11 @@ public:
                      f32 depth = 0, f32 rotation = 0, Vec2 origin = {0.5f, 0.5f});
     // A filled rectangle (top-left corner at position).
     void draw_rect(Rect rect, Color color, f32 depth = 0);
+    // A rectangle outline, `thickness` wide, inside `rect`.
+    void draw_outline(Rect rect, Color color, f32 thickness = 1, f32 depth = 0);
+    // Nine-slice: corners stay their size, edges stretch one way, the middle both. insets = left, top, right, bottom
+    // border sizes in texture pixels (drawn at that many world units).
+    void draw_nine_slice(const Texture& texture, Rect dest, Vec4 insets, Color color = Color::white(), f32 depth = 0);
 
     usize size() const { return sprites_.size(); }
     const Camera2D& camera() const { return camera_; }
