@@ -45,8 +45,8 @@ ctest --preset dev
 Presets: `dev` (optimized + debug info + dev tools, the day-to-day build), `debug`, `release` (shipping: no dev tools,
 precompiled shaders only).
 
-Command-line flags for any game: `--frames N` (quit after N frames), `--screenshot out.png`, `--no-vsync`,
-`--driver vulkan|metal|direct3d12`.
+Command-line flags for any game: `--frames N` (quit after N frames), `--screenshot out.png` (what's on screen, overlay
+included), `--overlay` (open the dev overlay at startup), `--no-vsync`, `--driver vulkan|metal|direct3d12`.
 
 ## A game in one file
 

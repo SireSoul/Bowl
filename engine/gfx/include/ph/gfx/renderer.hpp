@@ -45,10 +45,11 @@ public:
     // Size of the current target in pixels.
     Vec2 target_size() const { return target_size_; }
     const Texture& white_texture() const { return *white_; }
-    const Stats& stats() const { return stats_; }
+    // Totals of the last completed frame.
+    const Stats& stats() const { return last_stats_; }
     void set_overlay(Overlay overlay) { overlay_ = std::move(overlay); }
 
-    // Reads back the next rendered frame (without overlays) as RGBA8 rows, top to bottom. Stalls that one frame.
+    // Reads back the next rendered frame (as shown, overlays included) as RGBA8 rows, top to bottom. Stalls that frame.
     using CaptureCallback = std::function<void(u32 width, u32 height, std::span<const u8> rgba)>;
     void capture_next_frame(CaptureCallback callback) { capture_ = std::move(callback); }
 
@@ -89,7 +90,7 @@ private:
     std::vector<Draw> draws_;
     std::vector<Pass> passes_;
     std::vector<u32> order_;
-    Stats stats_;
+    Stats stats_, last_stats_;
     Overlay overlay_;
 };
 

@@ -238,9 +238,10 @@ void Renderer::end_frame() {
                 }
             }
         }
+        // Overlays draw last, into the same image, so screenshots show exactly what's on screen.
+        if (overlay_.draw) overlay_.draw(cmd_, pass);
         SDL_EndGPURenderPass(pass);
 
-        // Screenshot: read the scene back (without the dev overlay).
         SDL_GPUTransferBuffer* readback = nullptr;
         if (capture_) {
             SDL_GPUTransferBufferCreateInfo tinfo{SDL_GPU_TRANSFERBUFFERUSAGE_DOWNLOAD, w * h * 4, 0};
@@ -267,16 +268,6 @@ void Renderer::end_frame() {
         blit.filter = SDL_GPU_FILTER_NEAREST;
         SDL_BlitGPUTexture(cmd_, &blit);
 
-        if (overlay_.draw) {
-            SDL_GPUColorTargetInfo over{};
-            over.texture = target_;
-            over.load_op = SDL_GPU_LOADOP_LOAD;
-            over.store_op = SDL_GPU_STOREOP_STORE;
-            SDL_GPURenderPass* overlay_pass = SDL_BeginGPURenderPass(cmd_, &over, 1, nullptr);
-            overlay_.draw(cmd_, overlay_pass);
-            SDL_EndGPURenderPass(overlay_pass);
-        }
-
         if (readback) {
             SDL_GPUFence* fence = SDL_SubmitGPUCommandBufferAndAcquireFence(cmd_);
             SDL_WaitForGPUFences(d, true, &fence, 1);
@@ -293,6 +284,7 @@ void Renderer::end_frame() {
             capture(w, h, rgba);
             cmd_ = nullptr;
             target_ = nullptr;
+            last_stats_ = stats_;
             return;
         }
     }
@@ -300,6 +292,7 @@ void Renderer::end_frame() {
     SDL_SubmitGPUCommandBuffer(cmd_);
     cmd_ = nullptr;
     target_ = nullptr;
+    last_stats_ = stats_;
 }
 
 } // namespace ph::gfx

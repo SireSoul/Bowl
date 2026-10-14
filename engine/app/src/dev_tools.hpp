@@ -17,6 +17,7 @@ public:
     void begin_frame();
     void end_frame(Game& game);
     bool visible() const { return visible_; }
+    void set_visible(bool visible) { visible_ = visible; }
 
 private:
 #if PH_DEV_TOOLS
