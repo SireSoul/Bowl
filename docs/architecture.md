@@ -87,6 +87,27 @@ ecs::Entity guard = ecs::spawn_prefab(world, prefab_json, ctx);
 - Components are saved by type name. A type has to be known before loading (`ecs::register_components<A, B>()`, or by
   having been used).
 
+## Game-code hot reload
+
+With `ph_add_game(target ... HOT_RELOAD)` (dev builds on macOS and Linux, CMake 3.27+), the game's sources become
+`target_code`, a loadable library. `target` becomes a host executable that contains the whole engine (force-linked)
+and exports its symbols, so the library links nothing and calls into the host at load time. `PH_MAIN` turns into the
+library's `ph_create_game` export.
+
+When the library file changes and the linker has finished writing it, the host (`ph::HotReloadHost`):
+
+1. saves the world with `save_world`;
+2. tears down everything the old code made while that code is still loaded: scenes, systems, the world (entities,
+   hooks, resources), and every asset, loader and callback registered since startup (`AssetManager::mark/rollback`);
+3. marks component registrations whose code lived in the old library as dormant;
+4. loads a fresh copy of the new library, whose `PH_COMPONENT` registrations refresh those entries under the same ids;
+5. creates the new `Game`, runs `init()`, re-applies saved controls, and loads the world back.
+
+If the new library won't load, the old registrations are restored and the old code comes back up with the world.
+Component ids and type ids are name-based, so the host and the library always agree on them. What doesn't survive a
+reload: components that aren't savable (rebuild them in `init`, as the sprites sample does for its animators), state
+kept only in the `Game` object, and the ids of entities (references between saved entities are remapped).
+
 ## Rendering
 
 The renderer is SDL_GPU: Metal on macOS and iOS, Vulkan on Linux, Android and Windows, and D3D12 on Windows (and

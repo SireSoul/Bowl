@@ -110,6 +110,9 @@ public:
     CommandBuffer& deferred() { return deferred_; }
     // Applies deferred() commands. The App calls this between schedules.
     void flush();
+    // Back to a brand-new world: entities, archetypes, hooks and resources all go (no hooks run). Game-code hot
+    // reload calls this while the old game library is still loaded, since its destructors live there.
+    void reset();
     bool locked() const { return lock_.load(std::memory_order_relaxed) > 0; }
 
     // --- introspection ---------------------------------------------------------------------------------------------

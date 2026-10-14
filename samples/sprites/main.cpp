@@ -24,34 +24,34 @@ using namespace ph::ecs;
 
 // --- components: plain structs ---------------------------------------------------------------------------------------
 
-// PH_REFLECT makes a component savable and editable in the F1 inspector.
+// PH_COMPONENT makes a component savable, editable in the F1 inspector, and kept across game-code hot reloads.
 struct Transform {
     Vec2 position;
     Vec2 previous; // position at the previous fixed tick, for interpolated rendering
     f32 rotation = 0;
 };
-PH_REFLECT(Transform, position, previous, rotation)
+PH_COMPONENT(Transform, position, previous, rotation)
 struct Velocity {
     Vec2 value;
 };
-PH_REFLECT(Velocity, value)
+PH_COMPONENT(Velocity, value)
 struct Spin {
     f32 speed = 0;
 };
-PH_REFLECT(Spin, speed)
+PH_COMPONENT(Spin, speed)
 struct Look {
     Color color;
     f32 size = 16;
 };
-PH_REFLECT(Look, color, size)
+PH_COMPONENT(Look, color, size)
 struct Lifetime {
     f32 seconds = 0;
 };
-PH_REFLECT(Lifetime, seconds)
+PH_COMPONENT(Lifetime, seconds)
 struct Banner {
     int slot = 0; // position in the row of animated sprites
 };
-PH_REFLECT(Banner, slot)
+PH_COMPONENT(Banner, slot)
 
 // --- resources -------------------------------------------------------------------------------------------------------
 
@@ -117,23 +117,30 @@ public:
             if (life.seconds <= 0) ctx.commands.destroy(e);
         });
 
-        spawn(engine, {0, 0}, 2000);
-
         // Animated sprites: a procedural 8-frame sheet, stepped by a parallel system in the frame schedule.
         auto sheet = std::make_unique<gfx::SpriteSheet>(
             gfx::SpriteSheet::grid(engine.assets().add("generated/spinner", make_spinner_texture(engine.gpu())), 64,
                                    64, 8, 0.07f));
         sheet->animations.push_back({"bounce", 0, 7, gfx::SpriteAnimation::Direction::PingPong});
         spinner_ = engine.assets().add("generated/spinner.sheet", std::move(sheet));
-        for (int i = 0; i < 5; ++i) {
-            gfx::SpriteAnimator anim;
-            anim.sheet = spinner_;
-            anim.play(i % 2 ? "bounce" : "default");
-            anim.speed = 0.6f + 0.2f * static_cast<f32>(i);
-            engine.world().create(Banner{i}, anim);
-        }
+        // Banners get their animator here rather than in start(): animators aren't saved, so after a game-code hot
+        // reload this puts them back.
+        engine.frame_schedule().each<const Banner>(
+            "animate banners", [this](SystemContext& ctx, Entity e, const Banner& b) {
+                gfx::SpriteAnimator anim;
+                anim.sheet = spinner_;
+                anim.play(b.slot % 2 ? "bounce" : "default");
+                anim.speed = 0.6f + 0.2f * static_cast<f32>(b.slot);
+                ctx.commands.add<gfx::SpriteAnimator>(e, anim);
+            },
+            ecs::without<gfx::SpriteAnimator>());
         engine.frame_schedule().par_each<gfx::SpriteAnimator>(
             "animate", [](SystemContext& ctx, Entity, gfx::SpriteAnimator& a) { a.update(ctx.dt); });
+    }
+
+    void start(Engine& engine) override {
+        spawn(engine, {0, 0}, 2000);
+        for (int i = 0; i < 5; ++i) engine.world().create(Banner{i});
     }
 
     void fixed_update(Engine& engine, f32) override {

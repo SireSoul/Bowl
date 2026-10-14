@@ -64,7 +64,7 @@ void AssetManager::watch_dependencies(Entry& entry, const std::vector<fs::path>&
 }
 
 void AssetManager::notify(std::string_view path, bool ok) {
-    for (auto& cb : on_reload_) cb(path, ok);
+    for (auto& cb : on_reload_) cb.fn(path, ok);
 }
 
 void AssetManager::poll() {
@@ -94,6 +94,29 @@ bool AssetManager::reload(std::string_view path) {
         ok = ok && r;
     }
     return !matches.empty() && ok;
+}
+
+void AssetManager::rollback(u64 mark) {
+    for (auto it = entries_.begin(); it != entries_.end();) {
+        if (it->second->serial > mark) {
+            for (auto id : it->second->watches) watcher_.unwatch(id);
+            it = entries_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = loaders_.begin(); it != loaders_.end();) {
+        std::shared_ptr<LoaderSlot> slot = it->second;
+        while (slot && slot->serial > mark) slot = slot->previous; // restore what was registered before the mark
+        if (slot) {
+            it->second = slot;
+            ++it;
+        } else {
+            it = loaders_.erase(it);
+        }
+    }
+    std::erase_if(on_reload_, [mark](const Callback& c) { return c.serial > mark; });
+    serial_ = mark;
 }
 
 std::vector<AssetManager::Info> AssetManager::list() const {

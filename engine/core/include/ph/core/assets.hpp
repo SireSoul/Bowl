@@ -80,7 +80,9 @@ public:
     std::optional<std::filesystem::path> resolve(std::string_view virtual_path) const;
 
     template <class T> void register_loader(AssetLoader<T> loader) {
-        loaders_[type_id<T>()] = std::make_shared<AssetLoader<T>>(std::move(loader));
+        auto& slot = loaders_[type_id<T>()];
+        std::shared_ptr<LoaderSlot> previous = slot;
+        slot = std::make_shared<LoaderSlot>(LoaderSlot{std::make_shared<AssetLoader<T>>(std::move(loader)), ++serial_, previous});
     }
 
     // Returns the cached asset or loads it. On failure the handle is empty (and the error is logged); if the file
@@ -98,7 +100,14 @@ public:
     void poll();
     // Reloads one asset now (dev tools button). Returns false if it failed or isn't loaded.
     bool reload(std::string_view path);
-    void on_reload(std::function<void(std::string_view path, bool ok)> callback) { on_reload_.push_back(std::move(callback)); }
+    void on_reload(std::function<void(std::string_view path, bool ok)> callback) {
+        on_reload_.push_back({std::move(callback), ++serial_});
+    }
+
+    // Everything registered or loaded after mark() — loaders, assets, callbacks — can be dropped with rollback().
+    // Game-code hot reload uses this to release the game library's objects before unloading it.
+    u64 mark() const { return serial_; }
+    void rollback(u64 mark);
 
     struct Info {
         std::string path;
@@ -109,10 +118,20 @@ public:
     std::vector<Info> list() const;
 
 private:
+    struct LoaderSlot {
+        std::shared_ptr<void> loader; // AssetLoader<T>
+        u64 serial;
+        std::shared_ptr<LoaderSlot> previous; // what this registration replaced
+    };
+    struct Callback {
+        std::function<void(std::string_view, bool)> fn;
+        u64 serial;
+    };
     struct Entry {
         std::string path;
         TypeId type;
-        std::string_view type_name;
+        std::string type_name;
+        u64 serial = 0;
         std::shared_ptr<void> slot;
         std::function<bool(Entry&)> reload; // empty for code-made assets
         std::function<u32()> version;
@@ -126,7 +145,7 @@ private:
         bool operator==(const Key&) const = default;
     };
     struct KeyHash {
-        usize operator()(const Key& k) const { return std::hash<std::string>{}(k.path) * 31 + k.type; }
+        usize operator()(const Key& k) const { return std::hash<std::string>{}(k.path) * 31 + static_cast<usize>(k.type); }
     };
     struct Mount {
         std::string prefix;
@@ -138,22 +157,23 @@ private:
     void notify(std::string_view path, bool ok);
 
     std::vector<Mount> mounts_;
-    std::unordered_map<TypeId, std::shared_ptr<void>> loaders_;
+    std::unordered_map<TypeId, std::shared_ptr<LoaderSlot>> loaders_;
     std::unordered_map<Key, std::unique_ptr<Entry>, KeyHash> entries_;
-    std::vector<std::function<void(std::string_view, bool)>> on_reload_;
+    std::vector<Callback> on_reload_;
     FileWatcher watcher_;
     bool hot_reload_ = false;
+    u64 serial_ = 0;
 };
 
 void log_asset_error(std::string_view path, std::string_view type, std::string_view message);
 
 template <class T> bool AssetManager::run_loader(Entry& entry) {
     auto it = loaders_.find(type_id<T>());
-    if (it == loaders_.end()) {
+    if (it == loaders_.end() || !it->second) {
         log_asset_error(entry.path, type_name<T>(), "no loader registered for this type");
         return false;
     }
-    auto& loader = *static_cast<AssetLoader<T>*>(it->second.get());
+    auto& loader = *static_cast<AssetLoader<T>*>(it->second->loader.get());
     AssetLoadContext ctx(*this, entry.path);
     std::unique_ptr<T> value = loader(ctx);
     watch_dependencies(entry, ctx.dependencies());
@@ -174,7 +194,8 @@ template <class T> Asset<T> AssetManager::load(std::string_view path) {
     auto entry = std::make_unique<Entry>();
     entry->path = std::string(path);
     entry->type = key.type;
-    entry->type_name = type_name<T>();
+    entry->type_name = std::string(type_name<T>());
+    entry->serial = ++serial_;
     entry->slot = slot;
     entry->reload = [this](Entry& e) { return run_loader<T>(e); };
     entry->version = [s = slot.get()] { return s->version; };
@@ -194,7 +215,8 @@ template <class T> Asset<T> AssetManager::add(std::string_view path, std::unique
         auto entry = std::make_unique<Entry>();
         entry->path = std::string(path);
         entry->type = key.type;
-        entry->type_name = type_name<T>();
+        entry->type_name = std::string(type_name<T>());
+        entry->serial = ++serial_;
         entry->slot = slot;
         entry->version = [s = slot.get()] { return s->version; };
         entry->loaded = [s = slot.get()] { return s->value != nullptr; };

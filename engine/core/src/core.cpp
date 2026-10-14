@@ -19,13 +19,6 @@ const auto process_start = std::chrono::steady_clock::now();
 
 f64 now_seconds() { return std::chrono::duration<f64>(std::chrono::steady_clock::now() - process_start).count(); }
 
-// --- type ids -------------------------------------------------------------------------------------------------------
-
-TypeId detail::next_type_id() {
-    static std::atomic<TypeId> next{0};
-    return next.fetch_add(1, std::memory_order_relaxed);
-}
-
 // --- logging --------------------------------------------------------------------------------------------------------
 
 namespace {

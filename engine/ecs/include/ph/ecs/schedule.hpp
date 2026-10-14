@@ -72,6 +72,12 @@ public:
 
     // Applies every command recorded so far before later systems run.
     void barrier();
+    // Removes every system.
+    void clear() {
+        systems_.clear();
+        batches_.clear();
+        dirty_ = true;
+    }
 
     void run(World& world, JobSystem& jobs, f32 dt);
 

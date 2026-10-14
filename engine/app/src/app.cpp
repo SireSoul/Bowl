@@ -101,6 +101,7 @@ struct AppRunner {
         game->init(e);
         // Player rebinds win over the defaults the game just set.
         if (const json::Value* saved = e.settings_.find("input")) e.input_.load_bindings(*saved);
+        game->start(e);
         if (inspect_index >= 0)
             for (const auto& a : e.world_.archetypes())
                 for (ecs::Entity ent : a->entities())

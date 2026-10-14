@@ -10,6 +10,8 @@
 #include <bit>
 #include <new>
 #include <optional>
+#include <utility>
+#include <vector>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -83,7 +85,9 @@ struct ComponentInfo {
     json::Value (*save)(const void* ptr, serial::Context& ctx) = nullptr;
     bool (*load)(const json::Value& j, void* ptr, serial::Context& ctx) = nullptr;
     void (*visit)(void* ptr, reflect::FieldVisitor& v) = nullptr; // live editing (reflected only)
-    bool savable() const { return save != nullptr; }
+    // Its code was in a game library that hot reload unloaded; the next registration of the name refreshes it.
+    bool dormant = false;
+    bool savable() const { return save != nullptr && !dormant; }
 };
 
 template <class T>
@@ -145,6 +149,23 @@ template <class T> ComponentId component_id() { return detail::component_id_of<s
 
 // Makes component types known by name before anything uses them, so saved worlds that mention them can load.
 template <class... Ts> void register_components() { (static_cast<void>(component_id<Ts>()), ...); }
+
+// Hot reload: marks registrations whose code satisfies `owned` (lives in the library being unloaded) as dormant, and
+// returns what they were so restore_components can undo it if the new library fails to load.
+std::vector<std::pair<ComponentId, ComponentInfo>> mark_components_dormant(bool (*owned)(const ComponentInfo&, void*),
+                                                                           void* user);
+void restore_components(const std::vector<std::pair<ComponentId, ComponentInfo>>& saved);
+
+} // namespace ph::ecs
+
+// PH_COMPONENT(Type, fields...): PH_REFLECT plus registration when the program (or game library) loads, so saved
+// worlds can name the type before any code touches it. Use it for components; PH_REFLECT for other structs.
+#define PH_COMPONENT(Type, ...)                                                                                      \
+    PH_REFLECT(Type, __VA_ARGS__)                                                                                     \
+    [[maybe_unused]] inline const ::ph::ecs::ComponentId ph_component_registration_##Type =                           \
+        ::ph::ecs::component_id<Type>();
+
+namespace ph::ecs {
 
 // Fixed-size bitset over component ids.
 struct ComponentMask {

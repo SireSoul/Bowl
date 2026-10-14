@@ -6,6 +6,8 @@
 #include <atomic>
 #include <deque>
 #include <mutex>
+#include <memory>
+#include <string>
 #include <unordered_map>
 
 namespace ph {
@@ -15,6 +17,8 @@ namespace {
 struct ProfilerState {
     std::atomic<bool> enabled{true};
     std::mutex mutex;
+    // Zone names are copied once and reused: a name may point into a game library that gets hot-reloaded.
+    std::unordered_map<std::string_view, std::unique_ptr<std::string>> names; // key views its own value
     std::unordered_map<std::string_view, profiler::ZoneStats> current;
     std::vector<profiler::ZoneStats> last;
     std::deque<f32> history;
@@ -48,8 +52,15 @@ void profiler::end_frame() {
 void profiler::record(std::string_view name, f64 milliseconds) {
     auto& s = state();
     std::lock_guard lock(s.mutex);
-    auto& z = s.current[name];
-    z.name = name;
+    auto interned = s.names.find(name);
+    if (interned == s.names.end()) {
+        auto owned = std::make_unique<std::string>(name);
+        std::string_view view = *owned;
+        interned = s.names.emplace(view, std::move(owned)).first;
+    }
+    std::string_view stable = interned->first;
+    auto& z = s.current[stable];
+    z.name = stable;
     z.milliseconds += milliseconds;
     ++z.calls;
 }

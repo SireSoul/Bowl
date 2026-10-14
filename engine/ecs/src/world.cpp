@@ -173,6 +173,20 @@ void World::run_remove_hooks(ComponentId c, Entity e) {
     for (auto& hook : h->on_remove) hook(*this, e);
 }
 
+void World::reset() {
+    check_unlocked();
+    deferred_.clear();
+    hooks_.clear();
+    resources_.clear();
+    archetypes_.clear(); // destroys every component
+    by_mask_.clear();
+    records_.clear();
+    free_.clear();
+    free_cursor_.store(0, std::memory_order_relaxed);
+    entity_count_ = 0;
+    empty_ = &archetype_for(ComponentMask{});
+}
+
 void World::flush() {
     // Applying can record more commands (hooks, run() callbacks); keep going until quiet.
     for (int pass = 0; pass < 64 && !deferred_.empty(); ++pass) deferred_.apply();

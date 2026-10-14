@@ -38,7 +38,48 @@ function(ph_compile_shaders outputs_var source_dir output_dir)
     set(${outputs_var} ${outputs} PARENT_SCOPE)
 endfunction()
 
-# ph_add_game(<target> [ASSETS <dir>])
+# Moves a game's sources into a loadable library (<target>_code) and turns <target> into the engine host that loads
+# and reloads it. The host contains every engine object file (force-linked) and exports its symbols, so the library
+# links against nothing and resolves engine calls from the host at load time.
+function(ph_make_hot_reloadable target)
+    get_target_property(sources ${target} SOURCES)
+    get_target_property(source_dir ${target} SOURCE_DIR)
+    set(abs_sources "")
+    foreach(s IN LISTS sources)
+        if(IS_ABSOLUTE "${s}")
+            list(APPEND abs_sources "${s}")
+        else()
+            list(APPEND abs_sources "${source_dir}/${s}")
+        endif()
+    endforeach()
+
+    set(code ${target}_code)
+    add_library(${code} MODULE ${abs_sources})
+    target_compile_definitions(${code} PRIVATE PH_HOT_RELOAD_LIBRARY=1)
+    target_link_libraries(${code} PRIVATE $<COMPILE_ONLY:ph::engine>)
+    ph_configure_target(${code})
+    if(APPLE)
+        target_link_options(${code} PRIVATE "LINKER:-undefined,dynamic_lookup" "LINKER:-no_fixup_chains")
+    endif()
+    set_target_properties(${code} PROPERTIES FOLDER samples)
+
+    set_property(TARGET ${target} PROPERTY SOURCES "${PH_ENGINE_SOURCE_DIR}/app/hot/host_main.cpp")
+    set_target_properties(${target} PROPERTIES ENABLE_EXPORTS ON)
+    target_compile_definitions(${target} PRIVATE PH_HOT_RELOAD_LIBRARY_PATH="$<TARGET_FILE:${code}>")
+    foreach(lib ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app ph_imgui ph_shaderc)
+        if(TARGET ${lib})
+            if(APPLE)
+                target_link_options(${target} PRIVATE "LINKER:-force_load,$<TARGET_FILE:${lib}>")
+            else()
+                target_link_options(${target} PRIVATE "LINKER:--whole-archive" "$<TARGET_FILE:${lib}>"
+                                                      "LINKER:--no-whole-archive")
+            endif()
+        endif()
+    endforeach()
+    add_dependencies(${target} ${code})
+endfunction()
+
+# ph_add_game(<target> [ASSETS <dir>] [BUNDLE_ID <id>] [HOT_RELOAD])
 # Links the engine and lays out the runtime folder next to the executable:
 #   <exe dir>/engine/...  engine assets (compiled shaders)
 #   <exe dir>/assets/...  the game's assets, with its shaders compiled
@@ -46,10 +87,20 @@ endfunction()
 # With PH_MACOS_BUNDLES (on in the release preset) a macOS game is a .app with these folders in Contents/Resources.
 # `cmake --install <build dir> --prefix <folder>` lays out a shippable copy of every game.
 #   BUNDLE_ID com.example.game   macOS bundle identifier (default: com.placeholderenginename.<target>)
+#   HOT_RELOAD                   dev builds on macOS/Linux: the game's sources become <target>_code, a library the
+#                                <target> executable reloads whenever it's rebuilt (see ph/app/hot_reload.hpp)
 function(ph_add_game target)
-    cmake_parse_arguments(ARG "" "ASSETS;BUNDLE_ID" "" ${ARGN})
+    cmake_parse_arguments(ARG "HOT_RELOAD" "ASSETS;BUNDLE_ID" "" ${ARGN})
     target_link_libraries(${target} PRIVATE ph::engine)
     ph_configure_target(${target})
+
+    if(ARG_HOT_RELOAD AND PH_DEV_TOOLS AND NOT WIN32)
+        if(CMAKE_VERSION VERSION_LESS 3.27)
+            message(WARNING "${target}: hot reload needs CMake 3.27+; building it normally")
+        else()
+            ph_make_hot_reloadable(${target})
+        endif()
+    endif()
 
     set(bundle OFF)
     if(APPLE AND NOT IOS AND PH_MACOS_BUNDLES)

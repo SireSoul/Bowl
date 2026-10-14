@@ -110,6 +110,10 @@ ph_add_game(my_game ASSETS assets)
   copied as JSON. The whole world saves and loads from the overlay. `--inspect N` opens entity N at startup.
 - Dev builds read assets straight from your source folders. Save a PNG, WAV or `.glsl` file and the running game
   updates. A broken shader logs its error and keeps the last good version.
+- **Game-code hot reload** (macOS, Linux): `ph_add_game(my_game ... HOT_RELOAD)` builds your code as a library. Keep
+  the game running, rebuild `my_game_code`, and the new code takes over within a second, with the world kept. Put
+  world creation in `Game::start` and setup (systems, bindings, assets) in `Game::init`; use `PH_COMPONENT` for
+  components so they survive the swap.
 - `Game::dev_ui` is where your own ImGui tool windows go.
 
 ## Docs

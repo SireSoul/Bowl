@@ -191,3 +191,20 @@ TEST_CASE("inspector visitor walks reflected components and writes edits back") 
                                              "? inventory", "? buff", "entity companion"});
     CHECK(w.get<Hero>(e).level == 99);
 }
+
+TEST_CASE("components: hot-reload dormancy keeps ids and is undone by restore or re-registration") {
+    ComponentId id = component_id<Hero>();
+    auto everything = [](const ComponentInfo& info, void*) { return info.name == "game::Hero"; };
+    auto saved = mark_components_dormant(everything, nullptr);
+    REQUIRE(saved.size() == 1);
+    CHECK(component_info(id).dormant);
+    CHECK_FALSE(component_info(id).savable());
+    restore_components(saved);
+    CHECK_FALSE(component_info(id).dormant);
+    CHECK(component_info(id).savable());
+
+    mark_components_dormant(everything, nullptr);
+    CHECK(ecs::detail::register_component(ecs::detail::make_component_info<Hero>()) == id); // same id, refreshed
+    CHECK(component_info(id).savable());
+    CHECK(find_component("game::Hero") == id);
+}

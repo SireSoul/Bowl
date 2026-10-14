@@ -44,7 +44,11 @@ public:
     virtual ~Game() = default;
     // Called first, before the window exists.
     virtual AppConfig configure() { return {}; }
+    // Setup that code changes may need redone: register systems, bind inputs, load assets, set resources.
+    // Runs at startup, and again after each game-code hot reload.
     virtual void init(Engine&) {}
+    // Create the world (spawn entities). Runs once, after the first init; a hot reload keeps the world instead.
+    virtual void start(Engine&) {}
     // Simulation at a fixed rate (after the fixed schedule). Deterministic code goes here.
     virtual void fixed_update(Engine&, f32 /*dt*/) {}
     // Once per frame (after the frame schedule): animation, camera, UI.

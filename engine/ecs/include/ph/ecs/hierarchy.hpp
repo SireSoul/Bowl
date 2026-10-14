@@ -24,7 +24,7 @@ struct Transform2D {
     f32 rotation = 0; // radians
     Vec2 scale{1, 1};
 };
-PH_REFLECT(Transform2D, position, rotation, scale)
+PH_COMPONENT(Transform2D, position, rotation, scale)
 
 // Written by propagate_transforms; read it when drawing.
 struct GlobalTransform2D {
@@ -34,17 +34,17 @@ struct GlobalTransform2D {
 
     Vec2 apply(Vec2 local) const { return position + (local * scale).rotated(rotation); }
 };
-PH_REFLECT(GlobalTransform2D, position, rotation, scale)
+PH_COMPONENT(GlobalTransform2D, position, rotation, scale)
 
 struct Parent {
     Entity entity;
 };
-PH_REFLECT(Parent, entity)
+PH_COMPONENT(Parent, entity)
 
 struct Children {
     std::vector<Entity> list;
 };
-PH_REFLECT(Children, list)
+PH_COMPONENT(Children, list)
 
 // Attaches child under parent (null parent: detach). Refuses (returns false) if that would make a cycle.
 // Not while iterating; from systems use ctx.commands.run([=](World& w) { set_parent(w, child, parent); }).

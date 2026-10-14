@@ -9,6 +9,7 @@
 #   ph_ui        immediate-mode game UI: panels, widgets, focus navigation, dialogue (gfx, platform)
 #   ph_app       Engine/Game, main loop, dev tools                               (everything)
 
+set(PH_ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
 set(PH_ENGINE_ASSET_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets" CACHE INTERNAL "")
 set(PH_ENGINE_ASSET_BUILD_DIR "${CMAKE_BINARY_DIR}/engine_assets" CACHE INTERNAL "")
 
@@ -91,6 +92,7 @@ ph_module(app
     SOURCES
         app/src/app.cpp
         app/src/dev_tools.cpp
+        app/src/hot_reload.cpp
         app/src/scene.cpp
     PUBLIC_DEPS ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui)
 target_compile_definitions(ph_app PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}")

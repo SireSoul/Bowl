@@ -8,7 +8,7 @@
 namespace ph {
 
 // Lightweight always-available CPU profiler. Zones are aggregated by name per frame; the dev overlay shows them.
-// Zone names must be string literals (or otherwise outlive the program).
+// Names are copied the first time they're seen, so any string works.
 //
 //     void physics() { PH_PROFILE_SCOPE("physics"); ... }
 namespace profiler {
