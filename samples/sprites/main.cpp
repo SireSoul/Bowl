@@ -24,27 +24,34 @@ using namespace ph::ecs;
 
 // --- components: plain structs ---------------------------------------------------------------------------------------
 
+// PH_REFLECT makes a component savable and editable in the F1 inspector.
 struct Transform {
     Vec2 position;
     Vec2 previous; // position at the previous fixed tick, for interpolated rendering
     f32 rotation = 0;
 };
+PH_REFLECT(Transform, position, previous, rotation)
 struct Velocity {
     Vec2 value;
 };
+PH_REFLECT(Velocity, value)
 struct Spin {
     f32 speed = 0;
 };
+PH_REFLECT(Spin, speed)
 struct Look {
     Color color;
     f32 size = 16;
 };
+PH_REFLECT(Look, color, size)
 struct Lifetime {
     f32 seconds = 0;
 };
+PH_REFLECT(Lifetime, seconds)
 struct Banner {
     int slot = 0; // position in the row of animated sprites
 };
+PH_REFLECT(Banner, slot)
 
 // --- resources -------------------------------------------------------------------------------------------------------
 

@@ -8,6 +8,7 @@ add_executable(ph_tests
     test_jobs.cpp
     test_json.cpp
     test_math.cpp
+    test_reflect.cpp
     test_schedule.cpp
     test_shaderc.cpp
     test_sprite_sheet.cpp

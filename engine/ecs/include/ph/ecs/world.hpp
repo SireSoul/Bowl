@@ -78,6 +78,10 @@ public:
     // Component ids of an entity, for tools (see component_info(id).name).
     std::span<const ComponentId> components_of(Entity e) const;
     void* component_ptr(Entity e, ComponentId c) const;
+    // Adds a component by id (default-constructed, then `init` fills it in) — for loaders and tools that only know
+    // the type at runtime. Replaces an existing one. The component type must be savable (see SavableComponent).
+    // init receives nullptr for tags. Returns false if the type can't be default-constructed this way.
+    bool add_component(Entity e, ComponentId c, FunctionRef<void(void*)> init);
 
     // --- queries ---------------------------------------------------------------------------------------------------
     // Ts may be const-qualified to declare read-only access. Keep the Query around (e.g. in a system) — it caches the

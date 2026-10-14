@@ -50,6 +50,13 @@ const ComponentInfo& component_info(ComponentId id) {
 
 usize component_type_count() { return registry().count.load(std::memory_order_acquire); }
 
+std::optional<ComponentId> find_component(std::string_view name) {
+    usize n = component_type_count();
+    for (usize i = 0; i < n; ++i)
+        if (registry().infos[i].name == name) return static_cast<ComponentId>(i);
+    return std::nullopt;
+}
+
 // --- Archetype ------------------------------------------------------------------------------------------------------
 
 Archetype::Archetype(u32 id, std::vector<ComponentId> components) : id_(id), components_(std::move(components)) {

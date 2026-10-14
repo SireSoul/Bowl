@@ -1,12 +1,15 @@
 #pragma once
 
 #include "ph/core/assert.hpp"
+#include "ph/core/reflect.hpp"
+#include "ph/core/serialize.hpp"
 #include "ph/core/type_id.hpp"
 #include "ph/core/types.hpp"
 
 #include <array>
 #include <bit>
 #include <new>
+#include <optional>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -32,6 +35,32 @@ struct Entity {
 
 inline constexpr Entity null_entity{};
 
+// Entities in saved data are written as ids local to the file and remapped on load (ctx.entity_map), so references
+// between saved entities survive. A reference to an entity that wasn't saved becomes null.
+inline json::Value ph_to_json(const Entity& e, serial::Context& ctx) {
+    if (!e) return {};
+    if (ctx.entity_map) {
+        auto it = ctx.entity_map->find(e.bits());
+        if (it != ctx.entity_map->end()) return static_cast<f64>(it->second);
+    }
+    ctx.warn("a reference to an entity that isn't being saved was written as null");
+    return {};
+}
+inline bool ph_from_json(const json::Value& j, Entity& e, serial::Context& ctx) {
+    if (j.is_null()) {
+        e = null_entity;
+        return true;
+    }
+    if (!j.is_number()) return false;
+    e = null_entity;
+    if (ctx.entity_map) {
+        auto it = ctx.entity_map->find(static_cast<u64>(j.as_int()));
+        if (it != ctx.entity_map->end()) e = Entity::from_bits(it->second);
+    }
+    return true;
+}
+inline void ph_visit(reflect::FieldVisitor& v, std::string_view name, Entity& e) { v.entity(name, e.bits()); }
+
 using ComponentId = u16;
 inline constexpr usize max_components = PH_ECS_MAX_COMPONENTS;
 static_assert(max_components % 64 == 0);
@@ -49,7 +78,17 @@ struct ComponentInfo {
     bool trivially_relocatable = false;
     void (*move_construct)(void* dst, void* src) = nullptr; // placement-move src into uninitialized dst
     void (*destroy)(void* ptr) = nullptr;
+    // Present for savable components: reflected (PH_REFLECT), with serialization hooks, or tags.
+    void (*construct_default)(void* ptr) = nullptr;
+    json::Value (*save)(const void* ptr, serial::Context& ctx) = nullptr;
+    bool (*load)(const json::Value& j, void* ptr, serial::Context& ctx) = nullptr;
+    void (*visit)(void* ptr, reflect::FieldVisitor& v) = nullptr; // live editing (reflected only)
+    bool savable() const { return save != nullptr; }
 };
+
+template <class T>
+concept SavableComponent = std::is_default_constructible_v<T> &&
+                           (std::is_empty_v<T> || reflect::Reflected<T> || serial::HasHooks<T>);
 
 namespace detail {
 ComponentId register_component(const ComponentInfo& info);
@@ -64,12 +103,34 @@ template <Component T> ComponentInfo make_component_info() {
         info.move_construct = [](void* dst, void* src) { ::new (dst) T(std::move(*static_cast<T*>(src))); };
         info.destroy = [](void* p) { static_cast<T*>(p)->~T(); };
     }
+    if constexpr (SavableComponent<T>) {
+        info.construct_default = [](void* p) {
+            if constexpr (!std::is_empty_v<T>) ::new (p) T();
+        };
+        if constexpr (std::is_empty_v<T>) {
+            info.save = [](const void*, serial::Context&) { return json::Value(json::Object{}); };
+            info.load = [](const json::Value&, void*, serial::Context&) { return true; };
+        } else {
+            info.save = [](const void* p, serial::Context& ctx) { return serial::to_json(*static_cast<const T*>(p), ctx); };
+            info.load = [](const json::Value& j, void* p, serial::Context& ctx) {
+                return serial::from_json(j, *static_cast<T*>(p), ctx);
+            };
+        }
+        if constexpr (reflect::Reflected<T>) {
+            info.visit = [](void* p, reflect::FieldVisitor& v) {
+                reflect::for_each_field(*static_cast<T*>(p),
+                                        [&](std::string_view name, auto& field) { reflect::visit(v, name, field); });
+            };
+        }
+    }
     return info;
 }
 } // namespace detail
 
 const ComponentInfo& component_info(ComponentId id);
 usize component_type_count();
+// Looks a component type up by its type_name (e.g. "game::Health"). Only types used (or registered) so far exist.
+std::optional<ComponentId> find_component(std::string_view name);
 
 namespace detail {
 template <class T> ComponentId component_id_of() {
@@ -81,6 +142,9 @@ template <class T> ComponentId component_id_of() {
 
 // const T and T share one id (const only expresses read-only access in queries).
 template <class T> ComponentId component_id() { return detail::component_id_of<std::remove_cvref_t<T>>(); }
+
+// Makes component types known by name before anything uses them, so saved worlds that mention them can load.
+template <class... Ts> void register_components() { (static_cast<void>(component_id<Ts>()), ...); }
 
 // Fixed-size bitset over component ids.
 struct ComponentMask {

@@ -38,7 +38,8 @@ iterate:
 
 ## ECS
 
-- **Components** are plain structs: no base class, macros or code generation. Empty structs are tags and use no memory.
+- **Components** are plain structs: no base class or code generation. Empty structs are tags and use no memory.
+  Adding `PH_REFLECT(Type, field, ...)` after a struct makes it savable (JSON) and editable in the F1 inspector.
 - **Storage** is by archetype: entities with the same component set share contiguous per-component arrays. Adding or
   removing a component moves the entity to another archetype. The transitions are cached as graph edges.
 - **Entities** are `{index, generation}`, so a stale handle never aliases a newer entity.
@@ -63,6 +64,28 @@ buffers merge in chunk order.
 exception: entity ids created inside `par_each` chunks are unique, but which id each new entity gets depends on thread
 timing. When ids must be reproducible (lockstep or rollback netcode), spawn from `each()` or exclusive systems.
 Removing this limitation is on the roadmap.
+
+### Saving, loading, prefabs
+
+```cpp
+struct Health { i32 current = 100; i32 max = 100; ecs::Entity attacker; };
+PH_REFLECT(Health, current, max, attacker)
+
+serial::Context ctx{&engine.assets()};
+json::Value save = ecs::save_world(world, ctx);              // every entity with savable components
+auto spawned = ecs::load_entities(other_world, save, ctx);   // adds to a world; returns the new entities
+ecs::Entity guard = ecs::spawn_prefab(world, prefab_json, ctx);
+```
+
+- Savable components: reflected ones, ones with `ph_to_json`/`ph_from_json` hooks, and tags. Others are skipped, with a
+  warning in `ctx.warnings`.
+- Fields can be numbers, bools, enums, strings, math types, `Color`, vectors, arrays, optionals, nested reflected
+  structs, `Asset<T>` (saved as the path, reloaded on load), and `Entity`. Entity references are remapped, so they
+  survive a load into a world that already has entities.
+- Loading is tolerant: missing fields keep their defaults, and unknown components are skipped with a warning. Old save
+  files keep loading as components gain fields.
+- Components are saved by type name. A type has to be known before loading (`ecs::register_components<A, B>()`, or by
+  having been used).
 
 ## Rendering
 

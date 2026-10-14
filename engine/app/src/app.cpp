@@ -24,6 +24,7 @@ struct AppRunner {
     u64 frame_limit = 0;        // --frames N: quit after N frames (automated runs)
     std::string screenshot;     // --screenshot file.png: capture the last frame (or frame 60 without --frames)
     bool start_with_overlay = false; // --overlay: open the dev overlay at startup
+    i64 inspect_index = -1;          // --inspect N
 
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
@@ -38,6 +39,10 @@ struct AppRunner {
                 screenshot = argv[++i];
             } else if (arg == "--overlay") {
                 start_with_overlay = true;
+            } else if (arg == "--inspect" && i + 1 < argc) { // open the overlay with entity N in the inspector
+                start_with_overlay = true;
+                std::string_view n = argv[++i];
+                std::from_chars(n.data(), n.data() + n.size(), inspect_index);
             } else if (arg == "--no-vsync") {
                 e.config_.vsync = false;
             } else if (arg == "--driver" && i + 1 < argc) {
@@ -77,6 +82,10 @@ struct AppRunner {
         dev = std::make_unique<DevTools>(e);
         dev->set_visible(start_with_overlay);
         game->init(e);
+        if (inspect_index >= 0)
+            for (const auto& a : e.world_.archetypes())
+                for (ecs::Entity ent : a->entities())
+                    if (ent.index == static_cast<u32>(inspect_index)) dev->select(ent);
         last_ticks = SDL_GetTicksNS();
         info("ready: {} worker threads, {} backend", e.jobs_->worker_count(), e.gpu_.driver());
         return true;

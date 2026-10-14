@@ -39,6 +39,7 @@ ph_module(ecs
         ecs/src/archetype.cpp
         ecs/src/schedule.cpp
         ecs/src/world.cpp
+        ecs/src/world_io.cpp
     PUBLIC_DEPS ph_core)
 
 ph_module(platform

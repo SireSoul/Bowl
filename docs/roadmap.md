@@ -16,9 +16,10 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   polygons/capsules, trigger events as ECS components, optional rigid-body physics (Box2D v3) for games that want it
 
 ## M2: worlds that persist
-- Reflection for components (a small `PH_REFLECT` macro or C++26 reflection when compilers ship it)
-- Serialization: save/load worlds, scene and prefab files (JSON), entity references remapped on load
-- Entity inspector: edit component fields live in the overlay
+- ~~Reflection: `PH_REFLECT(Type, fields...)`~~ (done). Later: switch to C++26 reflection when compilers ship it
+- ~~Serialization: JSON for reflected types, world save/load, prefabs, entity references remapped on load~~ (done).
+  Still to do: prefab and scene *assets* (hot-reloaded files), binary format for big worlds, save-file migrations
+- ~~Entity inspector: select, edit fields live, duplicate, destroy, copy as JSON, save/load the world~~ (done)
 - Relationships: parent/child transforms
 
 ## M3: look great

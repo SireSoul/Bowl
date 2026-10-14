@@ -593,14 +593,14 @@ void register_tilemap_loader(AssetManager& assets) {
             log_asset_error(ctx.path(), "Tilemap", error);
             return nullptr;
         }
-        AssetManager& assets = ctx.assets();
+        AssetManager& manager = ctx.assets();
         for (Tileset& ts : map->tilesets) {
-            if (!ts.image_path.empty()) ts.image = assets.load<Texture>(ts.image_path);
+            if (!ts.image_path.empty()) ts.image = manager.load<Texture>(ts.image_path);
             for (TileInfo& t : ts.tiles)
-                if (!t.image_path.empty()) t.image = assets.load<Texture>(t.image_path);
+                if (!t.image_path.empty()) t.image = manager.load<Texture>(t.image_path);
         }
         for (MapLayer& l : map->layers)
-            if (!l.image_path.empty()) l.image = assets.load<Texture>(l.image_path);
+            if (!l.image_path.empty()) l.image = manager.load<Texture>(l.image_path);
         return map;
     });
 }

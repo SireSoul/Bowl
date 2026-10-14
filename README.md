@@ -64,6 +64,8 @@ using namespace ph;
 
 struct Position { Vec2 value; };
 struct Velocity { Vec2 value; };
+PH_REFLECT(Position, value) // optional: savable + editable in the F1 inspector
+PH_REFLECT(Velocity, value)
 
 class MyGame : public Game {
     gfx::SpriteBatch batch;
@@ -95,6 +97,8 @@ ph_add_game(my_game ASSETS assets)
 
 - **F1** opens the overlay: FPS graph, profiler zones, every system with its time and parallel batch (toggle systems
   on/off), entity/archetype browser, asset list with reload buttons, log, and pause / single-step / time-scale.
+- Click an entity to inspect it: reflected components are edited live, and entities can be duplicated, destroyed or
+  copied as JSON. The whole world saves and loads from the overlay. `--inspect N` opens entity N at startup.
 - Dev builds read assets straight from your source folders. Save a PNG, WAV or `.glsl` file and the running game
   updates. A broken shader logs its error and keeps the last good version.
 - `Game::dev_ui` is where your own ImGui tool windows go.

@@ -90,6 +90,28 @@ void* World::component_ptr(Entity e, ComponentId c) const {
     return r.archetype->at(c, r.row);
 }
 
+bool World::add_component(Entity e, ComponentId c, FunctionRef<void(void*)> init) {
+    check_unlocked();
+    if (!alive(e)) return false;
+    const ComponentInfo& info = component_info(c);
+    if (!info.construct_default) return false;
+    Record& r = records_[e.index];
+    bool existed = r.archetype->has(c);
+    if (existed) {
+        void* p = r.archetype->at(c, r.row);
+        if (p && info.destroy) info.destroy(p);
+        if (p) info.construct_default(p);
+        init(p);
+        return true;
+    }
+    u32 row = move_entity(e, archetype_with(*r.archetype, c));
+    void* p = records_[e.index].archetype->at(c, row);
+    if (p) info.construct_default(p);
+    init(p);
+    run_add_hooks(c, e);
+    return true;
+}
+
 Archetype& World::archetype_for(const ComponentMask& mask) {
     if (auto it = by_mask_.find(mask); it != by_mask_.end()) return *it->second;
     std::vector<ComponentId> comps;
