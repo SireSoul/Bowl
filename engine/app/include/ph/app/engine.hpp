@@ -3,6 +3,7 @@
 #include "ph/audio/audio.hpp"
 #include "ph/core/assets.hpp"
 #include "ph/core/jobs.hpp"
+#include "ph/core/localization.hpp"
 #include "ph/core/log.hpp"
 #include "ph/ecs/ecs.hpp"
 #include "ph/gfx/renderer.hpp"
@@ -25,6 +26,8 @@ struct AppConfig {
     bool pixel_art = false;          // nearest-filtered textures and a pixel-snapped camera
     std::string gpu_driver;          // "", "vulkan", "metal", "direct3d12"
     LogLevel log_level = LogLevel::Info;
+    std::string language = "en";     // lang/<language>.json, falling back to fallback_language
+    std::string fallback_language = "en";
     std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
 };
 
@@ -63,6 +66,8 @@ public:
     Input& input() { return input_; }
     audio::AudioEngine& audio() { return audio_; }
     AssetManager& assets() { return assets_; }
+    // Strings for the current language, from assets lang/<code>.json (see AppConfig::language).
+    Localization& i18n() { return i18n_; }
     JobSystem& jobs() { return *jobs_; }
     ecs::World& world() { return world_; }
     // Runs every fixed tick, before Game::fixed_update.
@@ -113,6 +118,7 @@ private:
     gfx::Camera2D camera_;
     // Declared after the device: destroyed first, so textures and shaders release before the GPU goes away.
     AssetManager assets_;
+    Localization i18n_{assets_};
     gfx::Renderer renderer_;
 
     f64 time_ = 0, accumulator_ = 0;

@@ -31,6 +31,7 @@ ph_module(core
         core/src/file.cpp
         core/src/jobs.cpp
         core/src/json.cpp
+        core/src/localization.cpp
         core/src/profiler.cpp
     PUBLIC_DEPS Threads::Threads)
 

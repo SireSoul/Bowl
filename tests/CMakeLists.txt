@@ -7,6 +7,7 @@ add_executable(ph_tests
     test_hierarchy.cpp
     test_input.cpp
     test_jobs.cpp
+    test_localization.cpp
     test_json.cpp
     test_math.cpp
     test_particles.cpp

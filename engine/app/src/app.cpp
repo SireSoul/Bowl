@@ -47,6 +47,8 @@ struct AppRunner {
                 e.config_.vsync = false;
             } else if (arg == "--driver" && i + 1 < argc) {
                 e.config_.gpu_driver = argv[++i];
+            } else if (arg == "--lang" && i + 1 < argc) {
+                e.config_.language = argv[++i];
             }
         }
         if (e.config_.game_asset_dir.empty() && game_asset_dir) e.config_.game_asset_dir = game_asset_dir;
@@ -71,6 +73,11 @@ struct AppRunner {
         mount_assets(e);
         gfx::register_asset_loaders(e.assets_, e.gpu_, e.config_.pixel_art ? gfx::Filter::Nearest : gfx::Filter::Linear);
         audio::register_asset_loaders(e.assets_);
+        register_string_table_loader(e.assets_);
+        if (e.assets_.resolve("lang/" + e.config_.fallback_language + ".json")) {
+            e.i18n_.set_fallback(e.config_.fallback_language);
+            e.i18n_.set_language(e.config_.language);
+        }
         e.assets_.set_hot_reload(PH_DEV_TOOLS != 0);
         if (!e.renderer_.init(e.gpu_, e.assets_)) return false;
 
