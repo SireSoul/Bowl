@@ -20,7 +20,7 @@ Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md) for what's next
 | `audio` | software mixer: 128 voices, buses, pitch, equal-power pan, looping; WAV and OGG sounds; streamed OGG music with gapless loops and crossfades |
 | `ui` | immediate-mode game UI: panels, buttons, checkboxes, sliders, progress bars, nine-slice art, mouse + keyboard + gamepad focus, typewriter dialogue box |
 | `physics` | collision: rect/circle overlap + separation, swept boxes (no tunneling), raycasts, spatial hash, `move_and_slide` |
-| `app` | `Engine` + `Game`, fixed-timestep loop with interpolation, SDL3 callback entry point, Dear ImGui dev overlay |
+| `app` | `Engine` + `Game`, scene stack with fades, localization, fixed-timestep loop with interpolation, SDL3 callback entry point, Dear ImGui dev overlay |
 | `tools/shaderc` | GLSL → SPIR-V + Metal compiler (library + CLI), also linked into dev builds for live shader edits |
 
 ## Build

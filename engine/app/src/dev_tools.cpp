@@ -81,6 +81,7 @@ void DevTools::end_frame(Game& game) {
     draw_main();
     draw_inspector();
     game.dev_ui(engine_);
+    engine_.scenes().dev_ui(engine_);
     ImGui::Render();
 }
 

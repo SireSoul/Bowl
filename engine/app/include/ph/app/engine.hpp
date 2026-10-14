@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ph/app/scene.hpp"
 #include "ph/audio/audio.hpp"
 #include "ph/core/assets.hpp"
 #include "ph/core/jobs.hpp"
@@ -76,6 +77,8 @@ public:
     ecs::Schedule& frame_schedule() { return frame_schedule_; }
     // The main world camera; its viewport follows the window.
     gfx::Camera2D& camera() { return camera_; }
+    // Title screen, gameplay, menus...: run after the Game's own callbacks each frame.
+    SceneStack& scenes() { return scenes_; }
     const AppConfig& config() const { return config_; }
     // Command-line arguments (argv[1..]), including the engine's own flags.
     const std::vector<std::string>& args() const { return args_; }
@@ -120,6 +123,7 @@ private:
     AssetManager assets_;
     Localization i18n_{assets_};
     gfx::Renderer renderer_;
+    SceneStack scenes_;
 
     f64 time_ = 0, accumulator_ = 0;
     f32 delta_ = 0, alpha_ = 0, time_scale_ = 1;

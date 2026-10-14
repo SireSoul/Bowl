@@ -139,6 +139,7 @@ struct AppRunner {
             e.input_.begin_fixed_tick();
             e.fixed_schedule_.run(e.world_, *e.jobs_, static_cast<f32>(step));
             game->fixed_update(e, static_cast<f32>(step));
+            e.scenes_.fixed_update(e, static_cast<f32>(step));
             e.world_.flush();
             e.input_.end_fixed_tick();
             e.accumulator_ -= step;
@@ -157,6 +158,7 @@ struct AppRunner {
             PH_PROFILE_SCOPE("frame update");
             e.frame_schedule_.run(e.world_, *e.jobs_, e.delta_);
             game->update(e, e.delta_);
+            e.scenes_.update(e, e.delta_);
             e.world_.flush();
         }
 
@@ -170,10 +172,12 @@ struct AppRunner {
         if (e.renderer_.begin_frame()) {
             PH_PROFILE_SCOPE("game render");
             game->render(e);
+            e.scenes_.render(e);
         }
         dev->end_frame(*game);
         e.renderer_.end_frame();
 
+        e.scenes_.apply_pending(e);
         e.input_.begin_frame();
         profiler::end_frame();
         ++e.frame_;
@@ -191,6 +195,7 @@ struct AppRunner {
     }
 
     void shutdown() {
+        if (engine) engine->scenes_.shutdown(*engine);
         if (engine && game) game->shutdown(*engine);
         if (engine) SDL_WaitForGPUIdle(engine->gpu_.handle());
         dev.reset();

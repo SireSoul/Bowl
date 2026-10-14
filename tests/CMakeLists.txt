@@ -12,13 +12,14 @@ add_executable(ph_tests
     test_math.cpp
     test_particles.cpp
     test_reflect.cpp
+    test_scene.cpp
     test_schedule.cpp
     test_shaderc.cpp
     test_sprite_sheet.cpp
     test_text.cpp
     test_tilemap.cpp
     test_ui.cpp)
-target_link_libraries(ph_tests PRIVATE ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui doctest::doctest)
+target_link_libraries(ph_tests PRIVATE ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app doctest::doctest)
 target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"
     PH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(TARGET ph_shaderc)
