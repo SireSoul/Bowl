@@ -10,8 +10,8 @@
 namespace ph::physics {
 
 // Collision for games that move things around a world: overlap tests that say how to separate, swept boxes that
-// never tunnel, raycasts, a spatial hash broadphase, and move_and_slide for characters. Everything works in any
-// consistent unit — pixels, tiles, or the cell space of an isometric map.
+// never tunnel, raycasts, a spatial hash broadphase, and move_and_slide for characters. Any consistent unit works:
+// pixels, tiles, or the cell space of an isometric map.
 
 struct Circle {
     Vec2 center;

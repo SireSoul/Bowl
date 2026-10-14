@@ -74,7 +74,7 @@ bool Font::place(u32 w, u32 h, u16& page, u32& x, u32& y) {
     y = p->shelf_y;
     p->shelf_x += w + 1;
     p->shelf_h = std::max(p->shelf_h, h);
-    p->dirty = true;
+    p->mark(x, y, w, h);
     return true;
 }
 
@@ -120,7 +120,7 @@ const Font::Glyph& Font::glyph(u32 codepoint, f32 pixel_size) {
 const Texture* Font::page(u16 index) {
     if (index >= pages_.size()) return nullptr;
     Page& p = pages_[index];
-    if (p.dirty && device_) {
+    if (device_ && (!p.texture || p.dirty())) {
         if (!p.texture) {
             TextureDesc desc;
             desc.width = desc.height = page_size;
@@ -131,14 +131,18 @@ const Texture* Font::page(u16 index) {
             desc.name = name_;
             p.texture = device_->create_texture(desc);
         } else {
-            device_->update_texture(*p.texture, p.pixels.data(), true);
+            // Only the glyphs added since the last upload: usually a few hundred bytes, not the 4 MB page.
+            PixelRect rect{p.dirty_x0, p.dirty_y0, p.dirty_x1 - p.dirty_x0, p.dirty_y1 - p.dirty_y0};
+            device_->update_texture_region(*p.texture, rect, &p.pixels[(rect.y * page_size + rect.x) * 4], page_size,
+                                           true);
         }
-        p.dirty = false;
+        p.dirty_x0 = p.dirty_y0 = page_size;
+        p.dirty_x1 = p.dirty_y1 = 0;
     }
     return p.texture.get();
 }
 
-// --- layout ---------------------------------------------------------------------------------------------------------
+// Layout
 
 namespace {
 

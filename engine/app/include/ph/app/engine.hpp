@@ -85,7 +85,7 @@ public:
     ecs::Schedule& frame_schedule() { return frame_schedule_; }
     // The main world camera; its viewport follows the window.
     gfx::Camera2D& camera() { return camera_; }
-    // Title screen, gameplay, menus...: run after the Game's own callbacks each frame.
+    // Screens such as the title, gameplay and menus. They run after the Game's own callbacks each frame.
     SceneStack& scenes() { return scenes_; }
     // Player preferences, saved to user_data_path()/settings.json at exit. Controls saved under "input" (with
     // save_controls) are applied after Game::init, so player rebinds override the game's defaults.

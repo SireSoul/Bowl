@@ -1,5 +1,6 @@
 #include "ph/core/ease.hpp"
 #include "ph/core/serialize.hpp"
+#include "ph/ecs/hierarchy.hpp"
 #include "ph/gfx/particles.hpp"
 
 #include <doctest/doctest.h>
@@ -78,4 +79,22 @@ TEST_CASE("particle settings are reflected and serializable") {
     ParticleEmitter back;
     REQUIRE(serial::from_json(j, back, ctx));
     CHECK(back.settings.color_start == e.settings.color_start);
+}
+
+TEST_CASE("particle emitters on entities: every emitter steps, emitting=false stops spawning") {
+    ecs::World world;
+    ParticleSettings s;
+    s.rate = 20;
+    s.lifetime_min = s.lifetime_max = 10;
+    ecs::Entity attached = world.create(ecs::Transform2D{{100, 50}}, ParticleEmitter{.settings = s});
+    ecs::Entity loose = world.create(ParticleEmitter{.settings = s, .origin = {-30, 0}});
+    ecs::propagate_transforms(world);
+
+    update_particle_emitters(world, 0.25f);
+    CHECK(world.get<ParticleEmitter>(attached).system.size() == 5);
+    CHECK(world.get<ParticleEmitter>(loose).system.size() == 5);
+    world.get<ParticleEmitter>(loose).emitting = false;
+    update_particle_emitters(world, 0.25f);
+    CHECK(world.get<ParticleEmitter>(attached).system.size() == 10);
+    CHECK(world.get<ParticleEmitter>(loose).system.size() == 5);
 }

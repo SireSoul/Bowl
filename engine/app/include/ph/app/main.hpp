@@ -2,8 +2,8 @@
 
 // Include in exactly one .cpp of your game and write PH_MAIN(YourGame).
 //
-// Uses SDL3's callback entry points instead of a main() loop, which is what the web (Emscripten), iOS and Android
-// need — the same game code runs everywhere. In a hot-reload build (ph_add_game(... HOT_RELOAD)) the game is a
+// Uses SDL3's callback entry points instead of a main() loop. The web (Emscripten), iOS and Android need those, and
+// using them everywhere keeps the game code identical on every platform. In a hot-reload build (ph_add_game(... HOT_RELOAD)) the game is a
 // library instead, and PH_MAIN exports the function the host uses to create the game.
 
 #include "ph/app/entry.hpp"

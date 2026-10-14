@@ -5,7 +5,7 @@
 
 namespace ph::gfx {
 
-// --- Camera2D -------------------------------------------------------------------------------------------------------
+// Camera2D
 
 Mat4 Camera2D::view_projection() const {
     Vec2 pos = position;
@@ -35,7 +35,7 @@ Rect Camera2D::visible_bounds() const {
     return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y};
 }
 
-// --- SpriteBatch ----------------------------------------------------------------------------------------------------
+// SpriteBatch
 
 void SpriteBatch::begin(const Camera2D& camera, SpriteSort sort, BlendMode blend, const Material* material) {
     camera_ = camera;

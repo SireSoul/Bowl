@@ -42,6 +42,8 @@ struct Vec2 {
     constexpr f32 length_squared() const { return dot(*this); }
     f32 length() const { return std::sqrt(length_squared()); }
     Vec2 normalized() const { f32 l = length(); return l > 0 ? *this / l : Vec2{}; }
+    f32 distance(Vec2 o) const { return (o - *this).length(); }
+    f32 angle() const { return std::atan2(y, x); }
     constexpr Vec2 perpendicular() const { return {-y, x}; }
     Vec2 rotated(f32 angle) const {
         f32 c = std::cos(angle), s = std::sin(angle);
@@ -151,6 +153,10 @@ struct Mat4 {
 struct Rect {
     f32 x = 0, y = 0, w = 0, h = 0;
 
+    static constexpr Rect from_center(Vec2 center, Vec2 size) {
+        return {center.x - size.x * 0.5f, center.y - size.y * 0.5f, size.x, size.y};
+    }
+    constexpr Rect expanded(f32 by) const { return {x - by, y - by, w + 2 * by, h + 2 * by}; }
     constexpr Vec2 position() const { return {x, y}; }
     constexpr Vec2 size() const { return {w, h}; }
     constexpr Vec2 center() const { return {x + w * 0.5f, y + h * 0.5f}; }
@@ -161,11 +167,14 @@ struct Rect {
     constexpr bool operator==(const Rect&) const = default;
 };
 
-// Linear-space-agnostic RGBA color in 0..1 floats. Use Color::hex(0xRRGGBB) / Color::rgba8 for authored colors.
+// RGBA with float channels, normally 0..1. Values above 1 are allowed and make sprites glow when bloom is on.
+// Color::hex(0xRRGGBB) and Color::rgba8 convert from the usual 8-bit notations.
 struct Color {
     f32 r = 1, g = 1, b = 1, a = 1;
 
-    static constexpr Color rgba8(u8 r, u8 g, u8 b, u8 a = 255) { return {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f}; }
+    static constexpr Color rgba8(u8 red, u8 green, u8 blue, u8 alpha = 255) {
+        return {red / 255.0f, green / 255.0f, blue / 255.0f, alpha / 255.0f};
+    }
     static constexpr Color hex(u32 rgb, f32 alpha = 1.0f) {
         return {((rgb >> 16) & 0xFF) / 255.0f, ((rgb >> 8) & 0xFF) / 255.0f, (rgb & 0xFF) / 255.0f, alpha};
     }

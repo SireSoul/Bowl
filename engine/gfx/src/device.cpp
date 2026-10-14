@@ -1,5 +1,6 @@
 #include "ph/gfx/device.hpp"
 
+#include "ph/core/assert.hpp"
 #include "ph/core/log.hpp"
 
 #include <SDL3/SDL.h>
@@ -137,7 +138,7 @@ std::unique_ptr<Texture> GpuDevice::create_texture(const TextureDesc& desc) {
         return nullptr;
     }
     if (!desc.name.empty()) SDL_SetGPUTextureName(device_, texture, std::string(desc.name).c_str());
-    upload_pixels(texture, desc.width, desc.height, desc.rgba8, desc.premultiplied, mips);
+    upload_pixels(texture, {0, 0, desc.width, desc.height}, desc.rgba8, desc.width, desc.premultiplied, mips);
 
     auto t = std::unique_ptr<Texture>(new Texture());
     t->device_ = this;
@@ -151,37 +152,50 @@ std::unique_ptr<Texture> GpuDevice::create_texture(const TextureDesc& desc) {
 }
 
 bool GpuDevice::update_texture(Texture& texture, const void* rgba8, bool premultiplied) {
-    return upload_pixels(texture.texture_, texture.width_, texture.height_, rgba8, premultiplied, texture.mipmapped_);
+    return upload_pixels(texture.texture_, {0, 0, texture.width_, texture.height_}, rgba8, texture.width_,
+                         premultiplied, texture.mipmapped_);
 }
 
-bool GpuDevice::upload_pixels(SDL_GPUTexture* texture, u32 width, u32 height, const void* rgba8, bool premultiplied,
-                              bool mips) {
-    u32 bytes = width * height * 4;
-    SDL_GPUTransferBufferCreateInfo tinfo{SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, bytes, 0};
+bool GpuDevice::update_texture_region(Texture& texture, PixelRect rect, const void* rgba8, u32 row_pixels,
+                                      bool premultiplied) {
+    if (rect.w == 0 || rect.h == 0) return true;
+    PH_ASSERT(rect.x + rect.w <= texture.width_ && rect.y + rect.h <= texture.height_, "region outside the texture");
+    return upload_pixels(texture.texture_, rect, rgba8, row_pixels, premultiplied, texture.mipmapped_);
+}
+
+bool GpuDevice::upload_pixels(SDL_GPUTexture* texture, PixelRect rect, const void* rgba8, u32 row_pixels,
+                              bool premultiplied, bool mips) {
+    u32 row_bytes = rect.w * 4;
+    SDL_GPUTransferBufferCreateInfo tinfo{SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, row_bytes * rect.h, 0};
     SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_, &tinfo);
     if (!transfer) return false;
     auto* dst = static_cast<u8*>(SDL_MapGPUTransferBuffer(device_, transfer, false));
-    if (premultiplied) {
-        std::memcpy(dst, rgba8, bytes);
-    } else {
-        const auto* src = static_cast<const u8*>(rgba8);
-        for (u32 i = 0; i < bytes; i += 4) {
+    for (u32 row = 0; row < rect.h; ++row) {
+        const u8* src = static_cast<const u8*>(rgba8) + static_cast<usize>(row) * row_pixels * 4;
+        u8* out = dst + static_cast<usize>(row) * row_bytes;
+        if (premultiplied) {
+            std::memcpy(out, src, row_bytes);
+            continue;
+        }
+        for (u32 i = 0; i < row_bytes; i += 4) {
             u32 a = src[i + 3];
-            dst[i + 0] = static_cast<u8>((src[i + 0] * a + 127) / 255);
-            dst[i + 1] = static_cast<u8>((src[i + 1] * a + 127) / 255);
-            dst[i + 2] = static_cast<u8>((src[i + 2] * a + 127) / 255);
-            dst[i + 3] = static_cast<u8>(a);
+            out[i + 0] = static_cast<u8>((src[i + 0] * a + 127) / 255);
+            out[i + 1] = static_cast<u8>((src[i + 1] * a + 127) / 255);
+            out[i + 2] = static_cast<u8>((src[i + 2] * a + 127) / 255);
+            out[i + 3] = static_cast<u8>(a);
         }
     }
     SDL_UnmapGPUTransferBuffer(device_, transfer);
 
     SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device_);
     SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
-    SDL_GPUTextureTransferInfo src_info{transfer, 0, width, height};
+    SDL_GPUTextureTransferInfo src_info{transfer, 0, rect.w, rect.h};
     SDL_GPUTextureRegion region{};
     region.texture = texture;
-    region.w = width;
-    region.h = height;
+    region.x = rect.x;
+    region.y = rect.y;
+    region.w = rect.w;
+    region.h = rect.h;
     region.d = 1;
     SDL_UploadToGPUTexture(copy, &src_info, &region, false);
     SDL_EndGPUCopyPass(copy);

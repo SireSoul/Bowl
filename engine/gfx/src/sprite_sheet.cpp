@@ -101,7 +101,7 @@ SpriteSheet SpriteSheet::grid(Asset<Texture> texture, u32 cell_width, u32 cell_h
     return sheet;
 }
 
-// --- SpriteAnimator -------------------------------------------------------------------------------------------------
+// SpriteAnimator
 
 bool SpriteAnimator::play(std::string_view name, bool restart) {
     if (!sheet) return false;
@@ -158,7 +158,7 @@ void SpriteAnimator::update(f32 dt) {
     }
 }
 
-// --- drawing --------------------------------------------------------------------------------------------------------
+// Drawing
 
 void draw_frame(SpriteBatch& batch, const SpriteSheet& sheet, u32 frame, Vec2 position, Vec2 scale, Color color,
                 f32 depth, f32 rotation) {

@@ -3,7 +3,7 @@
 #   ph_core      no dependencies: types, math, logging, jobs, profiler, files, assets, shader bundles
 #   ph_ecs       entities, components, queries, commands, parallel schedules     (core)
 #   ph_platform  window and input                                               (core, SDL3)
-#   ph_gfx       GPU device, textures, shaders, sprite batching, renderer        (core, SDL3, stb)
+#   ph_gfx       GPU device, textures, shaders, sprite batching, renderer        (core, ecs, SDL3, stb)
 #   ph_audio     mixer, sounds, streamed music                                   (core, SDL3, stb)
 #   ph_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide (core)
 #   ph_ui        immediate-mode game UI: panels, widgets, focus navigation, dialogue (gfx, platform)
@@ -63,7 +63,7 @@ ph_module(gfx
         gfx/src/sprites.cpp
         gfx/src/text.cpp
         gfx/src/tilemap.cpp
-    PUBLIC_DEPS ph_core SDL3::SDL3
+    PUBLIC_DEPS ph_core ph_ecs SDL3::SDL3
     PRIVATE_DEPS ph_stb)
 if(PH_DEV_TOOLS)
     target_link_libraries(ph_gfx PRIVATE ph_shaderc)

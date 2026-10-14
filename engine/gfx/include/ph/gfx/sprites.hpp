@@ -41,7 +41,7 @@ struct Camera2D {
 enum class SpriteSort : u8 {
     None,         // submission order (painter's algorithm, you sort)
     Texture,      // fewest draw calls; order between textures is arbitrary
-    Depth,        // by depth, then texture for equal depth — the default
+    Depth,        // by depth, then texture for equal depth (the default)
 };
 
 // How a batch's pixels combine with what's already drawn (colors are premultiplied).

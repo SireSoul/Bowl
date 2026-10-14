@@ -10,11 +10,10 @@
 #include <bit>
 #include <new>
 #include <optional>
-#include <utility>
-#include <vector>
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #ifndef PH_ECS_MAX_COMPONENTS
 #define PH_ECS_MAX_COMPONENTS 256
@@ -67,8 +66,9 @@ using ComponentId = u16;
 inline constexpr usize max_components = PH_ECS_MAX_COMPONENTS;
 static_assert(max_components % 64 == 0);
 
-// Components are plain structs: any type that is move-constructible and destructible. No base class, no macros,
-// no code generation. Empty structs are "tags" and take no memory.
+// A component is any move-constructible, destructible struct; no base class or generated code. Empty structs are
+// tags and take no memory. Adding PH_COMPONENT(Type, fields...) after one makes it savable and editable in the
+// inspector, but is optional.
 template <class T>
 concept Component = std::is_object_v<T> && !std::is_const_v<T> && std::is_move_constructible_v<T> &&
                     std::is_destructible_v<T>;

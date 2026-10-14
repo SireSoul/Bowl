@@ -14,7 +14,7 @@
 
 namespace ph::gfx {
 
-// --- small helpers --------------------------------------------------------------------------------------------------
+// Small helpers
 
 std::string normalize_path(std::string_view path) {
     std::vector<std::string_view> parts;
@@ -296,7 +296,7 @@ bool parse_layers(const json::Value& list, const LayerContext& parent, std::stri
 
 } // namespace
 
-// --- Tileset / MapLayer ---------------------------------------------------------------------------------------------
+// Tileset / MapLayer
 
 const TileInfo* Tileset::tile(u32 local_id) const {
     auto it = std::lower_bound(tiles.begin(), tiles.end(), local_id, [](const TileInfo& t, u32 id) { return t.id < id; });
@@ -316,7 +316,7 @@ u32 MapLayer::at(i32 x, i32 y) const {
     return cells[static_cast<usize>(ly) * width + static_cast<usize>(lx)];
 }
 
-// --- Tilemap --------------------------------------------------------------------------------------------------------
+// Tilemap
 
 bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
                     const std::function<std::optional<std::string>(const std::string&)>& read_file, Tilemap& out,
@@ -418,7 +418,7 @@ Vec2 Tilemap::world_to_cell(Vec2 w) const {
     return {w.x / tw, w.y / th};
 }
 
-// --- drawing --------------------------------------------------------------------------------------------------------
+// Drawing
 
 namespace {
 
@@ -571,7 +571,7 @@ void draw_tilemap(SpriteBatch& batch, const Tilemap& map, const TilemapDrawOptio
     }
 }
 
-// --- loader ---------------------------------------------------------------------------------------------------------
+// Loader
 
 void register_tilemap_loader(AssetManager& assets) {
     assets.register_loader<Tilemap>([](AssetLoadContext& ctx) -> std::unique_ptr<Tilemap> {

@@ -12,7 +12,7 @@ void log_asset_error(std::string_view path, std::string_view type, std::string_v
     error("asset '{}' ({}): {}", path, type, message);
 }
 
-// --- AssetLoadContext -----------------------------------------------------------------------------------------------
+// AssetLoadContext
 
 std::optional<std::vector<u8>> AssetLoadContext::read(std::string_view virtual_path) {
     auto file = assets_.resolve(virtual_path);
@@ -29,7 +29,7 @@ std::optional<std::string> AssetLoadContext::read_text(std::string_view virtual_
 
 bool AssetLoadContext::exists(std::string_view virtual_path) const { return assets_.resolve(virtual_path).has_value(); }
 
-// --- AssetManager ---------------------------------------------------------------------------------------------------
+// AssetManager
 
 AssetManager::AssetManager() = default;
 AssetManager::~AssetManager() = default;

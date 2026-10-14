@@ -113,8 +113,8 @@ public:
     // Custom property of the tile at a cell, e.g. map.tile_property("ground", x, y, "solid").as_bool()
     const json::Value& tile_property(std::string_view layer_name, i32 x, i32 y, std::string_view key) const;
 
-    // Map pixel coordinates of a cell's anchor: its top-left (orthogonal) or the top corner of the diamond
-    // (isometric) — where Tiled puts tile (x, y).
+    // Map pixel coordinates of a cell's anchor, where Tiled puts tile (x, y): its top-left (orthogonal) or the top
+    // corner of the diamond (isometric).
     Vec2 cell_to_world(f32 x, f32 y) const;
     // Inverse: fractional cell coordinates of a map point; floor() them for the cell.
     Vec2 world_to_cell(Vec2 world) const;

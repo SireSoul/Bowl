@@ -68,8 +68,8 @@ private:
 
 template <class T> using AssetLoader = std::function<std::unique_ptr<T>(AssetLoadContext&)>;
 
-// Loads and caches assets by virtual path, from an ordered list of mounted folders. Not thread-safe: use it from the
-// main thread. Failed reloads keep the previous value, so a typo in a shader never takes the game down.
+// Loads and caches assets by virtual path from an ordered list of mounted folders. Main thread only.
+// If a reload fails (say, a shader with a syntax error), the previous value stays in place.
 class AssetManager : NonCopyable {
 public:
     AssetManager();
@@ -104,8 +104,8 @@ public:
         on_reload_.push_back({std::move(callback), ++serial_});
     }
 
-    // Everything registered or loaded after mark() — loaders, assets, callbacks — can be dropped with rollback().
-    // Game-code hot reload uses this to release the game library's objects before unloading it.
+    // rollback(mark) drops every loader, asset and callback registered after mark() was taken, and restores loaders
+    // they replaced. Game-code hot reload uses it to free the game library's objects before unloading the library.
     u64 mark() const { return serial_; }
     void rollback(u64 mark);
 
@@ -152,6 +152,7 @@ private:
         std::filesystem::path directory;
     };
 
+    template <class T> Entry& make_entry(Key key, bool from_file);
     template <class T> bool run_loader(Entry& entry);
     void watch_dependencies(Entry& entry, const std::vector<std::filesystem::path>& files);
     void notify(std::string_view path, bool ok);
@@ -184,45 +185,35 @@ template <class T> bool AssetManager::run_loader(Entry& entry) {
     return true;
 }
 
-template <class T> Asset<T> AssetManager::load(std::string_view path) {
-    Key key{type_id<T>(), std::string(path)};
-    if (auto it = entries_.find(key); it != entries_.end())
-        return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(it->second->slot));
-
+template <class T> AssetManager::Entry& AssetManager::make_entry(Key key, bool from_file) {
     auto slot = std::make_shared<AssetSlot<T>>();
-    slot->path = std::string(path);
+    slot->path = key.path;
     auto entry = std::make_unique<Entry>();
-    entry->path = std::string(path);
+    entry->path = key.path;
     entry->type = key.type;
     entry->type_name = std::string(type_name<T>());
     entry->serial = ++serial_;
     entry->slot = slot;
-    entry->reload = [this](Entry& e) { return run_loader<T>(e); };
+    if (from_file) entry->reload = [this](Entry& e) { return run_loader<T>(e); };
     entry->version = [s = slot.get()] { return s->version; };
     entry->loaded = [s = slot.get()] { return s->value != nullptr; };
-    Entry& e = *entry;
-    entries_.emplace(std::move(key), std::move(entry));
-    run_loader<T>(e);
-    return Asset<T>(std::move(slot));
+    return *entries_.emplace(std::move(key), std::move(entry)).first->second;
+}
+
+template <class T> Asset<T> AssetManager::load(std::string_view path) {
+    Key key{type_id<T>(), std::string(path)};
+    if (auto it = entries_.find(key); it != entries_.end())
+        return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(it->second->slot));
+    Entry& entry = make_entry<T>(std::move(key), true);
+    run_loader<T>(entry);
+    return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(entry.slot));
 }
 
 template <class T> Asset<T> AssetManager::add(std::string_view path, std::unique_ptr<T> value) {
     Key key{type_id<T>(), std::string(path)};
     auto it = entries_.find(key);
-    if (it == entries_.end()) {
-        auto slot = std::make_shared<AssetSlot<T>>();
-        slot->path = std::string(path);
-        auto entry = std::make_unique<Entry>();
-        entry->path = std::string(path);
-        entry->type = key.type;
-        entry->type_name = std::string(type_name<T>());
-        entry->serial = ++serial_;
-        entry->slot = slot;
-        entry->version = [s = slot.get()] { return s->version; };
-        entry->loaded = [s = slot.get()] { return s->value != nullptr; };
-        it = entries_.emplace(std::move(key), std::move(entry)).first;
-    }
-    auto slot = std::static_pointer_cast<AssetSlot<T>>(it->second->slot);
+    Entry& entry = it != entries_.end() ? *it->second : make_entry<T>(std::move(key), false);
+    auto slot = std::static_pointer_cast<AssetSlot<T>>(entry.slot);
     slot->value = std::move(value);
     ++slot->version;
     return Asset<T>(std::move(slot));

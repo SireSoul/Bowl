@@ -60,7 +60,7 @@ Value& Value::set(std::string_view key, Value value) {
     return o.back().second;
 }
 
-// --- parser ---------------------------------------------------------------------------------------------------------
+// Parser
 
 namespace {
 

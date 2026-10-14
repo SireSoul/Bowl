@@ -42,7 +42,7 @@ class IsometricGame final : public Game {
 public:
     AppConfig configure() override {
         AppConfig config;
-        config.window.title = "PLACEHOLDERENGINENAME — isometric";
+        config.window.title = "PLACEHOLDERENGINENAME: isometric";
         return config;
     }
 

@@ -140,7 +140,7 @@ struct AppRunner {
         e.camera_.viewport = e.window_.size();
         dev->begin_frame();
 
-        // --- fixed-rate simulation ---------------------------------------------------------------------------------
+        // Fixed-rate simulation
         f64 step = 1.0 / e.config_.fixed_hz;
         f64 scaled = real_dt * e.time_scale_;
         if (!e.paused_) e.accumulator_ += scaled;
@@ -164,7 +164,7 @@ struct AppRunner {
         e.step_ = false;
         e.alpha_ = static_cast<f32>(e.accumulator_ / step);
 
-        // --- per-frame update --------------------------------------------------------------------------------------
+        // Per-frame update
         e.input_.set_context(Input::Context::Frame);
         e.delta_ = e.paused_ ? 0.0f : static_cast<f32>(scaled);
         {
@@ -175,7 +175,7 @@ struct AppRunner {
             e.world_.flush();
         }
 
-        // --- render ------------------------------------------------------------------------------------------------
+        // Render
         if (!screenshot.empty() && e.frame_ + 1 == (frame_limit ? frame_limit : 60)) {
             e.renderer_.capture_next_frame([path = screenshot](u32 w, u32 h, std::span<const u8> rgba) {
                 if (gfx::write_png(path, w, h, rgba)) info("screenshot: {} ({}x{})", path, w, h);

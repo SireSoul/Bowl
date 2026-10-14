@@ -8,7 +8,7 @@
 
 namespace ph::ecs {
 
-// --- component registry ---------------------------------------------------------------------------------------------
+// Component registry
 
 namespace {
 
@@ -96,7 +96,7 @@ std::optional<ComponentId> find_component(std::string_view name) {
     return std::nullopt;
 }
 
-// --- Archetype ------------------------------------------------------------------------------------------------------
+// Archetype
 
 Archetype::Archetype(u32 id, std::vector<ComponentId> components) : id_(id), components_(std::move(components)) {
     std::sort(components_.begin(), components_.end());

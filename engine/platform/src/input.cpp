@@ -152,7 +152,7 @@ void Input::rumble(int pad, f32 low, f32 high, u32 milliseconds) {
     SDL_RumbleGamepad(pads_[pad], to16(low), to16(high), milliseconds);
 }
 
-// --- actions --------------------------------------------------------------------------------------------------------
+// Actions
 
 void Input::bind(std::string_view action, InputBinding binding) {
     Action& a = actions_[fnv1a(action)];

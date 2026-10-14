@@ -2,6 +2,7 @@
 
 #include "ph/core/math.hpp"
 #include "ph/core/reflect.hpp"
+#include "ph/ecs/world.hpp"
 #include "ph/gfx/sprites.hpp"
 
 #include <vector>
@@ -31,7 +32,8 @@ PH_REFLECT(ParticleSettings, rate, lifetime_min, lifetime_max, speed_min, speed_
 // leaves a trail.
 class ParticleSystem {
 public:
-    explicit ParticleSystem(u64 seed = 0x9E3779B97F4A7C15ull) : rng_(seed | 1) {}
+    ParticleSystem() : ParticleSystem(0x9E3779B97F4A7C15ull) {}
+    explicit ParticleSystem(u64 seed) : rng_(seed | 1) {}
 
     // Spawns `count` particles at `origin` right away (explosions, puffs).
     void burst(const ParticleSettings& s, Vec2 origin, u32 count);
@@ -54,14 +56,23 @@ private:
     u64 rng_;
 };
 
-// An ECS component: settings + state. Put it on an entity with a Transform2D/GlobalTransform2D (or set `origin`).
+// A particle emitter as a component, for effects that belong to an entity (a torch, a chimney, a spell). It emits
+// from the entity's GlobalTransform2D, or from `origin` if it has none. Settings save with the world; the live
+// particles don't.
+//
+//     world.create(Transform2D{{40, 80}}, ParticleEmitter{.settings = smoke});
+//     update_particle_emitters(world, dt);                    // in update() or a system
+//     draw_particle_emitters(world, batch, renderer.light_texture());
 struct ParticleEmitter {
     ParticleSettings settings;
     bool emitting = true;
-    Vec2 origin;      // used when the entity has no transform
+    Vec2 origin;
     f32 depth = 0;
     ParticleSystem system;
 };
-PH_REFLECT(ParticleEmitter, settings, emitting, origin, depth)
+PH_COMPONENT(ParticleEmitter, settings, emitting, origin, depth)
+
+void update_particle_emitters(ecs::World& world, f32 dt);
+void draw_particle_emitters(ecs::World& world, SpriteBatch& batch, const Texture& texture);
 
 } // namespace ph::gfx

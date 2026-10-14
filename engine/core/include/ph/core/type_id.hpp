@@ -40,7 +40,7 @@ constexpr u64 fnv1a(std::string_view s) {
 template <class T> constexpr u64 type_hash() { return fnv1a(type_name<T>()); }
 
 // Identifies a type in maps (resources, asset loaders). Derived from the type's name, so it's the same in every
-// module of the process — the host and a hot-reloaded game library agree on it — and across runs.
+// module of the process (a hot-reloaded game library and its host agree on it) and across runs.
 using TypeId = u64;
 template <class T> constexpr TypeId type_id() { return type_hash<std::remove_cvref_t<T>>(); }
 

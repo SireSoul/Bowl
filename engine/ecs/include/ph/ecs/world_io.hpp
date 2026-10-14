@@ -9,7 +9,7 @@
 
 namespace ph::ecs {
 
-// Saving and loading entities as JSON — save games, scenes, prefabs, and copy/paste in tools.
+// Saving and loading entities as JSON, for save games, scenes, prefabs and copy/paste in tools.
 //
 //     { "format": "PLACEHOLDERENGINENAME.world", "version": 1,
 //       "entities": [ { "id": 0, "components": { "game::Health": { "current": 80, "max": 100 }, "game::Player": {} } } ] }
@@ -27,7 +27,8 @@ json::Value save_entities(const World& world, std::span<const Entity> entities, 
 json::Value save_world(const World& world, serial::Context& ctx, const QueryFilter& filter = {});
 
 // Spawns the saved entities into the world (adding to what's there) and returns them in file order.
-// Unknown component names are skipped with a warning — register types with register_components<...>() first.
+// Unknown component names are skipped with a warning. Types the program hasn't used yet are unknown until
+// registered: use PH_COMPONENT, or call register_components<...>() before loading.
 std::vector<Entity> load_entities(World& world, const json::Value& doc, serial::Context& ctx);
 
 // A prefab is one saved entity object ({"components": {...}}); spawns a fresh copy.

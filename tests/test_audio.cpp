@@ -55,7 +55,7 @@ TEST_CASE("audio: stale handles never touch a reused slot") {
     CHECK(out[0] > 0.5f);
 }
 
-// --- Ogg Vorbis (fixtures: tests/data/README.md) ----------------------------------------------------------------------
+// Ogg Vorbis (fixtures: tests/data/README.md)
 
 namespace {
 

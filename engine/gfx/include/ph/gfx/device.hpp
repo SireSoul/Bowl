@@ -19,6 +19,11 @@ class GpuDevice;
 
 enum class Filter : u8 { Nearest, Linear };
 
+// A rectangle of whole pixels in a texture, top-left origin.
+struct PixelRect {
+    u32 x = 0, y = 0, w = 0, h = 0;
+};
+
 struct TextureDesc {
     u32 width = 0;
     u32 height = 0;
@@ -95,15 +100,19 @@ public:
     bool vsync() const { return vsync_; }
 
     std::unique_ptr<Texture> create_texture(const TextureDesc& desc);
-    // Replaces all pixels of a texture (same size), e.g. a growing glyph atlas. Rebuilds mipmaps if it has them.
+    // Replaces all pixels of a texture (same size). Rebuilds mipmaps if it has them.
     bool update_texture(Texture& texture, const void* rgba8, bool premultiplied);
+    // Replaces one rectangle. rgba8 points at the rectangle's top-left pixel in a source image `row_pixels` wide,
+    // so a region of a larger CPU-side image can be sent without copying it out first.
+    bool update_texture_region(Texture& texture, PixelRect rect, const void* rgba8, u32 row_pixels, bool premultiplied);
     std::unique_ptr<Shader> create_shader(const ShaderBundle& bundle, std::string_view name);
 
     // Uploads raw bytes into a buffer through a temporary transfer buffer, on its own command buffer.
     bool upload(SDL_GPUBuffer* buffer, const void* data, u32 size, u32 offset = 0);
 
 private:
-    bool upload_pixels(SDL_GPUTexture* texture, u32 width, u32 height, const void* rgba8, bool premultiplied, bool mips);
+    bool upload_pixels(SDL_GPUTexture* texture, PixelRect rect, const void* rgba8, u32 row_pixels, bool premultiplied,
+                       bool mips);
 
     SDL_GPUDevice* device_ = nullptr;
     SDL_Window* window_ = nullptr;

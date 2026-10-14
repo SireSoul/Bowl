@@ -5,7 +5,7 @@
 
 namespace ph::ecs {
 
-// --- World ----------------------------------------------------------------------------------------------------------
+// World
 
 World::World() : deferred_(*this) { empty_ = &archetype_for(ComponentMask{}); }
 
@@ -193,7 +193,7 @@ void World::flush() {
     PH_ASSERT(deferred_.empty(), "deferred commands keep scheduling more commands");
 }
 
-// --- CommandBuffer --------------------------------------------------------------------------------------------------
+// CommandBuffer
 
 CommandBuffer::CommandBuffer(CommandBuffer&& o) noexcept
     : world_(o.world_), commands_(std::move(o.commands_)), blocks_(std::move(o.blocks_)), block_used_(o.block_used_) {

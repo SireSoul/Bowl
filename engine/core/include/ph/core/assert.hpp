@@ -1,7 +1,7 @@
 #pragma once
 
-// PH_ASSERT(cond[, "message"]) — checked in debug and dev builds, compiled out when PH_ASSERTS is 0.
-// PH_VERIFY(cond[, "message"]) — always evaluates cond; only checks when asserts are on.
+// PH_ASSERT(cond[, "message"]): checked in debug and dev builds, compiled out when PH_ASSERTS is 0.
+// PH_VERIFY(cond[, "message"]): like PH_ASSERT, but cond is evaluated even when asserts are off.
 
 #ifndef PH_ASSERTS
 #if !defined(NDEBUG) || PH_DEV_TOOLS

@@ -23,7 +23,7 @@ bool Settings::load(const fs::path& file) {
     return true;
 }
 
-bool Settings::save() const {
+bool Settings::save() {
     if (!dirty_ || file_.empty()) return true;
     std::string text = json::stringify(data_);
     fs::path temp = file_;
@@ -54,6 +54,7 @@ const json::Value* Settings::find(std::string_view key) const {
 }
 
 json::Value& Settings::slot(std::string_view key) {
+    dirty_ = true; // the caller is about to write through the reference
     json::Value* v = &data_;
     while (true) {
         usize dot = key.find('.');

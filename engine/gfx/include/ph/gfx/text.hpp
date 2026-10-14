@@ -2,6 +2,7 @@
 
 #include "ph/gfx/sprites.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <string_view>
 #include <unordered_map>
@@ -45,7 +46,15 @@ private:
         std::vector<u8> pixels; // RGBA8 premultiplied (white glyphs)
         std::unique_ptr<Texture> texture;
         u32 shelf_x = 1, shelf_y = 1, shelf_h = 0;
-        bool dirty = true;
+        // Bounds of glyphs added since the last upload (empty when the GPU copy is current).
+        u32 dirty_x0 = page_size, dirty_y0 = page_size, dirty_x1 = 0, dirty_y1 = 0;
+        bool dirty() const { return dirty_x1 > dirty_x0; }
+        void mark(u32 x, u32 y, u32 w, u32 h) {
+            dirty_x0 = std::min(dirty_x0, x);
+            dirty_y0 = std::min(dirty_y0, y);
+            dirty_x1 = std::max(dirty_x1, x + w);
+            dirty_y1 = std::max(dirty_y1, y + h);
+        }
     };
     bool place(u32 w, u32 h, u16& page, u32& x, u32& y);
 

@@ -16,8 +16,8 @@ class Value;
 using Array = std::vector<Value>;
 using Object = std::vector<std::pair<std::string, Value>>; // keeps file order, so saved files diff cleanly
 
-// A JSON document node. Reading is forgiving: a missing key or wrong type gives a null Value or the fallback, so
-// loaders read optional fields without ceremony:  sheet["meta"]["size"]["w"].as_int(0)
+// A JSON document node. Lookups never throw: a missing key or a wrong type gives a null Value or the fallback you
+// pass, so optional fields read in one expression: sheet["meta"]["size"]["w"].as_int(0)
 class Value {
 public:
     Value() = default;

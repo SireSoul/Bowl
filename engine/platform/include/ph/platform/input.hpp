@@ -64,7 +64,7 @@ struct InputBinding {
 //     Vec2 move = input.vector("left", "right", "up", "down");
 //
 // "pressed"/"released" are edges. Inside fixed-timestep updates they mean "since the previous fixed tick", in
-// per-frame code "since the previous frame" — so a tap is never lost or doubled, whatever the frame rate.
+// per-frame code "since the previous frame". A tap is never lost or seen twice, whatever the frame rate.
 class Input : NonCopyable {
 public:
     static constexpr int max_gamepads = 4;
@@ -73,7 +73,8 @@ public:
     Input();
     ~Input();
 
-    // --- raw devices ---------------------------------------------------------------------------------------------
+    // Raw devices
+
     bool down(Key k) const { return down_.test(key_code(k)); }
     bool pressed(Key k) const { return pressed_[ctx()].test(key_code(k)); }
     bool released(Key k) const { return released_[ctx()].test(key_code(k)); }
@@ -94,7 +95,8 @@ public:
     // Text typed this frame (UTF-8), for name entry and chat.
     std::string_view text() const { return text_; }
 
-    // --- actions -------------------------------------------------------------------------------------------------
+    // Actions
+
     void bind(std::string_view action, InputBinding binding);
     void bind(std::string_view action, std::initializer_list<InputBinding> bindings);
     void unbind(std::string_view action);
@@ -118,7 +120,8 @@ public:
     Vec2 vector(std::string_view neg_x, std::string_view pos_x, std::string_view neg_y, std::string_view pos_y,
                 f32 dead_zone = 0.15f) const;
 
-    // --- driven by the App: begin_frame, events..., end_events, then per fixed tick begin/end_fixed_tick -----------
+    // Called by the App each frame: begin_frame, handle_event for each event, end_events, then
+    // begin_fixed_tick/end_fixed_tick around every fixed tick.
     void begin_frame();
     void end_events();
     void begin_fixed_tick();

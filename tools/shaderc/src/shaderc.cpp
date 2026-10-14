@@ -99,7 +99,7 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
     }
     init_glslang();
 
-    // --- GLSL -> SPIR-V -------------------------------------------------------------------------------------------
+    // GLSL -> SPIR-V
     EShLanguage lang = to_glslang(options.stage);
     glslang::TShader shader(lang);
     const char* src = source.data();
@@ -132,7 +132,7 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
     spv_options.generateDebugInfo = options.debug_info;
     glslang::GlslangToSpv(*program.getIntermediate(lang), spirv, &spv_options);
 
-    // --- reflection: SDL_GPU needs resource counts, and wants them in specific descriptor sets --------------------
+    // Reflection: SDL_GPU needs resource counts, and wants them in specific descriptor sets
     spirv_cross::CompilerMSL msl(spirv);
     auto resources = msl.get_shader_resources();
     auto sampled = collect(msl, resources.sampled_images);
@@ -168,7 +168,7 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
     std::memcpy(spirv_blob.code.data(), spirv.data(), spirv_blob.code.size());
     bundle.blobs.push_back(std::move(spirv_blob));
 
-    // --- SPIR-V -> MSL, with Metal slots laid out the way SDL_GPU binds them --------------------------------------
+    // SPIR-V -> MSL, with Metal slots laid out the way SDL_GPU binds them
     auto model = options.stage == ShaderStage::Vertex ? spv::ExecutionModelVertex : spv::ExecutionModelFragment;
     auto bind = [&](const Resource& r, u32 buffer, u32 texture, u32 sampler) {
         spirv_cross::MSLResourceBinding b;
@@ -198,7 +198,7 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
         return result;
     }
 
-    // --- SPIR-V -> HLSL (Shader Model 5.1) for D3D12, in SDL_GPU's register layout ---------------------------------
+    // SPIR-V -> HLSL (Shader Model 5.1) for D3D12, in SDL_GPU's register layout
     // t[n]/s[n] in the resource set's space, b[n] in the uniform set's space; storage textures and buffers follow the
     // sampled textures in t[]. Descriptor set numbers already equal SDL's spaces.
     try {

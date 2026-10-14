@@ -25,8 +25,8 @@ struct SystemContext {
 //     schedule.add("spawner", [](SystemContext& ctx) { ... });               // exclusive: runs alone
 //     schedule.add("ai", fn).reads<Position>().writes<Brain>();              // declared access: may run in parallel
 //
-// Structural changes go through ctx.commands and are applied at barrier() points and at the end of run(), in system
-// order — so results never depend on thread timing.
+// Structural changes go through ctx.commands and are applied in system order at barrier() points and at the end of
+// run(), so thread timing never changes the result.
 class Schedule : NonCopyable {
 public:
     struct System {

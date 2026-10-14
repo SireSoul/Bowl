@@ -18,7 +18,7 @@ namespace ph {
 class Settings {
 public:
     bool load(const std::filesystem::path& file);
-    bool save() const; // writes atomically (temp file + rename) when changed
+    bool save(); // writes atomically (temp file + rename), and only if something changed
     const std::filesystem::path& file() const { return file_; }
 
     template <class T> T get(std::string_view key, T fallback) const {
@@ -36,14 +36,14 @@ public:
     }
     bool has(std::string_view key) const { return find(key) != nullptr; }
     const json::Value* find(std::string_view key) const;
-    json::Value& slot(std::string_view key); // creates objects along the way
+    json::Value& slot(std::string_view key); // for writing: creates objects along the way, marks settings changed
     const json::Value& data() const { return data_; }
     bool dirty() const { return dirty_; }
 
 private:
     json::Value data_;
     std::filesystem::path file_;
-    mutable bool dirty_ = false;
+    bool dirty_ = false;
 };
 
 } // namespace ph

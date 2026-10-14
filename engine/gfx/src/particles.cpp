@@ -1,5 +1,7 @@
 #include "ph/gfx/particles.hpp"
 
+#include "ph/ecs/hierarchy.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -94,6 +96,19 @@ void ParticleSystem::clear() {
     rotation_.clear();
     spin_.clear();
     spawn_debt_ = 0;
+}
+
+void update_particle_emitters(ecs::World& world, f32 dt) {
+    world.each<ParticleEmitter>([&](ecs::Entity e, ParticleEmitter& emitter) {
+        const auto* global = world.try_get<const ecs::GlobalTransform2D>(e);
+        emitter.system.update(emitter.settings, global ? global->position : emitter.origin, dt, emitter.emitting);
+    });
+}
+
+void draw_particle_emitters(ecs::World& world, SpriteBatch& batch, const Texture& texture) {
+    world.each<const ParticleEmitter>([&](const ParticleEmitter& emitter) {
+        emitter.system.draw(batch, texture, emitter.settings, emitter.depth);
+    });
 }
 
 } // namespace ph::gfx

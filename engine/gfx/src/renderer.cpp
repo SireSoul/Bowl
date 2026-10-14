@@ -349,7 +349,7 @@ void Renderer::end_frame() {
     if (!cmd_) return;
     SDL_GPUDevice* d = device_->handle();
 
-    // --- upload every sprite of the frame at once -----------------------------------------------------------------
+    // Upload every sprite of the frame at once
     u32 count = static_cast<u32>(frame_sprites_.size());
     if (swapchain_ && count > 0) {
         if (count > sprite_capacity_) {

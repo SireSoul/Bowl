@@ -1,6 +1,6 @@
 # Compiler settings shared by every engine, tool, test and game target.
 
-# ph_configure_target(<target>) — warnings, defines and platform flags for code we own.
+# ph_configure_target(<target>): warnings, defines and platform flags for code we own.
 function(ph_configure_target target)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /utf-8 /MP)

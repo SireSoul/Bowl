@@ -22,7 +22,7 @@
 using namespace ph;
 using namespace ph::ecs;
 
-// --- components: plain structs ---------------------------------------------------------------------------------------
+// Components
 
 // PH_COMPONENT makes a component savable, editable in the F1 inspector, and kept across game-code hot reloads.
 struct Transform {
@@ -53,7 +53,7 @@ struct Banner {
 };
 PH_COMPONENT(Banner, slot)
 
-// --- resources -------------------------------------------------------------------------------------------------------
+// Resources
 
 struct Arena {
     Rect bounds{-900, -500, 1800, 1000};
@@ -74,7 +74,7 @@ class SpritesGame final : public Game {
 public:
     AppConfig configure() override {
         AppConfig config;
-        config.window.title = "PLACEHOLDERENGINENAME — sprites";
+        config.window.title = "PLACEHOLDERENGINENAME: sprites";
         return config;
     }
 
@@ -139,6 +139,8 @@ public:
     }
 
     void start(Engine& engine) override {
+        engine.camera().position = {0, 0};
+        engine.camera().zoom = 0.6f;
         spawn(engine, {0, 0}, 2000);
         for (int i = 0; i < 5; ++i) engine.world().create(Banner{i});
     }
@@ -158,11 +160,6 @@ public:
         gfx::Camera2D& camera = engine.camera();
         camera.position += input.vector("left", "right", "up", "down") * (600.0f * dt / camera.zoom);
         if (input.wheel() != 0) camera.zoom = clamp(camera.zoom * std::pow(1.1f, input.wheel()), 0.1f, 8.0f);
-        if (!initialized_camera_) {
-            camera.position = {0, 0};
-            camera.zoom = 0.6f;
-            initialized_camera_ = true;
-        }
     }
 
     void render(Engine& engine) override {
@@ -302,7 +299,6 @@ private:
     Asset<audio::Sound> blip_;
     gfx::SpriteBatch batch_, ui_;
     int spawn_rate_ = 40;
-    bool initialized_camera_ = false;
     static constexpr u32 palette_[] = {0xff5c8a, 0xffb84d, 0xffe066, 0x5cd6a9, 0x4dc3ff, 0x9d7bff};
 };
 

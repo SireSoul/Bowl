@@ -15,7 +15,7 @@
 
 namespace ph::audio {
 
-// --- Music ----------------------------------------------------------------------------------------------------------
+// Music
 
 std::unique_ptr<Music> Music::from_memory(std::vector<u8> ogg) {
     int err = 0;
