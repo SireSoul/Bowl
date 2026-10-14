@@ -62,8 +62,11 @@ if(PH_DEV_TOOLS)
 endif()
 
 ph_module(audio
-    SOURCES audio/src/audio.cpp
-    PUBLIC_DEPS ph_core SDL3::SDL3)
+    SOURCES
+        audio/src/audio.cpp
+        audio/src/vorbis.cpp
+    PUBLIC_DEPS ph_core SDL3::SDL3
+    PRIVATE_DEPS ph_stb)
 
 ph_module(app
     SOURCES

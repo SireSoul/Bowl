@@ -17,7 +17,7 @@ Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md) for what's next
 | `ecs` | archetype ECS: plain-struct components, cached queries, `par_each`, command buffers, hooks, resources, parallel scheduler |
 | `platform` | window, keyboard/mouse/gamepad, named actions with fixed-timestep-safe edges |
 | `gfx` | SDL_GPU device, textures (mipmapped), shaders, instanced sprite batching (one upload, one draw per texture), cameras, TTF text (UTF-8, kerning, wrap, align), Aseprite sprite sheets + animation, screenshots |
-| `audio` | software mixer: 128 voices, buses, pitch, equal-power pan, looping, WAV loading |
+| `audio` | software mixer: 128 voices, buses, pitch, equal-power pan, looping; WAV and OGG sounds; streamed OGG music with gapless loops and crossfades |
 | `app` | `Engine` + `Game`, fixed-timestep loop with interpolation, SDL3 callback entry point, Dear ImGui dev overlay |
 | `tools/shaderc` | GLSL → SPIR-V + Metal compiler (library + CLI), also linked into dev builds for live shader edits |
 

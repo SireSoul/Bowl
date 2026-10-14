@@ -5,11 +5,143 @@
 
 #include <SDL3/SDL.h>
 
+#define STB_VORBIS_HEADER_ONLY
+#define STB_VORBIS_NO_STDIO
+#include <stb_vorbis.c>
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
 namespace ph::audio {
+
+// --- Music ----------------------------------------------------------------------------------------------------------
+
+std::unique_ptr<Music> Music::from_memory(std::vector<u8> ogg) {
+    int err = 0;
+    stb_vorbis* v = stb_vorbis_open_memory(ogg.data(), static_cast<int>(ogg.size()), &err, nullptr);
+    if (!v) return nullptr;
+    stb_vorbis_info vi = stb_vorbis_get_info(v);
+    f32 seconds = stb_vorbis_stream_length_in_seconds(v);
+    stb_vorbis_close(v);
+    if (vi.channels < 1 || vi.channels > 2 || vi.sample_rate == 0) return nullptr;
+    return std::make_unique<Music>(std::make_shared<const std::vector<u8>>(std::move(ogg)), vi.sample_rate,
+                                   static_cast<u32>(vi.channels), seconds);
+}
+
+// A playing music track: Vorbis decoder -> SDL resampler (to 48 kHz stereo) -> gain ramp -> mix.
+struct AudioEngine::Stream {
+    std::shared_ptr<const std::vector<u8>> data;
+    stb_vorbis* decoder = nullptr;
+    SDL_AudioStream* resampler = nullptr;
+    u32 channels = 2;
+    f32 gain = 0, target = 1;
+    f32 ramp = 0; // gain change per output frame; 0 = jump
+    bool loop = true, ended = false, stopping = false;
+    Bus bus = Bus::Music;
+
+    ~Stream() {
+        if (decoder) stb_vorbis_close(decoder);
+        if (resampler) SDL_DestroyAudioStream(resampler);
+    }
+};
+
+static f32 ramp_per_frame(f32 from, f32 to, f32 seconds) {
+    return seconds > 0 ? std::abs(to - from) / (seconds * static_cast<f32>(Sound::sample_rate)) : 0.0f;
+}
+
+void AudioEngine::play_music(const Music& music, const MusicParams& params) {
+    auto s = std::make_unique<Stream>();
+    s->data = music.data();
+    int err = 0;
+    s->decoder = stb_vorbis_open_memory(s->data->data(), static_cast<int>(s->data->size()), &err, nullptr);
+    if (!s->decoder) {
+        error("audio: music can't be decoded (stb_vorbis error {})", err);
+        return;
+    }
+    s->channels = music.channels();
+    SDL_AudioSpec src{SDL_AUDIO_F32, static_cast<int>(music.channels()), static_cast<int>(music.sample_rate())};
+    SDL_AudioSpec dst{SDL_AUDIO_F32, static_cast<int>(Sound::channels), static_cast<int>(Sound::sample_rate)};
+    s->resampler = SDL_CreateAudioStream(&src, &dst);
+    if (!s->resampler) {
+        error("audio: SDL_CreateAudioStream failed: {}", SDL_GetError());
+        return;
+    }
+    s->loop = params.loop;
+    s->bus = params.bus;
+    s->target = params.gain;
+    s->gain = params.fade_in > 0 ? 0.0f : params.gain;
+    s->ramp = ramp_per_frame(0, params.gain, params.fade_in);
+
+    std::lock_guard lock(mutex_);
+    for (auto& old : streams_) { // crossfade out whatever was playing
+        old->stopping = true;
+        old->target = 0;
+        old->ramp = ramp_per_frame(old->gain, 0, params.fade_in);
+        if (old->ramp == 0) old->gain = 0;
+    }
+    streams_.push_back(std::move(s));
+}
+
+void AudioEngine::stop_music(f32 fade_out) {
+    std::lock_guard lock(mutex_);
+    for (auto& s : streams_) {
+        s->stopping = true;
+        s->target = 0;
+        s->ramp = ramp_per_frame(s->gain, 0, fade_out);
+        if (s->ramp == 0) s->gain = 0;
+    }
+}
+
+bool AudioEngine::music_playing() const {
+    std::lock_guard lock(mutex_);
+    return std::any_of(streams_.begin(), streams_.end(), [](const auto& s) { return !s->stopping; });
+}
+
+// Called with mutex_ held.
+void AudioEngine::mix_streams(f32* out, u32 frames) {
+    f32 master = bus_gain_[static_cast<usize>(Bus::Master)];
+    const int want = static_cast<int>(frames * Sound::channels * sizeof(f32));
+    stream_buffer_.resize(frames * Sound::channels);
+    std::vector<f32> decoded;
+    for (auto& sp : streams_) {
+        Stream& s = *sp;
+        // Decode until the resampler holds enough output for this callback.
+        int empty_reads = 0;
+        while (!s.ended && SDL_GetAudioStreamAvailable(s.resampler) < want) {
+            decoded.resize(2048 * s.channels);
+            int got = stb_vorbis_get_samples_float_interleaved(s.decoder, static_cast<int>(s.channels), decoded.data(),
+                                                               static_cast<int>(decoded.size()));
+            if (got > 0) {
+                SDL_PutAudioStreamData(s.resampler, decoded.data(), got * static_cast<int>(s.channels * sizeof(f32)));
+                empty_reads = 0;
+            } else if (s.loop && ++empty_reads < 2) {
+                stb_vorbis_seek_start(s.decoder); // gapless: the resampler keeps its history
+            } else {
+                SDL_FlushAudioStream(s.resampler);
+                s.ended = true;
+            }
+        }
+        int bytes = SDL_GetAudioStreamData(s.resampler, stream_buffer_.data(), want);
+        u32 got_frames = bytes > 0 ? static_cast<u32>(bytes) / (Sound::channels * sizeof(f32)) : 0;
+        f32 bus = master * bus_gain_[static_cast<usize>(s.bus)];
+        for (u32 i = 0; i < got_frames; ++i) {
+            if (s.ramp > 0) {
+                if (s.gain < s.target) s.gain = std::min(s.target, s.gain + s.ramp);
+                else if (s.gain > s.target) s.gain = std::max(s.target, s.gain - s.ramp);
+            } else {
+                s.gain = s.target;
+            }
+            out[i * 2] += stream_buffer_[i * 2] * s.gain * bus;
+            out[i * 2 + 1] += stream_buffer_[i * 2 + 1] * s.gain * bus;
+        }
+        if (s.ended && got_frames < frames) { // played out
+            s.stopping = true;
+            s.gain = 0;
+        }
+    }
+    std::erase_if(streams_, [](const auto& s) { return s->stopping && s->gain <= 0.0f; });
+}
 
 std::unique_ptr<Sound> Sound::from_mono(std::span<const f32> mono) {
     std::vector<f32> stereo(mono.size() * 2);
@@ -17,6 +149,7 @@ std::unique_ptr<Sound> Sound::from_mono(std::span<const f32> mono) {
     return std::make_unique<Sound>(std::move(stereo));
 }
 
+AudioEngine::AudioEngine() = default;
 AudioEngine::~AudioEngine() { shutdown(); }
 
 bool AudioEngine::init() {
@@ -44,6 +177,7 @@ void AudioEngine::shutdown() {
     stream_ = nullptr;
     std::lock_guard lock(mutex_);
     for (auto& v : voices_) v = {};
+    streams_.clear();
 }
 
 AudioEngine::VoiceState* AudioEngine::find(Voice v) {
@@ -153,6 +287,7 @@ void AudioEngine::mix(f32* out, u32 frames) {
             v.position += step;
         }
     }
+    mix_streams(out, frames);
     // Soft clip instead of wrapping when many loud voices stack up.
     for (u32 i = 0; i < frames * 2; ++i) {
         f32 x = out[i];
@@ -160,12 +295,47 @@ void AudioEngine::mix(f32* out, u32 frames) {
     }
 }
 
+namespace {
+
+// Converts any PCM to the mixer format (48 kHz stereo float).
+std::unique_ptr<Sound> to_mixer_format(std::string_view path, const SDL_AudioSpec& spec, const void* data, int bytes) {
+    SDL_AudioSpec target{SDL_AUDIO_F32, static_cast<int>(Sound::channels), static_cast<int>(Sound::sample_rate)};
+    Uint8* converted = nullptr;
+    int converted_len = 0;
+    if (!SDL_ConvertAudioSamples(&spec, static_cast<const Uint8*>(data), bytes, &target, &converted, &converted_len)) {
+        log_asset_error(path, "Sound", SDL_GetError());
+        return nullptr;
+    }
+    std::vector<f32> samples(static_cast<usize>(converted_len) / sizeof(f32));
+    std::memcpy(samples.data(), converted, samples.size() * sizeof(f32));
+    SDL_free(converted);
+    return std::make_unique<Sound>(std::move(samples));
+}
+
+bool is_ogg(std::string_view path) { return path.ends_with(".ogg") || path.ends_with(".oga"); }
+
+} // namespace
+
 void register_asset_loaders(AssetManager& assets) {
+    // Sound: decoded fully up front. Use for effects; use Music for long tracks.
     assets.register_loader<Sound>([](AssetLoadContext& ctx) -> std::unique_ptr<Sound> {
         auto bytes = ctx.read(ctx.path());
         if (!bytes) {
             log_asset_error(ctx.path(), "Sound", "file not found in any mount");
             return nullptr;
+        }
+        if (is_ogg(ctx.path())) {
+            int channels = 0, rate = 0;
+            short* pcm = nullptr;
+            int frames = stb_vorbis_decode_memory(bytes->data(), static_cast<int>(bytes->size()), &channels, &rate, &pcm);
+            if (frames <= 0 || !pcm) {
+                log_asset_error(ctx.path(), "Sound", "not a valid Ogg Vorbis file");
+                return nullptr;
+            }
+            SDL_AudioSpec spec{SDL_AUDIO_S16, channels, rate};
+            auto sound = to_mixer_format(ctx.path(), spec, pcm, frames * channels * static_cast<int>(sizeof(short)));
+            std::free(pcm);
+            return sound;
         }
         SDL_IOStream* io = SDL_IOFromConstMem(bytes->data(), bytes->size());
         SDL_AudioSpec spec;
@@ -175,19 +345,20 @@ void register_asset_loaders(AssetManager& assets) {
             log_asset_error(ctx.path(), "Sound", SDL_GetError());
             return nullptr;
         }
-        SDL_AudioSpec target{SDL_AUDIO_F32, static_cast<int>(Sound::channels), static_cast<int>(Sound::sample_rate)};
-        Uint8* converted = nullptr;
-        int converted_len = 0;
-        bool ok = SDL_ConvertAudioSamples(&spec, data, static_cast<int>(length), &target, &converted, &converted_len);
+        auto sound = to_mixer_format(ctx.path(), spec, data, static_cast<int>(length));
         SDL_free(data);
-        if (!ok) {
-            log_asset_error(ctx.path(), "Sound", SDL_GetError());
+        return sound;
+    });
+
+    assets.register_loader<Music>([](AssetLoadContext& ctx) -> std::unique_ptr<Music> {
+        auto bytes = ctx.read(ctx.path());
+        if (!bytes) {
+            log_asset_error(ctx.path(), "Music", "file not found in any mount");
             return nullptr;
         }
-        std::vector<f32> samples(static_cast<usize>(converted_len) / sizeof(f32));
-        std::memcpy(samples.data(), converted, samples.size() * sizeof(f32));
-        SDL_free(converted);
-        return std::make_unique<Sound>(std::move(samples));
+        auto music = Music::from_memory(std::move(*bytes));
+        if (!music) log_asset_error(ctx.path(), "Music", "not a valid mono/stereo Ogg Vorbis file");
+        return music;
     });
 }
 
