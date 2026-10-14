@@ -10,6 +10,7 @@
 #include "ph/app/main.hpp"
 #include "ph/gfx/text.hpp"
 #include "ph/gfx/tilemap.hpp"
+#include "ph/physics/collision.hpp"
 
 #include <cmath>
 
@@ -75,16 +76,16 @@ public:
         Vec2 dir = engine.input().vector("left", "right", "up", "down");
         Vec2 grid{dir.x + dir.y * 2.0f, dir.y * 2.0f - dir.x};
         if (grid.length() > 0) grid = grid.normalized() * (dir.length() * 4.0f * dt);
-        Vec2 next = p.cell + grid;
-        // Water and pillars block; try each axis separately so you slide along walls.
-        auto walkable = [&](Vec2 c) {
-            if (c.x < 0 || c.y < 0 || c.x >= map_size || c.y >= map_size) return false;
-            u32 g = map_->layers[0].at(static_cast<i32>(c.x), static_cast<i32>(c.y)) & gfx::tile_gid_mask;
-            u32 o = map_->layers[1].at(static_cast<i32>(c.x), static_cast<i32>(c.y)) & gfx::tile_gid_mask;
-            return g != Water && o != Pillar;
+        // Collide in map-cell space: the player is a small box, water/pillar/off-map cells are solid.
+        auto solid = [&](i32 x, i32 y) {
+            if (x < 0 || y < 0 || x >= static_cast<i32>(map_size) || y >= static_cast<i32>(map_size)) return true;
+            return (map_->layers[0].at(x, y) & gfx::tile_gid_mask) == Water ||
+                   (map_->layers[1].at(x, y) & gfx::tile_gid_mask) == Pillar;
         };
-        if (walkable({next.x, p.cell.y})) p.cell.x = next.x;
-        if (walkable({p.cell.x, next.y})) p.cell.y = next.y;
+        constexpr f32 r = 0.2f;
+        Rect box{p.cell.x - r, p.cell.y - r, 2 * r, 2 * r};
+        physics::move_and_slide(box, grid, physics::GridSolids{{1, 1}, {0, 0}, solid});
+        p.cell = box.center();
     }
 
     void update(Engine& engine, f32) override {

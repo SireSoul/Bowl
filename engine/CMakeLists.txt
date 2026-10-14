@@ -4,7 +4,8 @@
 #   ph_ecs       entities, components, queries, commands, parallel schedules     (core)
 #   ph_platform  window and input                                               (core, SDL3)
 #   ph_gfx       GPU device, textures, shaders, sprite batching, renderer        (core, SDL3, stb)
-#   ph_audio     mixer and sound loading                                         (core, SDL3)
+#   ph_audio     mixer, sounds, streamed music                                   (core, SDL3, stb)
+#   ph_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide (core)
 #   ph_app       Engine/Game, main loop, dev tools                               (everything)
 
 set(PH_ENGINE_ASSET_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/assets" CACHE INTERNAL "")
@@ -69,11 +70,15 @@ ph_module(audio
     PUBLIC_DEPS ph_core SDL3::SDL3
     PRIVATE_DEPS ph_stb)
 
+ph_module(physics
+    SOURCES physics/src/collision.cpp
+    PUBLIC_DEPS ph_core)
+
 ph_module(app
     SOURCES
         app/src/app.cpp
         app/src/dev_tools.cpp
-    PUBLIC_DEPS ph_core ph_ecs ph_platform ph_gfx ph_audio)
+    PUBLIC_DEPS ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics)
 target_compile_definitions(ph_app PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}")
 if(PH_DEV_TOOLS)
     target_link_libraries(ph_app PRIVATE ph_imgui)
