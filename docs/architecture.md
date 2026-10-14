@@ -89,8 +89,9 @@ ecs::Entity guard = ecs::spawn_prefab(world, prefab_json, ctx);
 
 ## Rendering
 
-The renderer is SDL_GPU: Vulkan on Windows, Linux and Android, Metal on macOS and iOS, and D3D12 on Windows/Xbox
-(D3D12 still needs the DXIL/DXBC shader path; see the roadmap).
+The renderer is SDL_GPU: Metal on macOS and iOS, Vulkan on Linux, Android and Windows, and D3D12 on Windows (and
+Xbox). Metal and D3D12 have both rendered the samples (D3D12 on CI, via WARP); `--driver vulkan|metal|direct3d12`
+picks one explicitly.
 
 - **Sprites** use vertex pulling. Each sprite is a 64-byte record in a storage buffer, and the vertex shader builds the
   quad from `gl_VertexIndex`, so there are no vertex buffers. All sprites of a frame go up in one upload, with one
@@ -118,8 +119,10 @@ Everything is tunable live in the overlay's "Post & lighting" panel.
 ## Shaders
 
 Shaders are written once in Vulkan GLSL as `name.vert.glsl` / `name.frag.glsl`, and `#include` is supported.
-`ph-shaderc` compiles them to `.phsh` bundles containing SPIR-V and MSL plus the resource counts SDL_GPU needs. It also
-remaps Metal slots to SDL's layout, and if a resource is in the wrong descriptor set it reports which set to use.
+`ph-shaderc` compiles them to `.phsh` bundles containing SPIR-V, MSL and HLSL (Shader Model 5.1) plus the resource
+counts SDL_GPU needs. It remaps Metal slots and HLSL registers to SDL's layout, and if a resource is in the wrong
+descriptor set it reports which set to use. On Windows the D3D12 backend compiles the HLSL to DXBC at load time with
+the system's `d3dcompiler_47.dll`.
 
 Required descriptor sets (SDL_GPU's model):
 

@@ -28,7 +28,8 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - ~~2D lighting: additive light map, ambient color~~ (done). Still to do: emissive sprites that ignore the light map,
   normal-mapped sprites, shadow casting
 - ~~Custom materials: user fragment shaders per batch, extra textures, uniforms, blend modes~~ (done)
-- D3D12 shader path (SPIRV-Cross -> HLSL -> DXBC/DXIL) so Windows can fall back from Vulkan
+- ~~D3D12: HLSL in shader bundles, compiled to DXBC on Windows; CI renders a sample on D3D12 (WARP)~~ (done).
+  Later: cache compiled DXBC on disk, DXIL via DXC for Shader Model 6 features
 - ~~Particles (CPU, deterministic, reflected settings)~~ and ~~easing + tweens~~ (done). Later: GPU particles (compute)
 
 ## M4: iterate faster than anyone

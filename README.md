@@ -8,8 +8,9 @@ archetype ECS, hot reload of assets and shaders, and in-game dev tools.
 
 ## Status
 
-Early but real: everything below builds, is tested, and runs (verified on macOS/Metal). CI builds and tests on
-Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md) for what's next.
+Early but real: everything below builds, is tested, and runs. Samples are verified rendering on macOS (Metal) and
+Windows (Direct3D 12, in CI). CI builds and tests on Windows, Linux and macOS. See [docs/roadmap.md](docs/roadmap.md)
+for what's next.
 
 | Module | What it does |
 | --- | --- |
