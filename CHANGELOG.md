@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Audio: per-voice filters (`PlayParams::low_pass`, `high_pass`, `set_filters`) and ducking (`set_ducking`, `Ducking`,
+  `duck_level`).
 - Background asset loading: `AssetManager::load_async`, `loading`, `finish_loads` (the App calls it every frame) and
   `register_decoder`. Textures and sounds decode on the loading thread; other types read their file there.
 - `ecs::World::compact` frees archetypes no entity uses; queries notice (`World::layout_epoch`) and refresh.

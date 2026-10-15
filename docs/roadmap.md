@@ -11,8 +11,7 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   maps, compressed layers, flips, animated tiles, objects, properties, y-sorting, GPU-cached chunks for very large
   maps~~ (done). Later: Tiled object templates (`.tx`), Wang sets as data
 - ~~Audio: OGG Vorbis and Opus sounds, streamed music with gapless loops and crossfades, per-bus low-pass, high-pass
-  and reverb, positional sounds that follow a listener~~ (done). Later: per-voice filters, ducking music under
-  dialogue
+  and reverb, positional sounds that follow a listener, per-voice filters, ducking music under dialogue~~ (done)
 - ~~Collision: shapes, sweeps, raycasts, spatial hash, `move_and_slide` against grids or boxes, polygons and
   capsules, colliders and trigger events as ECS components, optional rigid-body physics (Box2D v3)~~ (done). Later:
   Box2D joints and contact events as components

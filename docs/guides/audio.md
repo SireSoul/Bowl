@@ -22,6 +22,7 @@ engine.audio().play(jump, {.gain = 0.6f, .pan = -0.5f, .pitch = 1.2f});
 | `pitch` | 1 | Playback rate: 2 is an octave up and twice as fast |
 | `loop` | `false` | Repeat until stopped |
 | `bus` | `Effects` | Which volume bus it plays on |
+| `low_pass`, `high_pass` | 0 (off) | Filters on this sound alone, in Hz: a voice behind a door, a far-off explosion |
 
 WAV files (anything SDL reads: PCM, float, ADPCM) and Ogg Vorbis files are supported, mono or stereo, at any sample
 rate; everything is converted to the mixer's 48 kHz stereo on load. Ogg Opus files (`.opus`) work too when the engine
@@ -42,6 +43,9 @@ engine.audio().set_pan(engine_hum, pan);
 bool still = engine.audio().playing(engine_hum);
 engine.audio().stop(engine_hum);
 ```
+
+`set_filters(voice, low_pass, high_pass)` changes a playing sound's filters; they glide to the new values, so it
+can follow gameplay every frame (the door opening, the player walking around a corner).
 
 Handles to sounds that have finished are ignored safely, so there's no need to check before calling.
 `stop_all()` stops every sound.
@@ -101,6 +105,25 @@ engine.audio().set_bus_gain(audio::Bus::Music, engine.settings().get("audio.musi
 
 Buses are what volume sliders in an options menu should control. Store the values in `engine.settings()` so they're
 remembered (see [saving.md](saving.md#player-settings)).
+
+### Ducking
+
+Music that dips while someone talks, and comes back after:
+
+```cpp
+engine.audio().set_ducking(audio::Bus::Music, audio::Ducking{.trigger = audio::Bus::Voice, .depth = 0.5f});
+```
+
+| `Ducking` | Default | |
+| --- | --- | --- |
+| `trigger` | `Voice` | The bus that makes this one dip |
+| `depth` | 0.5 | How much quieter, 0 to 1 |
+| `attack` | 0.08 | Seconds to dip once the trigger plays |
+| `release` | 0.5 | Seconds to come back after it stops |
+| `threshold` | 0.02 | How loud the trigger has to be to count |
+
+`set_ducking(bus, std::nullopt)` turns it off; `duck_level(bus)` says how far it's dipped right now (1 is full
+volume). Any bus can duck under any other: ambience under effects, effects under the UI.
 
 ### Bus effects
 

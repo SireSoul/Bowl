@@ -441,6 +441,25 @@ void AudioEngine::set_pitch(Voice voice, f32 pitch) {
     if (VoiceState* v = find(voice)) v->params.pitch = std::max(pitch, 0.01f);
 }
 
+void AudioEngine::set_filters(Voice voice, f32 low_pass, f32 high_pass) {
+    std::lock_guard lock(mutex_);
+    if (VoiceState* v = find(voice)) {
+        v->params.low_pass = std::max(low_pass, 0.0f);
+        v->params.high_pass = std::max(high_pass, 0.0f);
+    }
+}
+
+void AudioEngine::set_ducking(Bus bus, std::optional<Ducking> ducking) {
+    std::lock_guard lock(mutex_);
+    ducking_[static_cast<usize>(bus)] = ducking;
+    if (!ducking) duck_[static_cast<usize>(bus)] = 1;
+}
+
+f32 AudioEngine::duck_level(Bus bus) const {
+    std::lock_guard lock(mutex_);
+    return duck_[static_cast<usize>(bus)];
+}
+
 void AudioEngine::set_position(Voice voice, Vec2 position) {
     std::lock_guard lock(mutex_);
     if (VoiceState* v = find(voice)) v->world_position = position;
@@ -503,6 +522,29 @@ void AudioEngine::mix(f32* out, u32 frames) {
         f32 gr = gain * std::sin(angle) * std::numbers::sqrt2_v<f32>;
         f32* bus = bus_buffers_[static_cast<usize>(v.params.bus)].data();
         f64 step = v.params.pitch;
+        // The voice's own filters, gliding like the buses' do.
+        v.low_pass_now = Effects::glide(v.low_pass_now, v.params.low_pass > 0 ? v.params.low_pass : 20000.0f, frames);
+        v.high_pass_now = Effects::glide(v.high_pass_now, v.params.high_pass > 0 ? v.params.high_pass : 10.0f, frames);
+        bool lp = v.low_pass_now < 19000, hp = v.high_pass_now > 15;
+        SvfCoefficients lpc(v.low_pass_now), hpc(v.high_pass_now);
+        auto filter = [&](f32 x, int ch) {
+            f32 low, band;
+            if (lp) {
+                Svf f{v.filter_state[ch * 2], v.filter_state[ch * 2 + 1]};
+                f.tick(x, lpc.a1, lpc.a2, lpc.a3, low, band);
+                v.filter_state[ch * 2] = f.ic1;
+                v.filter_state[ch * 2 + 1] = f.ic2;
+                x = low;
+            }
+            if (hp) {
+                Svf f{v.filter_state[4 + ch * 2], v.filter_state[5 + ch * 2]};
+                f.tick(x, hpc.a1, hpc.a2, hpc.a3, low, band);
+                v.filter_state[4 + ch * 2] = f.ic1;
+                v.filter_state[5 + ch * 2] = f.ic2;
+                x = x - SvfCoefficients::k * band - low;
+            }
+            return x;
+        };
         for (u32 i = 0; i < frames; ++i) {
             if (v.position >= length) {
                 if (!v.params.loop) { v = {}; break; }
@@ -514,12 +556,30 @@ void AudioEngine::mix(f32* out, u32 frames) {
             f32 t = static_cast<f32>(v.position - static_cast<f64>(i0));
             f32 l = s[i0 * 2] + (s[i1 * 2] - s[i0 * 2]) * t;
             f32 r = s[i0 * 2 + 1] + (s[i1 * 2 + 1] - s[i0 * 2 + 1]) * t;
+            if (lp || hp) {
+                l = filter(l, 0);
+                r = filter(r, 1);
+            }
             bus[i * 2] += l * gl;
             bus[i * 2 + 1] += r * gr;
             v.position += step;
         }
     }
     mix_streams(frames);
+
+    // Ducking: a bus dips while its trigger bus is playing, judged by the trigger's loudest sample this block.
+    std::array<f32, bus_count> duck_from = duck_;
+    for (usize b = 0; b < bus_count; ++b) {
+        if (!ducking_[b]) continue;
+        const Ducking& d = *ducking_[b];
+        f32 peak = 0;
+        for (f32 x : bus_buffers_[static_cast<usize>(d.trigger)]) peak = std::max(peak, std::abs(x));
+        bool loud = peak > d.threshold;
+        f32 target = loud ? 1.0f - std::clamp(d.depth, 0.0f, 1.0f) : 1.0f;
+        f32 seconds = std::max(loud ? d.attack : d.release, 1e-3f);
+        f32 k = 1.0f - std::exp(-static_cast<f32>(frames) / (seconds * Sound::sample_rate));
+        duck_[b] += (target - duck_[b]) * k;
+    }
 
     // Each bus through its effects and gain into the master bus, then the master's own.
     constexpr usize master = static_cast<usize>(Bus::Master);
@@ -528,7 +588,15 @@ void AudioEngine::mix(f32* out, u32 frames) {
         if (b == master) continue;
         if (effects_[b]) effects_[b]->process(bus_buffers_[b].data(), frames, bus_effects_[b]);
         f32 g = bus_gain_[b];
-        for (u32 i = 0; i < frames * 2; ++i) sum[i] += bus_buffers_[b][i] * g;
+        if (duck_from[b] == 1.0f && duck_[b] == 1.0f) {
+            for (u32 i = 0; i < frames * 2; ++i) sum[i] += bus_buffers_[b][i] * g;
+        } else { // ramped across the block, so the dip never clicks
+            for (u32 i = 0; i < frames; ++i) {
+                f32 dg = g * (duck_from[b] + (duck_[b] - duck_from[b]) * static_cast<f32>(i) / static_cast<f32>(frames));
+                sum[i * 2] += bus_buffers_[b][i * 2] * dg;
+                sum[i * 2 + 1] += bus_buffers_[b][i * 2 + 1] * dg;
+            }
+        }
     }
     if (effects_[master]) effects_[master]->process(sum.data(), frames, bus_effects_[master]);
     f32 g = bus_gain_[master];

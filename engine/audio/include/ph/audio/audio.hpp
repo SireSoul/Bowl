@@ -7,6 +7,7 @@
 #include <array>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -78,6 +79,19 @@ struct PlayParams {
     f32 pitch = 1; // playback rate
     bool loop = false;
     Bus bus = Bus::Effects;
+    // Filters on this sound alone (a voice through a door, a muffled explosion far away). Hz; 0 = off.
+    f32 low_pass = 0;
+    f32 high_pass = 0;
+};
+
+// One bus getting quieter while another plays: music dipping under dialogue. `depth` is how much quieter (0..1);
+// it dips over `attack` seconds once the trigger bus is louder than `threshold`, and comes back over `release`.
+struct Ducking {
+    Bus trigger = Bus::Voice;
+    f32 depth = 0.5f;
+    f32 attack = 0.08f;
+    f32 release = 0.5f;
+    f32 threshold = 0.02f;
 };
 
 struct MusicParams {
@@ -139,6 +153,8 @@ public:
     void set_gain(Voice voice, f32 gain);
     void set_pan(Voice voice, f32 pan);
     void set_pitch(Voice voice, f32 pitch);
+    // Changes a playing sound's filters (Hz, 0 = off); they glide there, so following gameplay every frame is fine.
+    void set_filters(Voice voice, f32 low_pass, f32 high_pass = 0);
     // Moves a sound started with play_at.
     void set_position(Voice voice, Vec2 position);
 
@@ -158,6 +174,10 @@ public:
     f32 bus_gain(Bus bus) const;
     void set_bus_effects(Bus bus, const BusEffects& effects);
     BusEffects bus_effects(Bus bus) const;
+    // Makes `bus` dip while another bus plays (see Ducking); std::nullopt turns it off.
+    void set_ducking(Bus bus, std::optional<Ducking> ducking);
+    // How far a ducked bus is dipped right now: 1 is full volume.
+    f32 duck_level(Bus bus) const;
     u32 active_voices() const;
 
     // Renders `frames` stereo frames into out (used by the device callback; public for offline rendering/tests).
@@ -176,6 +196,9 @@ private:
         bool spatial = false;
         Vec2 world_position;
         Attenuation attenuation;
+        // Its filters: current cutoffs (gliding toward params.low_pass/high_pass) and their state, left and right.
+        f32 low_pass_now = 20000, high_pass_now = 10;
+        f32 filter_state[8] = {};
     };
     VoiceState* find(Voice v);
     const VoiceState* find(Voice v) const;
@@ -187,6 +210,8 @@ private:
     std::array<BusEffects, bus_count> bus_effects_{};
     std::array<std::unique_ptr<Effects>, bus_count> effects_;
     std::array<std::vector<f32>, bus_count> bus_buffers_;
+    std::array<std::optional<Ducking>, bus_count> ducking_{};
+    std::array<f32, bus_count> duck_{1, 1, 1, 1, 1, 1}; // current dip, 1 = none
     Vec2 listener_;
     u32 next_generation_ = 1;
     SDL_AudioStream* stream_ = nullptr;

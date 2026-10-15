@@ -319,3 +319,39 @@ TEST_CASE("audio: Opus sounds and music") {
 #else
 TEST_CASE("audio: without PH_OPUS, Opus files are refused clearly") { CHECK_FALSE(opus_supported()); }
 #endif
+
+TEST_CASE("audio: a voice's own filters, and changing them while it plays") {
+    auto high = sine(6000, 0.5f);
+    std::vector<f32> out(2 * 4800);
+    AudioEngine audio;
+    Voice muffled = audio.play(*high, {.loop = true, .low_pass = 500});
+    audio.mix(out.data(), 4800);
+    audio.mix(out.data(), 4800);
+    CHECK(peak_of(out) < 0.05f); // only this voice is filtered
+    Voice clear = audio.play(*high, {.loop = true});
+    audio.mix(out.data(), 4800);
+    CHECK(peak_of(out) > 0.4f);
+    audio.stop(clear);
+    audio.set_filters(muffled, 0); // off again: it glides back
+    audio.mix(out.data(), 4800);
+    audio.mix(out.data(), 4800);
+    CHECK(peak_of(out) > 0.4f);
+}
+
+TEST_CASE("audio: music ducks under dialogue and comes back") {
+    auto tone = sine(200, 2.0f, 0.3f);
+    auto line = sine(300, 0.3f, 0.3f);
+    std::vector<f32> out(2 * 960);
+    AudioEngine audio;
+    audio.set_ducking(Bus::Music, Ducking{.trigger = Bus::Voice, .depth = 0.6f, .attack = 0.02f, .release = 0.1f});
+    audio.play(*tone, {.loop = true, .bus = Bus::Music});
+    audio.mix(out.data(), 960);
+    CHECK(audio.duck_level(Bus::Music) == doctest::Approx(1.0f));
+    audio.play(*line, {.bus = Bus::Voice});
+    for (int i = 0; i < 10; ++i) audio.mix(out.data(), 960); // 0.2 s of talking
+    CHECK(audio.duck_level(Bus::Music) == doctest::Approx(0.4f).epsilon(0.05));
+    for (int i = 0; i < 50; ++i) audio.mix(out.data(), 960); // the line is over; a second later
+    CHECK(audio.duck_level(Bus::Music) > 0.95f);
+    audio.set_ducking(Bus::Music, std::nullopt);
+    CHECK(audio.duck_level(Bus::Music) == 1.0f);
+}
