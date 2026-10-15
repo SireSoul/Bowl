@@ -4,6 +4,7 @@
 #include "ph/core/utf8.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cmath>
 
 #if defined(__clang__) || defined(__GNUC__)
@@ -25,6 +26,11 @@ struct Font::Impl {
     stbtt_fontinfo info{};
 };
 
+struct Font::Face {
+    const stbtt_fontinfo* info = nullptr;
+    int index = 0; // 0: the font's "missing" glyph
+};
+
 Font::~Font() = default;
 
 std::unique_ptr<Font> Font::from_memory(GpuDevice* device, std::vector<u8> ttf, std::string_view name) {
@@ -44,6 +50,26 @@ std::unique_ptr<Font> Font::from_memory(GpuDevice* device, std::vector<u8> ttf, 
 
 static u32 size_px(f32 pixel_size) { return std::max(1u, static_cast<u32>(std::lround(pixel_size))); }
 
+void Font::set_fallbacks(std::vector<Asset<Font>> fonts) {
+    fallbacks_ = std::move(fonts);
+    // Characters drawn as '?' so far may have a real glyph now.
+    glyphs_.clear();
+    sdf_glyphs_.clear();
+    pages_.clear();
+    sdf_pages_.clear();
+}
+
+Font::Face Font::face_for(u32 codepoint) const {
+    if (int i = stbtt_FindGlyphIndex(&impl_->info, static_cast<int>(codepoint)); i != 0) return {&impl_->info, i};
+    for (const Asset<Font>& f : fallbacks_)
+        if (f && f.get() != this)
+            if (int i = stbtt_FindGlyphIndex(&f->impl_->info, static_cast<int>(codepoint)); i != 0)
+                return {&f->impl_->info, i};
+    return {&impl_->info, 0};
+}
+
+bool Font::has_glyph(u32 codepoint) const { return face_for(codepoint).index != 0; }
+
 Font::Metrics Font::metrics(f32 pixel_size) const {
     int ascent = 0, descent = 0, gap = 0;
     stbtt_GetFontVMetrics(&impl_->info, &ascent, &descent, &gap);
@@ -51,25 +77,35 @@ Font::Metrics Font::metrics(f32 pixel_size) const {
     return {ascent * scale, descent * scale, gap * scale};
 }
 
-f32 Font::kerning(u32 left, u32 right, f32 pixel_size) const {
-    f32 scale = stbtt_ScaleForPixelHeight(&impl_->info, static_cast<f32>(size_px(pixel_size)));
-    return stbtt_GetCodepointKernAdvance(&impl_->info, static_cast<int>(left), static_cast<int>(right)) * scale;
+f32 Font::advance(u32 codepoint, f32 pixel_size) const {
+    Face face = face_for(codepoint);
+    if (face.index == 0 && codepoint != ' ') face = face_for('?');
+    int advance = 0, lsb = 0;
+    stbtt_GetGlyphHMetrics(face.info, face.index, &advance, &lsb);
+    return advance * stbtt_ScaleForPixelHeight(face.info, static_cast<f32>(size_px(pixel_size)));
 }
 
-bool Font::place(u32 w, u32 h, u16& page, u32& x, u32& y) {
+f32 Font::kerning(u32 left, u32 right, f32 pixel_size) const {
+    Face a = face_for(left), b = face_for(right);
+    if (a.info != b.info) return 0; // kerning only means something within one font
+    f32 scale = stbtt_ScaleForPixelHeight(a.info, static_cast<f32>(size_px(pixel_size)));
+    return stbtt_GetGlyphKernAdvance(a.info, a.index, b.index) * scale;
+}
+
+bool Font::place(std::vector<Page>& pages, u32 w, u32 h, u16& page, u32& x, u32& y) {
     if (w + 2 > page_size || h + 2 > page_size) return false;
-    if (pages_.empty()) pages_.push_back({std::vector<u8>(page_size * page_size * 4, 0)});
-    Page* p = &pages_.back();
+    if (pages.empty()) pages.push_back({std::vector<u8>(page_size * page_size * 4, 0)});
+    Page* p = &pages.back();
     if (p->shelf_x + w + 1 > page_size) { // next shelf
         p->shelf_y += p->shelf_h + 1;
         p->shelf_x = 1;
         p->shelf_h = 0;
     }
     if (p->shelf_y + h + 1 > page_size) { // next page
-        pages_.push_back({std::vector<u8>(page_size * page_size * 4, 0)});
-        p = &pages_.back();
+        pages.push_back({std::vector<u8>(page_size * page_size * 4, 0)});
+        p = &pages.back();
     }
-    page = static_cast<u16>(pages_.size() - 1);
+    page = static_cast<u16>(pages.size() - 1);
     x = p->shelf_x;
     y = p->shelf_y;
     p->shelf_x += w + 1;
@@ -83,27 +119,26 @@ const Font::Glyph& Font::glyph(u32 codepoint, f32 pixel_size) {
     u64 key = (static_cast<u64>(px) << 32) | codepoint;
     if (auto it = glyphs_.find(key); it != glyphs_.end()) return it->second;
 
-    const stbtt_fontinfo& info = impl_->info;
-    int index = stbtt_FindGlyphIndex(&info, static_cast<int>(codepoint));
-    if (index == 0 && codepoint != '?' && codepoint != ' ') {
-        Glyph fallback = glyph('?', pixel_size);
-        return glyphs_[key] = fallback;
+    Face face = face_for(codepoint);
+    if (face.index == 0 && codepoint != '?' && codepoint != ' ') {
+        Glyph missing = glyph('?', pixel_size);
+        return glyphs_[key] = missing;
     }
-    f32 scale = stbtt_ScaleForPixelHeight(&info, static_cast<f32>(px));
+    f32 scale = stbtt_ScaleForPixelHeight(face.info, static_cast<f32>(px));
     int advance = 0, lsb = 0;
-    stbtt_GetGlyphHMetrics(&info, index, &advance, &lsb);
+    stbtt_GetGlyphHMetrics(face.info, face.index, &advance, &lsb);
     int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-    stbtt_GetGlyphBitmapBox(&info, index, scale, scale, &x0, &y0, &x1, &y1);
+    stbtt_GetGlyphBitmapBox(face.info, face.index, scale, scale, &x0, &y0, &x1, &y1);
 
     Glyph g;
     g.advance = advance * scale;
     g.offset = {static_cast<f32>(x0), static_cast<f32>(y0)};
     u32 w = static_cast<u32>(std::max(0, x1 - x0)), h = static_cast<u32>(std::max(0, y1 - y0));
     u32 ax = 0, ay = 0;
-    if (w > 0 && h > 0 && place(w, h, g.page, ax, ay)) {
+    if (w > 0 && h > 0 && place(pages_, w, h, g.page, ax, ay)) {
         std::vector<u8> alpha(w * h);
-        stbtt_MakeGlyphBitmap(&info, alpha.data(), static_cast<int>(w), static_cast<int>(h), static_cast<int>(w), scale,
-                              scale, index);
+        stbtt_MakeGlyphBitmap(face.info, alpha.data(), static_cast<int>(w), static_cast<int>(h), static_cast<int>(w),
+                              scale, scale, face.index);
         std::vector<u8>& pixels = pages_[g.page].pixels;
         for (u32 row = 0; row < h; ++row)
             for (u32 col = 0; col < w; ++col) {
@@ -117,18 +152,51 @@ const Font::Glyph& Font::glyph(u32 codepoint, f32 pixel_size) {
     return glyphs_[key] = g;
 }
 
-const Texture* Font::page(u16 index) {
-    if (index >= pages_.size()) return nullptr;
-    Page& p = pages_[index];
+const Font::Glyph& Font::sdf_glyph(u32 codepoint) {
+    if (auto it = sdf_glyphs_.find(codepoint); it != sdf_glyphs_.end()) return it->second;
+    Face face = face_for(codepoint);
+    if (face.index == 0 && codepoint != '?' && codepoint != ' ') {
+        Glyph missing = sdf_glyph('?');
+        return sdf_glyphs_[codepoint] = missing;
+    }
+    f32 scale = stbtt_ScaleForPixelHeight(face.info, sdf_size);
+    int advance = 0, lsb = 0;
+    stbtt_GetGlyphHMetrics(face.info, face.index, &advance, &lsb);
+    Glyph g;
+    g.advance = advance * scale;
+    int w = 0, h = 0, xoff = 0, yoff = 0;
+    // Distances: 128 on the outline, falling to 0 sdf_spread pixels outside and rising to 255 inside.
+    unsigned char* field = stbtt_GetGlyphSDF(face.info, scale, face.index, sdf_spread, 128,
+                                             128.0f / static_cast<f32>(sdf_spread), &w, &h, &xoff, &yoff);
+    u32 ax = 0, ay = 0;
+    if (field && w > 0 && h > 0 && place(sdf_pages_, static_cast<u32>(w), static_cast<u32>(h), g.page, ax, ay)) {
+        std::vector<u8>& pixels = sdf_pages_[g.page].pixels;
+        for (int row = 0; row < h; ++row)
+            for (int col = 0; col < w; ++col) {
+                u8* p = &pixels[((ay + static_cast<u32>(row)) * page_size + ax + static_cast<u32>(col)) * 4];
+                p[0] = p[1] = p[2] = 255;
+                p[3] = field[row * w + col];
+            }
+        g.source = {static_cast<f32>(ax), static_cast<f32>(ay), static_cast<f32>(w), static_cast<f32>(h)};
+        g.offset = {static_cast<f32>(xoff), static_cast<f32>(yoff)};
+        g.visible = true;
+    }
+    if (field) stbtt_FreeSDF(field, nullptr);
+    return sdf_glyphs_[codepoint] = g;
+}
+
+const Texture* Font::upload(std::vector<Page>& pages, u16 index, std::string_view label) {
+    if (index >= pages.size()) return nullptr;
+    Page& p = pages[index];
     if (device_ && (!p.texture || p.dirty())) {
         if (!p.texture) {
             TextureDesc desc;
             desc.width = desc.height = page_size;
             desc.rgba8 = p.pixels.data();
-            desc.premultiplied = true;
+            desc.premultiplied = true; // glyph pages are written ready to use (SDF pages hold distances, not colors)
             desc.filter = Filter::Linear;
             desc.mipmaps = false; // glyphs are rasterized at the size they're drawn
-            desc.name = name_;
+            desc.name = label;
             p.texture = device_->create_texture(desc);
         } else {
             // Only the glyphs added since the last upload: usually a few hundred bytes, not the 4 MB page.
@@ -142,9 +210,97 @@ const Texture* Font::page(u16 index) {
     return p.texture.get();
 }
 
-// Layout
+const Texture* Font::page(u16 index) { return upload(pages_, index, name_); }
+const Texture* Font::sdf_page(u16 index) { return upload(sdf_pages_, index, name_ + " (sdf)"); }
+
+// Markup
 
 namespace {
+
+enum class Effect : u8 { None, Wave, Shake };
+
+// Style changes in the text, by byte offset into the text with the tags taken out.
+struct Run {
+    usize begin;
+    Color color;
+    bool has_color;
+    Effect effect;
+};
+
+std::optional<Color> parse_color(std::string_view v) {
+    if (v.starts_with('#')) v.remove_prefix(1);
+    u32 rgb = 0;
+    if ((v.size() != 6 && v.size() != 8 && v.size() != 3) ||
+        std::from_chars(v.data(), v.data() + v.size(), rgb, 16).ec != std::errc{})
+        return std::nullopt;
+    if (v.size() == 3) // #rgb
+        return Color::rgba8(static_cast<u8>(((rgb >> 8) & 0xF) * 17), static_cast<u8>(((rgb >> 4) & 0xF) * 17),
+                            static_cast<u8>((rgb & 0xF) * 17));
+    if (v.size() == 8) return Color::hex(rgb >> 8, static_cast<f32>(rgb & 0xFF) / 255.0f);
+    return Color::hex(rgb);
+}
+
+// Takes the tags out of `text` into `plain`, recording where the color and effect change.
+void parse_markup(std::string_view text, std::string& plain, std::vector<Run>& runs) {
+    struct State {
+        Color color;
+        bool has_color = false;
+        Effect effect = Effect::None;
+    };
+    std::vector<State> stack{State{}};
+    auto change = [&] {
+        const State& s = stack.back();
+        if (!runs.empty() && runs.back().begin == plain.size()) runs.pop_back();
+        runs.push_back({plain.size(), s.color, s.has_color, s.effect});
+    };
+    change();
+    for (usize i = 0; i < text.size();) {
+        if (text[i] == '[') {
+            if (i + 1 < text.size() && text[i + 1] == '[') { // "[[" is a literal "["
+                plain += '[';
+                i += 2;
+                continue;
+            }
+            usize close = text.find(']', i);
+            if (close != std::string_view::npos) {
+                std::string_view tag = text.substr(i + 1, close - i - 1);
+                bool known = true;
+                if (tag.starts_with("color=")) {
+                    if (auto c = parse_color(tag.substr(6))) {
+                        State s = stack.back();
+                        s.color = *c;
+                        s.has_color = true;
+                        stack.push_back(s);
+                    } else known = false;
+                } else if (tag == "wave" || tag == "shake") {
+                    State s = stack.back();
+                    s.effect = tag == "wave" ? Effect::Wave : Effect::Shake;
+                    stack.push_back(s);
+                } else if (tag == "/color" || tag == "/wave" || tag == "/shake") {
+                    if (stack.size() > 1) stack.pop_back();
+                } else {
+                    known = false; // not a tag: keep the text as it is
+                }
+                if (known) {
+                    change();
+                    i = close + 1;
+                    continue;
+                }
+            }
+        }
+        plain += text[i++];
+    }
+}
+
+const Run& run_at(const std::vector<Run>& runs, usize byte) {
+    const Run* found = &runs.front();
+    for (const Run& r : runs)
+        if (r.begin <= byte) found = &r;
+        else break;
+    return *found;
+}
+
+// Layout
 
 struct Line {
     usize begin, end; // byte range
@@ -157,7 +313,7 @@ f32 measure_range(Font& font, std::string_view text, usize begin, usize end, f32
     for (usize i = begin; i < end;) {
         u32 cp = utf8::next(text, i);
         if (prev) width += font.kerning(prev, cp, px);
-        width += font.glyph(cp, px).advance;
+        width += font.advance(cp, px);
         prev = cp;
     }
     return width;
@@ -179,7 +335,7 @@ std::vector<Line> break_lines(Font& font, std::string_view text, f32 px, f32 max
             prev = 0;
             continue;
         }
-        f32 adv = font.glyph(cp, px).advance + (prev ? font.kerning(prev, cp, px) : 0.0f);
+        f32 adv = font.advance(cp, px) + (prev ? font.kerning(prev, cp, px) : 0.0f);
         if (max_width > 0 && cp != ' ' && width + adv > max_width && at > line_start) {
             if (last_space != std::string_view::npos) {
                 lines.push_back({line_start, last_space, width_at_space});
@@ -191,7 +347,7 @@ std::vector<Line> break_lines(Font& font, std::string_view text, f32 px, f32 max
                 width = 0;
             }
             last_space = std::string_view::npos;
-            adv = font.glyph(cp, px).advance;
+            adv = font.advance(cp, px);
         }
         if (cp == ' ') {
             last_space = at;
@@ -204,28 +360,38 @@ std::vector<Line> break_lines(Font& font, std::string_view text, f32 px, f32 max
     return lines;
 }
 
-} // namespace
-
-Vec2 measure_text(Font& font, std::string_view text, const TextStyle& style) {
-    f32 scale = std::max(style.raster_scale, 1e-3f);
-    f32 px = style.size * scale;
-    auto lines = break_lines(font, text, px, style.max_width * scale);
-    f32 widest = 0;
-    for (const Line& l : lines) widest = std::max(widest, l.width);
-    f32 line_h = font.metrics(px).line_height() * style.line_spacing;
-    return Vec2{widest, line_h * static_cast<f32>(lines.size())} / scale;
+// A small, repeatable jitter for [shake]: the same for a character within a twentieth of a second.
+f32 jitter(u32 index, f32 time, u32 axis) {
+    u32 h = index * 374761393u + static_cast<u32>(time * 20.0f) * 668265263u + axis * 2246822519u;
+    h = (h ^ (h >> 13)) * 1274126177u;
+    return static_cast<f32>(h & 0xFFFF) / 32767.5f - 1.0f;
 }
 
-Vec2 draw_text(SpriteBatch& batch, Font& font, std::string_view text, Vec2 position, const TextStyle& style, f32 depth) {
-    f32 scale = std::max(style.raster_scale, 1e-3f);
+struct Laid {
+    std::vector<PlacedGlyph> glyphs;
+    Vec2 size;
+};
+
+Laid lay_out(Font& font, std::string_view source, Vec2 position, const TextStyle& style) {
+    std::string plain;
+    std::vector<Run> runs;
+    std::string_view text = source;
+    if (style.markup) {
+        parse_markup(source, plain, runs);
+        text = plain;
+    }
+    // SDF text lays out at the distance field's size and is scaled; bitmap text at screen pixels.
+    f32 scale = style.sdf ? Font::sdf_size / std::max(style.size, 1e-3f) : std::max(style.raster_scale, 1e-3f);
     f32 unit = 1.0f / scale;
-    f32 px = style.size * scale;
-    auto lines = break_lines(font, text, px, style.max_width * scale); // also rasterizes every glyph used
+    f32 px = style.sdf ? Font::sdf_size : style.size * scale;
+    auto lines = break_lines(font, text, px, style.max_width * scale);
     Font::Metrics m = font.metrics(px);
     f32 line_h = m.line_height() * style.line_spacing;
 
+    Laid out;
     f32 widest = 0;
     i32 budget = style.max_glyphs;
+    u32 visible = 0;
     for (usize li = 0; li < lines.size(); ++li) {
         const Line& line = lines[li];
         widest = std::max(widest, line.width);
@@ -235,24 +401,102 @@ Vec2 draw_text(SpriteBatch& batch, Font& font, std::string_view text, Vec2 posit
         f32 baseline = static_cast<f32>(li) * line_h + m.ascent;
         u32 prev = 0;
         for (usize i = line.begin; i < line.end;) {
+            usize at = i;
             u32 cp = utf8::next(text, i);
             if (prev) x += font.kerning(prev, cp, px);
-            const Font::Glyph& g = font.glyph(cp, px);
+            const Font::Glyph& g = style.sdf ? font.sdf_glyph(cp) : font.glyph(cp, px);
             if (g.visible) {
                 if (budget == 0) break;
                 if (budget > 0) --budget;
-                if (const Texture* page = font.page(g.page)) {
-                    // Snap to whole raster pixels so glyphs stay crisp.
-                    Vec2 at{std::round(x + g.offset.x), std::round(baseline + g.offset.y)};
-                    batch.draw_region(*page, g.source, position + at * unit, g.source.size() * unit, style.color,
-                                      depth, 0, {0, 0});
+                // Bitmap glyphs snap to whole raster pixels so they stay crisp; SDF glyphs don't need to.
+                Vec2 at_px = style.sdf ? Vec2{x + g.offset.x, baseline + g.offset.y}
+                                       : Vec2{std::round(x + g.offset.x), std::round(baseline + g.offset.y)};
+                PlacedGlyph p;
+                p.codepoint = cp;
+                p.index = visible++;
+                p.page = g.page;
+                p.sdf = style.sdf;
+                p.source = g.source;
+                p.position = position + at_px * unit;
+                p.size = g.source.size() * unit;
+                p.color = style.color;
+                if (style.markup) {
+                    const Run& r = run_at(runs, at);
+                    if (r.has_color) p.color = r.color.with_alpha(r.color.a * style.color.a);
+                    if (r.effect == Effect::Wave) p.position.y += std::sin(style.time * 6.0f + static_cast<f32>(p.index) * 0.6f) * style.size * 0.12f;
+                    if (r.effect == Effect::Shake)
+                        p.position += Vec2{jitter(p.index, style.time, 0), jitter(p.index, style.time, 1)} * (style.size * 0.05f);
                 }
+                out.glyphs.push_back(p);
             }
             x += g.advance;
             prev = cp;
         }
     }
-    return Vec2{widest, line_h * static_cast<f32>(lines.size())} * unit;
+    out.size = Vec2{widest, line_h * static_cast<f32>(lines.size())} * unit;
+    return out;
+}
+
+} // namespace
+
+std::string strip_markup(std::string_view text) {
+    std::string plain;
+    std::vector<Run> runs;
+    parse_markup(text, plain, runs);
+    return plain;
+}
+
+std::vector<PlacedGlyph> layout_text(Font& font, std::string_view text, Vec2 position, const TextStyle& style) {
+    return lay_out(font, text, position, style).glyphs;
+}
+
+Vec2 measure_text(Font& font, std::string_view text, const TextStyle& style) {
+    std::string plain;
+    std::vector<Run> runs;
+    if (style.markup) {
+        parse_markup(text, plain, runs);
+        text = plain;
+    }
+    f32 scale = style.sdf ? Font::sdf_size / std::max(style.size, 1e-3f) : std::max(style.raster_scale, 1e-3f);
+    f32 px = style.sdf ? Font::sdf_size : style.size * scale;
+    auto lines = break_lines(font, text, px, style.max_width * scale);
+    f32 widest = 0;
+    for (const Line& l : lines) widest = std::max(widest, l.width);
+    f32 line_h = font.metrics(px).line_height() * style.line_spacing;
+    return Vec2{widest, line_h * static_cast<f32>(lines.size())} / scale;
+}
+
+Vec2 draw_text(SpriteBatch& batch, Font& font, std::string_view text, Vec2 position, const TextStyle& style, f32 depth) {
+    Laid laid = lay_out(font, text, position, style);
+    auto draw_pass = [&](Vec2 offset, std::optional<Color> tint) {
+        for (const PlacedGlyph& g : laid.glyphs) {
+            const Texture* page = g.sdf ? font.sdf_page(g.page) : font.page(g.page);
+            if (!page) continue;
+            Color c = tint ? tint->with_alpha(tint->a * g.color.a) : g.color;
+            batch.draw_region(*page, g.source, g.position + offset, g.size, c, depth, 0, {0, 0});
+        }
+    };
+    // Underneath first: the shadow, then the outline (copies around each letter), then the letters.
+    if (style.shadow.x != 0 || style.shadow.y != 0) draw_pass(style.shadow, style.shadow_color);
+    if (style.outline > 0 && !style.sdf) {
+        f32 r = style.outline;
+        int steps = r * std::max(style.raster_scale, 1.0f) > 1.5f ? 16 : 8;
+        for (int k = 0; k < steps; ++k) draw_pass(Vec2::from_angle(tau * static_cast<f32>(k) / static_cast<f32>(steps)) * r, style.outline_color);
+    }
+    draw_pass({}, std::nullopt);
+    return laid.size;
+}
+
+Material sdf_text_material(AssetManager& assets, const SdfTextLook& look) {
+    struct Params {
+        Color outline_color; // premultiplied
+        f32 outline, softness, pad[2];
+    };
+    Material m;
+    m.fragment = assets.load<Shader>("engine/shaders/text_sdf.frag");
+    m.set_uniforms(Params{look.outline_color.premultiplied(), std::clamp(look.outline, 0.0f, 0.49f),
+                          std::max(look.softness, 0.0f), {0, 0}});
+    return m;
 }
 
 } // namespace ph::gfx

@@ -6,6 +6,9 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Text: outlines and shadows (`TextStyle::outline`, `shadow`), rich text markup (`[color=#hex]`, `[wave]`, `[shake]`),
+  fallback fonts (`Font::set_fallbacks`, `has_glyph`), distance-field text (`TextStyle::sdf`, `sdf_text_material`), and
+  `layout_text` for drawing laid-out characters yourself. `Font::advance` measures without rasterizing.
 - Sprite sheets: Aseprite slices (`SpriteSlice`, `slice_rect`, `draw_nine_slice` from a slice), animation events from
   tag user data (`SpriteAnimator::fired`), frame names (`frame_index`). `SpriteBatch::draw_nine_slice` from part of a
   texture.

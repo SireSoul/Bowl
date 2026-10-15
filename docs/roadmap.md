@@ -5,8 +5,8 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 ## M1: make a game with it (content basics)
 - ~~Sprite sheets and animation: Aseprite JSON (tags, durations, ping-pong, repeat, trimming), `SpriteAnimator`,
   slices (hitboxes, nine-slice, pivots), animation events by name, frames by name, the `ph-atlas` packer~~ (done)
-- ~~Text: TTF fonts, `draw_text`, UTF-8, kerning, wrapping, alignment~~ (done). Still to do: outlines/shadows, SDF for
-  smoothly scaling text, font fallback chains for CJK/emoji, rich text markup
+- ~~Text: TTF fonts, `draw_text`, UTF-8, kerning, wrapping, alignment, outlines and shadows, rich text markup,
+  font fallback chains, SDF text~~ (done). Later: color emoji, right-to-left and complex scripts (shaping)
 - ~~Tilemaps: Tiled `.tmj`/`.tsj`, orthogonal + isometric, infinite maps, compressed layers, flips, animated tiles,
   objects, properties, y-sorting~~ (done). Still to do: staggered/hex maps, `.tmx` XML, GPU-cached static chunks for
   very large maps

@@ -74,3 +74,75 @@ TEST_CASE("text: measuring, newlines and word wrap") {
     hi.raster_scale = 2;
     CHECK(gfx::measure_text(*font, "hello world", hi).x == doctest::Approx(wrapped.x).epsilon(0.08));
 }
+
+TEST_CASE("text: markup is taken out of the text and colors the characters") {
+    CHECK(gfx::strip_markup("a [color=#ff0000]red[/color] [[b] [wave]w[/wave]") == "a red [b] w");
+    CHECK(gfx::strip_markup("[nope] stays") == "[nope] stays");
+
+    auto font = engine_font();
+    gfx::TextStyle style;
+    style.markup = true;
+    auto glyphs = gfx::layout_text(*font, "a[color=#00ff00]bc[/color]d", {}, style);
+    REQUIRE(glyphs.size() == 4);
+    CHECK(glyphs[0].color == Color::white());
+    CHECK(glyphs[1].color == Color::hex(0x00FF00));
+    CHECK(glyphs[2].color == Color::hex(0x00FF00));
+    CHECK(glyphs[3].color == Color::white());
+
+    // Tags take no space: the same width as the plain text.
+    gfx::TextStyle plain;
+    CHECK(gfx::measure_text(*font, "a[color=#0f0]bc[/color]d", style).x ==
+          doctest::Approx(gfx::measure_text(*font, "abcd", plain).x));
+}
+
+TEST_CASE("text: wave moves letters, outlines and shadows don't change layout") {
+    auto font = engine_font();
+    gfx::TextStyle style;
+    style.markup = true;
+    style.time = 0.3f;
+    auto flat = gfx::layout_text(*font, "abc", {}, style);
+    auto waved = gfx::layout_text(*font, "[wave]abc[/wave]", {}, style);
+    REQUIRE(flat.size() == waved.size());
+    CHECK(flat[0].position.x == doctest::Approx(waved[0].position.x));
+    CHECK(flat[1].position.y != doctest::Approx(waved[1].position.y));
+
+    gfx::TextStyle outlined = style;
+    outlined.outline = 2;
+    outlined.shadow = {1, 1};
+    CHECK(gfx::measure_text(*font, "abc", outlined).x == doctest::Approx(gfx::measure_text(*font, "abc", style).x));
+
+    style.max_glyphs = 2;
+    CHECK(gfx::layout_text(*font, "a b c", {}, style).size() == 2);
+}
+
+TEST_CASE("text: distance-field glyphs scale with the text size") {
+    auto font = engine_font();
+    const auto& a = font->sdf_glyph('A');
+    CHECK(a.visible);
+    CHECK(a.source.h > gfx::Font::sdf_size * 0.5f);
+
+    gfx::TextStyle style;
+    style.sdf = true;
+    style.size = 24;
+    Vec2 small = gfx::measure_text(*font, "Hello", style);
+    style.size = 96;
+    Vec2 big = gfx::measure_text(*font, "Hello", style);
+    CHECK(big.x == doctest::Approx(small.x * 4).epsilon(0.01));
+    auto glyphs = gfx::layout_text(*font, "Hi", {}, style);
+    REQUIRE(glyphs.size() == 2);
+    CHECK(glyphs[0].sdf);
+    CHECK(glyphs[0].size.y == doctest::Approx(a.source.h * 96 / gfx::Font::sdf_size));
+}
+
+TEST_CASE("text: fallback fonts") {
+    auto font = engine_font();
+    CHECK(font->has_glyph('A'));
+    CHECK_FALSE(font->has_glyph(0x4E2D));
+    // A fallback that lacks the character too still ends at '?'.
+    auto slot = std::make_shared<AssetSlot<gfx::Font>>();
+    slot->value = engine_font();
+    font->set_fallbacks({Asset<gfx::Font>(slot)});
+    CHECK(font->fallbacks().size() == 1);
+    CHECK_FALSE(font->has_glyph(0x4E2D));
+    CHECK(font->glyph(0x4E2D, 20).advance == doctest::Approx(font->glyph('?', 20).advance));
+}

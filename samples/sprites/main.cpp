@@ -92,6 +92,7 @@ public:
 
         font_ = engine.assets().load<gfx::Font>("engine/fonts/Roboto-Medium.ttf");
         hologram_.fragment = engine.assets().load<gfx::Shader>("shaders/hologram.frag");
+        sdf_look_ = gfx::sdf_text_material(engine.assets(), {.outline_color = Color::hex(0x1a1f3d), .outline = 0.25f});
         ball_ = engine.assets().add("generated/ball", make_ball_texture(engine.gpu()));
         blip_ = engine.assets().add("generated/blip", make_blip());
 
@@ -184,11 +185,14 @@ public:
         Vec2 screen = engine.window().size();
         ui_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None);
         gfx::TextStyle title{.size = 28, .color = Color::white(), .raster_scale = engine.window().pixel_density()};
+        title.shadow = {2, 2};
         gfx::draw_text(ui_, *font_, "Bowl", {24, 20}, title);
         gfx::TextStyle body = title;
         body.size = 16;
         body.color = Color::hex(0xb8c0ff);
-        std::string stats = std::format("{} sprites  ·  {} draw calls  ·  tick {}", engine.world().query<const Look>().count(),
+        body.markup = true;
+        body.time = static_cast<f32>(engine.time());
+        std::string stats = std::format("[color=#ffffff]{}[/color] sprites  ·  [color=#ffffff]{}[/color] draw calls  ·  [wave]tick {}[/wave]", engine.world().query<const Look>().count(),
                                         engine.renderer().stats().draw_calls, engine.tick());
         gfx::draw_text(ui_, *font_, stats, {24, 58}, body);
         // The spinners use a custom material (assets/shaders/hologram.frag.glsl) with a time uniform.
@@ -213,6 +217,14 @@ public:
                        "the wheel zooms, C clears, F1 opens the dev overlay.",
                        {screen.x * 0.5f, screen.y - 46}, help);
         engine.renderer().submit_ui(ui_);
+
+        // Distance-field text stays sharp while its size changes every frame.
+        sdf_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None, gfx::BlendMode::Alpha,
+                   sdf_look_.fragment ? &sdf_look_ : nullptr);
+        gfx::TextStyle pulse{.size = 40 + 8 * std::sin(static_cast<f32>(engine.time()) * 2), .color = Color::hex(0xffe066)};
+        pulse.sdf = true;
+        gfx::draw_text(sdf_, *font_, "Bowl", {24, 92}, pulse);
+        engine.renderer().submit_ui(sdf_);
     }
 
     void dev_ui(Engine& engine) override {
@@ -295,7 +307,8 @@ private:
     Asset<gfx::Font> font_;
     Asset<gfx::SpriteSheet> spinner_;
     gfx::Material hologram_;
-    gfx::SpriteBatch holo_;
+    gfx::SpriteBatch holo_, sdf_;
+    gfx::Material sdf_look_;
     Asset<audio::Sound> blip_;
     gfx::SpriteBatch batch_, ui_;
     int spawn_rate_ = 40;
