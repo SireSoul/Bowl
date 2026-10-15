@@ -6,6 +6,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Look: your own full-screen effects (`Renderer::post_effects`, `PostEffect`, `PostStage::Scene` and `Final`),
+  color-grading lookup tables (`PostSettings::lut`, `make_neutral_lut`), chromatic aberration and film grain;
+  emissive sprites (`submit_emissive`); normal-mapped lighting and shadows from occluders (`light_material`,
+  `submit_normals`, `submit_occluders`). The isometric sample's torch casts shadows; the sprites sample has `--film`.
 - Saving: `ecs::Prefab` assets (`.prefab`, one entity or several) and `ecs::instantiate`; a binary document form
   (`json::encode_binary`, `decode_binary`, `parse_any`) read by every world loader and Bowl Editor; save-file
   migrations (`ecs::Migrations`, `serial::Context::game_version`, `rename_component`, `rename_field`,
@@ -55,6 +59,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- Lighting is applied in its own pass before bloom (so scene effects see the lit image); bloom still comes from the
+  scene's own bright pixels. `Renderer::submit(StaticSprites)` and the new submissions share one sprite path.
 - **Breaking:** `audio::Music`'s constructor takes the codec (`Music::Codec`). Loading through assets is unchanged.
 - The mixer sums each bus separately before applying its gain, so bus effects can work on it.
 - Font atlases upload only the rectangle holding newly added glyphs, instead of the whole 4 MB page.

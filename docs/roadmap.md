@@ -19,16 +19,15 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 
 ## M2: worlds that persist
 - ~~Reflection: `PH_REFLECT(Type, fields...)`~~ (done). Later: switch to C++26 reflection when compilers ship it
-- ~~Serialization: JSON for reflected types, world save/load, prefabs, entity references remapped on load~~ (done).
-  Prefab and world files as hot-reloading assets, a binary form for big worlds, save-file migrations (done)
+- ~~Serialization: JSON for reflected types, world save/load, prefabs, entity references remapped on load, prefab and
+  world files as hot-reloading assets, a binary form for big worlds, save-file migrations~~ (done)
 - ~~Entity inspector: select, edit fields live, duplicate, destroy, copy as JSON, save/load the world~~ (done)
 - ~~Relationships: parent/child `Transform2D` hierarchy, cycle-safe reparenting, recursive destroy~~ (done)
 
 ## M3: look great
-- ~~Post-processing: HDR scene, bloom, exposure/contrast/saturation/tint, ACES tonemap, vignette, UI layer~~ (done).
-  Still to do: user post-effect chain, color-grading LUTs, chromatic aberration/film grain
-- ~~2D lighting: additive light map, ambient color~~ (done). Still to do: emissive sprites that ignore the light map,
-  normal-mapped sprites, shadow casting
+- ~~Post-processing: HDR scene, bloom, exposure/contrast/saturation/tint, ACES tonemap, vignette, UI layer, your own
+  effect chain, color-grading LUTs, chromatic aberration, film grain~~ (done)
+- ~~2D lighting: additive light map, ambient color, emissive sprites, normal-mapped sprites, shadow casting~~ (done)
 - ~~Custom materials: user fragment shaders per batch, extra textures, uniforms, blend modes~~ (done)
 - ~~D3D12: HLSL in shader bundles, compiled to DXBC on Windows; CI renders a sample on D3D12 (WARP)~~ (done).
   Later: cache compiled DXBC on disk, DXIL via DXC for Shader Model 6 features

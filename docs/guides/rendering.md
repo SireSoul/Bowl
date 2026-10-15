@@ -194,15 +194,19 @@ void main() {
 The sprites sample's [hologram shader](../../samples/sprites/assets/shaders/hologram.frag.glsl) is a complete
 example. Writing shaders is covered in [shaders.md](shaders.md).
 
-## The three layers: scene, lights, UI
+## The layers: scene, lights, UI
 
-The renderer has three kinds of submission, drawn in this order:
+The renderer has these kinds of submission:
 
 ```
-submit(batch)        the scene, rendered in HDR (16-bit float) so colors can exceed 1
-submit_light(batch)  the light map: half resolution, always additive, only used with post().lighting
-                     ... post-processing combines them: lighting, bloom, grading, vignette ...
-submit_ui(batch)     the UI, drawn on the finished image: not lit, not bloomed, not graded
+submit(batch)            the scene, rendered in HDR (16-bit float) so colors can exceed 1
+submit_emissive(batch)   sprites that light themselves: over the lit scene, unaffected by the light map
+submit_light(batch)      the light map: half resolution, always additive, only used with post().lighting
+submit_normals(batch)    normal maps, for lights drawn with light_material
+submit_occluders(batch)  shadow casters, for lights drawn with light_material
+                         ... then lighting, your scene effects, bloom, grading, LUT, lens, vignette,
+                             your final effects ...
+submit_ui(batch)         the UI, drawn on the finished image: not lit, not bloomed, not graded
 ```
 
 Use `submit_ui` for HUD and menus so they stay readable whatever the scene looks like. The F1 overlay draws on top
@@ -236,6 +240,9 @@ post.saturation = 0.9f;
 | `vignette_radius`, `vignette_softness` | 0.55, 0.6 | Its shape |
 | `lighting` | `false` | Multiply the scene by ambient + light map |
 | `ambient` | dark blue-gray | Light everywhere, before lights are added |
+| `lut`, `lut_strength` | none, 1 | A color-grading lookup table, see below |
+| `chromatic_aberration` | 0 | Red and blue split toward the edges: 0.002 is subtle, 0.01 strong |
+| `grain` | 0 | Moving film grain, strongest in the midtones: 0.02 to 0.1 |
 
 Bloom works on brightness above the threshold, and since the scene is HDR, a sprite color like
 `{3.0f, 2.0f, 1.0f, 1}` is three times brighter than white in red and glows strongly. That's how the samples make
@@ -243,6 +250,59 @@ lanterns, fireflies and sparks glow without touching the rest of the image.
 
 Every value can be tuned live in the overlay's **Post & lighting** panel. `renderer.set_clear_color(color)` sets the
 background.
+
+### Color grading with a lookup table
+
+A LUT lets you grade the game in any image editor. Export the neutral table, take a screenshot of the game, grade the
+screenshot with adjustment layers, apply the same layers to the table, and load the result:
+
+```cpp
+// once, to make the starting file
+std::vector<u8> neutral = gfx::make_neutral_lut(16);
+gfx::write_png("lut_neutral.png", 16 * 16, 16, neutral);
+
+// in the game
+Asset<gfx::Texture> dusk = engine.assets().load<gfx::Texture>("luts/dusk.png");
+post.lut = dusk.get();
+post.lut_strength = 0.8f;   // blend with the ungraded image
+```
+
+The table is a strip of N slices, each N x N (red across, green down, blue from slice to slice), the layout most
+grading tools export; 16 or 32 slices both work. It's applied after grading and tonemapping. Load LUT textures
+without pixel-art filtering (they're always sampled smoothly). Swap or blend tables to change the mood: dusk, a
+flashback, a poisoned haze.
+
+### Your own effects
+
+Add full-screen passes of your own with `post_effects()`. Each is a fragment shader in a `Material`:
+
+```cpp
+gfx::Material scanlines;
+scanlines.fragment = engine.assets().load<gfx::Shader>("shaders/scanlines.frag");
+scanlines.set_uniforms(Params{0.18f, 360});
+engine.renderer().post_effects().push_back({&scanlines, gfx::PostStage::Final});
+```
+
+```glsl
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 out_color;
+layout(set = 2, binding = 0) uniform sampler2D u_image;   // the image so far
+layout(std140, set = 3, binding = 0) uniform Params { vec4 params; };
+
+void main() {
+    vec3 color = texture(u_image, v_uv).rgb;
+    out_color = vec4(color * (1.0 - params.x * (0.5 + 0.5 * sin(v_uv.y * params.y * 6.2831853))), 1.0);
+}
+```
+
+- `PostStage::Scene` effects run on the lit HDR scene before bloom: heat haze, underwater wobble, shockwaves.
+  `PostStage::Final` effects run on the finished, graded image before the UI: pixelation, CRT lines, dithering.
+- Effects run in the order they're in the list; set `enabled = false` to skip one. The material's textures are at
+  bindings 1-3 and its uniforms at set 3 binding 0; `textureSize(u_image, 0)` gives the image size. Pass time
+  through your uniforms if the effect moves.
+- The material is kept by pointer, so keep it alive while it's in the list.
+
+The sprites sample's `--film` flag uses a LUT, grain, chromatic aberration, a vignette and a scanline effect.
 
 ## 2D lighting
 
@@ -262,9 +322,57 @@ renderer.submit_light(lights);
 - Any texture works as a light: cones, window shapes, flickering sprite sheets.
 - Light colors add up, and `ambient + light` can go above 1, which brightens the scene past its original colors.
 - UI isn't lit.
+- Bloom comes from the scene's own bright pixels (over-bright sprites, emissive ones), not from where lights overlap.
 
-The isometric sample's night mode (`--night`) puts a lantern on every pillar and a torch on the player; read its
-`render` for a complete setup.
+The isometric sample's night mode (`--night`) puts a lantern on every pillar and a torch that casts shadows on the
+player; read its `render` for a complete setup.
+
+### Emissive sprites
+
+Things that give off their own light (lamps, glowing eyes, screens, lava) shouldn't darken at night. Draw them with
+`submit_emissive`: they appear over the lit scene at full brightness, and bloom like any bright sprite.
+
+```cpp
+glowing.begin(engine.camera());
+glowing.draw(lamp_texture, lamp);
+engine.renderer().submit_emissive(glowing);
+```
+
+Emissive sprites lie over everything in the scene, so use them for things on top, or draw just the glowing part
+(the flame, not the lantern).
+
+### Normal maps and shadows
+
+Lights drawn with `gfx::light_material` go further: they shade normal-mapped sprites and cast shadows.
+
+```cpp
+// once
+gfx::Material light_look = gfx::light_material(engine.assets(), {.normals = true, .height = 0.5f, .shadows = true});
+
+// every frame
+normals.begin(engine.camera());
+normals.draw(rock_normal_map, rock);          // the same sprite as in the scene, with its normal map
+engine.renderer().submit_normals(normals);
+
+occluders.begin(engine.camera());
+occluders.draw_rect(wall_rect, Color::white());   // blocks light
+engine.renderer().submit_occluders(occluders);
+
+lights.begin(engine.camera(), gfx::SpriteSort::None, gfx::BlendMode::Additive, &light_look);
+lights.draw(renderer.light_texture(), torch);
+engine.renderer().submit_light(lights);
+```
+
+- **Normal maps** use the OpenGL convention (green points up), what most tools make by default; flip the green
+  channel of DirectX-style maps. Unbumped areas look exactly as they would without normal mapping. `height` is how
+  far above the ground lights hang, relative to their radius: low lights rake across bumps, high ones light them
+  flat. Sprite rotation and flips aren't taken into account.
+- **Occluders** block light where their alpha is above one half; the light shader traces each pixel's way back to
+  the light. Anything drawn faintly (alpha around a quarter) blocks nothing but is never shadowed itself. In
+  isometric and side views, mark the upright parts of things that way and draw only their footprint at full alpha,
+  so the shadow falls behind them and not over them; the isometric sample does exactly that for its pillars.
+- Lights keep their shapes and colors; any light texture works. Lights without the material are drawn as before.
+- With nothing submitted to `submit_normals` or `submit_occluders`, those parts cost nothing.
 
 ## Pixel art
 
