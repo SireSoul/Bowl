@@ -1,13 +1,20 @@
 #include "ph/core/jobs.hpp"
 
+#include "ph/core/profiler.hpp"
+
 #include <algorithm>
+#include <string>
 
 namespace ph {
 
 JobSystem::JobSystem(i32 workers) {
     if (workers < 0) workers = std::max(0, static_cast<i32>(std::thread::hardware_concurrency()) - 1);
     threads_.reserve(static_cast<usize>(workers));
-    for (i32 i = 0; i < workers; ++i) threads_.emplace_back([this] { worker_main(); });
+    for (i32 i = 0; i < workers; ++i)
+        threads_.emplace_back([this, i] {
+            profiler::set_thread_name(("worker " + std::to_string(i + 1)).c_str());
+            worker_main();
+        });
 }
 
 JobSystem::~JobSystem() {

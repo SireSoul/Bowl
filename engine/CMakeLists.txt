@@ -37,6 +37,10 @@ ph_module(core
         core/src/profiler.cpp
         core/src/settings.cpp
     PUBLIC_DEPS Threads::Threads)
+if(PH_TRACY)
+    target_link_libraries(ph_core PRIVATE Tracy::TracyClient)
+    target_compile_definitions(ph_core PRIVATE PH_TRACY=1)
+endif()
 
 ph_module(ecs
     SOURCES

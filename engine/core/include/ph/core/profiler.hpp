@@ -11,6 +11,9 @@ namespace ph {
 // and the dev overlay shows the totals. Names are copied the first time they're seen, so any string works.
 //
 //     void physics() { PH_PROFILE_SCOPE("physics"); ... }
+//
+// Built with PH_TRACY, zones, frames, thread names, plots and log lines also go to the Tracy profiler, which shows
+// them on a timeline per thread.
 namespace profiler {
 
 struct ZoneStats {
@@ -30,11 +33,16 @@ std::vector<ZoneStats> last_frame();
 // Total frame time history (ms), oldest first.
 std::vector<f32> frame_history();
 
+// Tracy only (no-ops otherwise). Plot names must be string literals or otherwise live forever.
+void set_thread_name(const char* name);
+void plot(const char* name, f64 value);
+bool tracy_enabled();
+
 } // namespace profiler
 
 class ProfileScope {
 public:
-    explicit ProfileScope(std::string_view name);
+    explicit ProfileScope(std::string_view name, const char* file = nullptr, u32 line = 0);
     ~ProfileScope();
     ProfileScope(const ProfileScope&) = delete;
     ProfileScope& operator=(const ProfileScope&) = delete;
@@ -42,8 +50,10 @@ public:
 private:
     std::string_view name_;
     f64 start_;
+    [[maybe_unused]] u32 tracy_zone_ = 0; // used only in PH_TRACY builds
+    [[maybe_unused]] bool tracy_active_ = false;
 };
 
-#define PH_PROFILE_SCOPE(name) ::ph::ProfileScope PH_CONCAT(ph_profile_scope_, __LINE__){name}
+#define PH_PROFILE_SCOPE(name) ::ph::ProfileScope PH_CONCAT(ph_profile_scope_, __LINE__){name, __FILE__, __LINE__}
 
 } // namespace ph

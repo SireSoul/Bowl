@@ -28,6 +28,7 @@ struct AppRunner {
 
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
+        profiler::set_thread_name("main");
         e.config_ = game->configure();
         for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);
         for (int i = 1; i < argc; ++i) {
@@ -192,6 +193,13 @@ struct AppRunner {
 
         e.scenes_.apply_pending(e);
         e.input_.begin_frame();
+        if (profiler::tracy_enabled()) {
+            const auto& stats = e.renderer_.stats();
+            profiler::plot("entities", static_cast<f64>(e.world_.entity_count()));
+            profiler::plot("sprites", stats.sprites);
+            profiler::plot("draw calls", stats.draw_calls);
+            profiler::plot("fixed ticks this frame", steps);
+        }
         profiler::end_frame();
         ++e.frame_;
         if (e.quit_ || (frame_limit && e.frame_ >= frame_limit)) return SDL_APP_SUCCESS;

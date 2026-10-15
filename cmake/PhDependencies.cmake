@@ -88,6 +88,18 @@ if(PH_DEV_TOOLS)
     set_target_properties(ph_imgui PROPERTIES FOLDER third_party)
 endif()
 
+# Tracy: timeline profiler. On demand: zones cost almost nothing until the Tracy app connects.
+if(PH_TRACY)
+    set(TRACY_ENABLE ON CACHE BOOL "" FORCE)
+    set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
+    set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
+    ph_fetch(tracy https://github.com/wolfpld/tracy/archive/refs/tags/v0.12.2.tar.gz
+             09617765ba5ff1aa6da128d9ba3c608166c5ef05ac28e2bb77f791269d444952)
+    FetchContent_MakeAvailable(tracy)
+    set_target_properties(TracyClient PROPERTIES FOLDER third_party)
+    target_compile_options(TracyClient PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>) # its own warnings aren't ours to fix
+endif()
+
 # doctest: unit tests
 if(PH_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)
