@@ -50,6 +50,9 @@ std::optional<ShaderBundle> load_bundle(AssetLoadContext& ctx, std::string_view 
         options.name = file->filename().string();
         options.stage = *stage;
         options.source_path = *file;
+        // Game shaders can #include "engine/shaders/...": wherever the engine's shaders are mounted.
+        if (auto engine_shaders = ctx.assets().resolve("engine/shaders/common.glsl"))
+            options.include_roots.emplace_back("engine/shaders/", engine_shaders->parent_path());
         auto result = shaderc::compile_glsl(*source, options);
         for (const auto& inc : result.includes) ctx.depends_on(inc);
         if (!result.ok) {

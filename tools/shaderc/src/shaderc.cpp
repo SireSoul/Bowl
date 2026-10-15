@@ -25,15 +25,19 @@ void init_glslang() {
     std::call_once(once, [] { glslang::InitializeProcess(); });
 }
 
-// Resolves #include "file" relative to the including file, then the root shader's folder.
+// Resolves #include "file" relative to the including file, then the root shader's folder, then the include roots.
 class Includer final : public glslang::TShader::Includer {
 public:
-    explicit Includer(fs::path root_dir) : root_dir_(std::move(root_dir)) {}
+    Includer(fs::path root_dir, const std::vector<std::pair<std::string, fs::path>>& roots)
+        : root_dir_(std::move(root_dir)), roots_(roots) {}
 
     IncludeResult* includeLocal(const char* header, const char* includer, size_t) override {
         fs::path base = includer && *includer ? fs::path(includer).parent_path() : root_dir_;
-        for (const fs::path& dir : {base, root_dir_}) {
-            fs::path candidate = dir / header;
+        std::vector<fs::path> candidates{base / header, root_dir_ / header};
+        std::string_view name_in_source = header;
+        for (const auto& [prefix, dir] : roots_)
+            if (name_in_source.starts_with(prefix)) candidates.push_back(dir / name_in_source.substr(prefix.size()));
+        for (const fs::path& candidate : candidates) {
             if (auto text = read_file_text(candidate)) {
                 auto* owned = new std::string(std::move(*text));
                 std::string name = candidate.lexically_normal().string();
@@ -56,6 +60,7 @@ public:
 
 private:
     fs::path root_dir_;
+    const std::vector<std::pair<std::string, fs::path>>& roots_;
 };
 
 EShLanguage to_glslang(ShaderStage stage) {
@@ -225,7 +230,8 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
     shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_0);
     shader.setEntryPoint("main");
 
-    Includer includer(options.source_path.empty() ? fs::current_path() : options.source_path.parent_path());
+    Includer includer(options.source_path.empty() ? fs::current_path() : options.source_path.parent_path(),
+                      options.include_roots);
     auto messages = static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules);
     bool parsed = shader.parse(GetDefaultResources(), 450, false, messages, includer);
     result.includes = includer.includes;

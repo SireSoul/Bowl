@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Game shaders can `#include "engine/shaders/common.glsl"`: ph-shaderc takes include roots (`--include
+  <prefix>=<folder>`, `CompileOptions::include_roots`), and builds and dev reloads pass the engine's.
 - Bowl Editor: Level, Data and Paint workspaces. Data edits every JSON file in the assets folder as a tree and as text,
   keeping comments and layout; Paint is a pixel-art canvas (pencil, eraser, fill, picker, palette, undo); the Brush
   tool paints on art where it stands in the level; the Region tool and handles draw and resize trigger regions and

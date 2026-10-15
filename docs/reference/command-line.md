@@ -37,7 +37,8 @@ Games add their own the same way: `if (engine.has_arg("--skip-intro")) ...`.
 ## ph-shaderc
 
 ```bash
-ph-shaderc <input.vert.glsl | input.frag.glsl> -o <output.phsh> [--depfile <file>] [-g] [--print-msl] [--print-hlsl]
+ph-shaderc <input.(vert|frag|comp).glsl> -o <output.phsh> [--depfile <file>] [-g] [--print-msl] [--print-hlsl]
+           [--include <prefix>=<folder>]
 ```
 
 | Option | |
@@ -47,6 +48,7 @@ ph-shaderc <input.vert.glsl | input.frag.glsl> -o <output.phsh> [--depfile <file
 | `-g` | Keep debug information in the SPIR-V |
 | `--print-msl` | Print the generated Metal source to stdout |
 | `--print-hlsl` | Print the generated HLSL to stdout |
+| `--include <prefix>=<folder>` | Look for includes that start with `prefix` in `folder`; repeatable. `ph_add_game` passes `engine/shaders/=<engine shader folder>` |
 | `-h`, `--help` | Usage |
 
 Exit codes: 0 on success, 1 for compile or file errors, 2 for bad arguments. The executable is in

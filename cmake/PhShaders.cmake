@@ -29,6 +29,7 @@ function(ph_compile_shaders outputs_var source_dir output_dir)
         add_custom_command(
             OUTPUT "${out}"
             COMMAND ${shaderc} "${src}" -o "${out}" --depfile "${out}.d"
+                    --include "engine/shaders/=${PH_ENGINE_ASSET_SOURCE_DIR}/shaders"
             DEPENDS "${src}" ${tool_dep}
             DEPFILE "${out}.d"
             COMMENT "Compiling shader ${rel}"

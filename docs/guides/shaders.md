@@ -118,8 +118,14 @@ Colors in the pipeline are premultiplied: multiply RGB by alpha whenever you bui
 compiled. Included files are tracked, so editing one recompiles every shader that uses it, both in the build and in a
 running dev game.
 
-The engine's own helpers are in `engine/assets/shaders/common.glsl` (`premultiply`, `rotate`); copy what you need,
-since game shaders can't include engine files by path.
+Game shaders can include the engine's shader files by their asset path:
+
+```glsl
+#include "engine/shaders/common.glsl"   // premultiply(), rotate()
+```
+
+`ph_add_game` passes ph-shaderc the engine's shader folder for that prefix, and dev builds find it wherever the
+engine's assets are mounted.
 
 ## Live editing
 
@@ -145,6 +151,7 @@ ph-shaderc shaders/hologram.frag.glsl -o hologram.frag.phsh
 | `-g` | Keep debug information in the SPIR-V |
 | `--print-msl` | Print the generated Metal source |
 | `--print-hlsl` | Print the generated HLSL |
+| `--include <prefix>=<folder>` | Look for includes that start with `prefix` in `folder` (repeatable) |
 
 The stage comes from the file name (`.vert.glsl` or `.frag.glsl`). The pipeline inside is glslang (GLSL to SPIR-V)
 and SPIRV-Cross (SPIR-V to MSL and HLSL), with resource slots remapped to what SDL_GPU expects on each backend.

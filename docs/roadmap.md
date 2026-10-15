@@ -65,5 +65,4 @@ would otherwise be for.
 ## Known limitations
 - Max 256 component types (`PH_ECS_MAX_COMPONENTS` raises it)
 - Archetypes are never freed. Fine for games, but worth compacting eventually
-- Game shaders can't `#include` the engine's shader files by path
 - Assets load synchronously on the main thread; there's no background loading yet

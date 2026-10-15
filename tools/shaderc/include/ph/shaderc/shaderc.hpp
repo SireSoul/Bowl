@@ -15,6 +15,9 @@ struct CompileOptions {
     ShaderStage stage = ShaderStage::Vertex;
     std::filesystem::path source_path;   // for resolving #include "..." (relative to this file's folder)
     bool debug_info = false;
+    // More places to find includes: an include starting with the prefix is looked for in the folder, e.g.
+    // {"engine/shaders/", <engine shader folder>} lets game shaders write #include "engine/shaders/common.glsl".
+    std::vector<std::pair<std::string, std::filesystem::path>> include_roots;
 };
 
 struct CompileResult {

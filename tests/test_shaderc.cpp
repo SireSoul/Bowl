@@ -115,6 +115,26 @@ void main() { b[gl_GlobalInvocationID.x] = a[gl_GlobalInvocationID.x] * 2.0; })"
     CHECK(w.log.find("set = 1") != std::string::npos);
 }
 
+TEST_CASE("shaderc: game shaders include the engine's through an include root") {
+    const char* source = R"(#version 450
+#include "engine/shaders/common.glsl"
+layout(location = 0) in vec4 v_color;
+layout(location = 0) out vec4 out_color;
+void main() { out_color = premultiply(v_color); })";
+    shaderc::CompileOptions options;
+    options.name = "game.frag";
+    options.stage = ShaderStage::Fragment;
+    options.source_path = fs::temp_directory_path() / "game.frag.glsl"; // not next to the engine's shaders
+    auto without = shaderc::compile_glsl(source, options);
+    CHECK_FALSE(without.ok);
+    options.include_roots.emplace_back("engine/shaders/", fs::path(PH_ENGINE_ASSET_SOURCE_DIR) / "shaders");
+    auto with = shaderc::compile_glsl(source, options);
+    INFO(with.log);
+    CHECK(with.ok);
+    REQUIRE(with.includes.size() == 1);
+    CHECK(with.includes[0].filename() == "common.glsl");
+}
+
 TEST_CASE("shaderc: errors are reported, not thrown") {
     shaderc::CompileOptions options;
     options.name = "broken.frag.glsl";
