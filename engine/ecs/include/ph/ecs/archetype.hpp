@@ -9,7 +9,7 @@
 namespace ph::ecs {
 
 // All entities with exactly the same set of components live in one archetype, each component type in its own tightly
-// packed array (structure of arrays). Iterating a query walks these arrays linearly — the cache-friendly best case.
+// packed array (structure of arrays), so a query walks memory front to back.
 class Archetype {
 public:
     Archetype(u32 id, std::vector<ComponentId> components);
@@ -37,7 +37,8 @@ public:
         return col.data ? col.data + static_cast<usize>(row) * col.info->size : nullptr;
     }
 
-    // --- used by World ---------------------------------------------------------------------------------------------
+    // The rest is for World.
+
     // Appends a row whose components are uninitialized; the caller constructs them.
     u32 push(Entity e);
     // Destroys the row's components and fills the hole with the last row. Returns the entity that moved into `row`

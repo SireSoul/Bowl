@@ -1,0 +1,42 @@
+name: Feature request
+description: Something a game needs that the engine doesn't do yet.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: Check the [roadmap](https://github.com/SireSoul/PLACEHOLDERENGINENAME/blob/develop/docs/roadmap.md) first; it may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to make?
+      description: The game situation, not the solution. "Characters should cast shadows that stretch away from torches" is more useful than "add shadow maps".
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you do today?
+      description: How you work around it now, if at all, and what's painful about that.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: An API sketch, a reference from another tool, or just the behavior you'd like.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - ECS and systems
+        - Rendering and shaders
+        - Assets and hot reload
+        - Text, UI and localization
+        - Sprite sheets, tilemaps, particles
+        - Audio
+        - Input
+        - Collision
+        - Saving and settings
+        - Dev tools
+        - Build, packaging and platforms
+        - Documentation
+        - Other

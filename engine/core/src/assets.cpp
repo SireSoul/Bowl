@@ -12,7 +12,7 @@ void log_asset_error(std::string_view path, std::string_view type, std::string_v
     error("asset '{}' ({}): {}", path, type, message);
 }
 
-// --- AssetLoadContext -----------------------------------------------------------------------------------------------
+// AssetLoadContext
 
 std::optional<std::vector<u8>> AssetLoadContext::read(std::string_view virtual_path) {
     auto file = assets_.resolve(virtual_path);
@@ -29,7 +29,7 @@ std::optional<std::string> AssetLoadContext::read_text(std::string_view virtual_
 
 bool AssetLoadContext::exists(std::string_view virtual_path) const { return assets_.resolve(virtual_path).has_value(); }
 
-// --- AssetManager ---------------------------------------------------------------------------------------------------
+// AssetManager
 
 AssetManager::AssetManager() = default;
 AssetManager::~AssetManager() = default;
@@ -64,14 +64,17 @@ void AssetManager::watch_dependencies(Entry& entry, const std::vector<fs::path>&
 }
 
 void AssetManager::notify(std::string_view path, bool ok) {
-    for (auto& cb : on_reload_) cb(path, ok);
+    for (auto& cb : on_reload_) cb.fn(path, ok);
 }
 
 void AssetManager::poll() {
     if (!hot_reload_) return;
     watcher_.poll();
-    for (auto& [key, entry] : entries_) {
-        if (!entry->dirty || !entry->reload) continue;
+    // Snapshot first: loaders may load other assets (a sprite sheet loads its image), which inserts into entries_.
+    std::vector<Entry*> dirty;
+    for (auto& [key, entry] : entries_)
+        if (entry->dirty && entry->reload) dirty.push_back(entry.get());
+    for (Entry* entry : dirty) {
         entry->dirty = false;
         bool ok = entry->reload(*entry);
         if (ok) info("assets: reloaded '{}'", entry->path);
@@ -81,15 +84,39 @@ void AssetManager::poll() {
 }
 
 bool AssetManager::reload(std::string_view path) {
-    bool any = false, ok = true;
-    for (auto& [key, entry] : entries_) {
-        if (entry->path != path || !entry->reload) continue;
-        any = true;
+    std::vector<Entry*> matches;
+    for (auto& [key, entry] : entries_)
+        if (entry->path == path && entry->reload) matches.push_back(entry.get());
+    bool ok = true;
+    for (Entry* entry : matches) {
         bool r = entry->reload(*entry);
         notify(entry->path, r);
         ok = ok && r;
     }
-    return any && ok;
+    return !matches.empty() && ok;
+}
+
+void AssetManager::rollback(u64 mark) {
+    for (auto it = entries_.begin(); it != entries_.end();) {
+        if (it->second->serial > mark) {
+            for (auto id : it->second->watches) watcher_.unwatch(id);
+            it = entries_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = loaders_.begin(); it != loaders_.end();) {
+        std::shared_ptr<LoaderSlot> slot = it->second;
+        while (slot && slot->serial > mark) slot = slot->previous; // restore what was registered before the mark
+        if (slot) {
+            it->second = slot;
+            ++it;
+        } else {
+            it = loaders_.erase(it);
+        }
+    }
+    std::erase_if(on_reload_, [mark](const Callback& c) { return c.serial > mark; });
+    serial_ = mark;
 }
 
 std::vector<AssetManager::Info> AssetManager::list() const {

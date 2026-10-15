@@ -3,6 +3,7 @@
 #include "ph/core/types.hpp"
 
 #include <string_view>
+#include <type_traits>
 
 namespace ph {
 
@@ -38,14 +39,9 @@ constexpr u64 fnv1a(std::string_view s) {
 // Stable 64-bit id derived from the type's name: identical across runs and builds of the same code.
 template <class T> constexpr u64 type_hash() { return fnv1a(type_name<T>()); }
 
-// Small dense per-process id, assigned on first use. Good for array indices; not stable across runs.
-using TypeId = u32;
-namespace detail {
-TypeId next_type_id();
-}
-template <class T> TypeId type_id() {
-    static const TypeId id = detail::next_type_id();
-    return id;
-}
+// Identifies a type in maps (resources, asset loaders). Derived from the type's name, so it's the same in every
+// module of the process (a hot-reloaded game library and its host agree on it) and across runs.
+using TypeId = u64;
+template <class T> constexpr TypeId type_id() { return type_hash<std::remove_cvref_t<T>>(); }
 
 } // namespace ph

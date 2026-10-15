@@ -23,10 +23,13 @@ struct AppRunner {
     f64 last_asset_poll = 0;
     u64 frame_limit = 0;        // --frames N: quit after N frames (automated runs)
     std::string screenshot;     // --screenshot file.png: capture the last frame (or frame 60 without --frames)
+    bool start_with_overlay = false; // --overlay: open the dev overlay at startup
+    i64 inspect_index = -1;          // --inspect N
 
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
         e.config_ = game->configure();
+        for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);
         for (int i = 1; i < argc; ++i) {
             std::string_view arg = argv[i];
             if (arg == "--frames" && i + 1 < argc) {
@@ -34,10 +37,18 @@ struct AppRunner {
                 std::from_chars(n.data(), n.data() + n.size(), frame_limit);
             } else if (arg == "--screenshot" && i + 1 < argc) {
                 screenshot = argv[++i];
+            } else if (arg == "--overlay") {
+                start_with_overlay = true;
+            } else if (arg == "--inspect" && i + 1 < argc) { // open the overlay with entity N in the inspector
+                start_with_overlay = true;
+                std::string_view n = argv[++i];
+                std::from_chars(n.data(), n.data() + n.size(), inspect_index);
             } else if (arg == "--no-vsync") {
                 e.config_.vsync = false;
             } else if (arg == "--driver" && i + 1 < argc) {
                 e.config_.gpu_driver = argv[++i];
+            } else if (arg == "--lang" && i + 1 < argc) {
+                e.config_.language = argv[++i];
             }
         }
         if (e.config_.game_asset_dir.empty() && game_asset_dir) e.config_.game_asset_dir = game_asset_dir;
@@ -51,6 +62,16 @@ struct AppRunner {
         }
         if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) warn("audio: SDL audio unavailable: {}", SDL_GetError());
 
+        const std::string& app_name = e.config_.application.empty() ? e.config_.window.title : e.config_.application;
+        if (char* pref = SDL_GetPrefPath(e.config_.organization.c_str(), app_name.c_str())) {
+            e.user_data_ = pref;
+            SDL_free(pref);
+        } else {
+            e.user_data_ = std::filesystem::current_path();
+            warn("no per-user data folder ({}); using {}", SDL_GetError(), e.user_data_.string());
+        }
+        e.settings_.load(e.user_data_ / "settings.json");
+
         e.jobs_ = std::make_unique<JobSystem>(e.config_.worker_threads);
         if (!e.window_.create(e.config_.window)) return false;
         gfx::GpuDeviceDesc gpu_desc;
@@ -62,6 +83,11 @@ struct AppRunner {
         mount_assets(e);
         gfx::register_asset_loaders(e.assets_, e.gpu_, e.config_.pixel_art ? gfx::Filter::Nearest : gfx::Filter::Linear);
         audio::register_asset_loaders(e.assets_);
+        register_string_table_loader(e.assets_);
+        if (e.assets_.resolve("lang/" + e.config_.fallback_language + ".json")) {
+            e.i18n_.set_fallback(e.config_.fallback_language);
+            e.i18n_.set_language(e.config_.language);
+        }
         e.assets_.set_hot_reload(PH_DEV_TOOLS != 0);
         if (!e.renderer_.init(e.gpu_, e.assets_)) return false;
 
@@ -71,7 +97,15 @@ struct AppRunner {
         e.world_.set_resource<Engine*>(&e);
 
         dev = std::make_unique<DevTools>(e);
+        dev->set_visible(start_with_overlay);
         game->init(e);
+        // Player rebinds win over the defaults the game just set.
+        if (const json::Value* saved = e.settings_.find("input")) e.input_.load_bindings(*saved);
+        game->start(e);
+        if (inspect_index >= 0)
+            for (const auto& a : e.world_.archetypes())
+                for (ecs::Entity ent : a->entities())
+                    if (ent.index == static_cast<u32>(inspect_index)) dev->select(ent);
         last_ticks = SDL_GetTicksNS();
         info("ready: {} worker threads, {} backend", e.jobs_->worker_count(), e.gpu_.driver());
         return true;
@@ -106,7 +140,7 @@ struct AppRunner {
         e.camera_.viewport = e.window_.size();
         dev->begin_frame();
 
-        // --- fixed-rate simulation ---------------------------------------------------------------------------------
+        // Fixed-rate simulation
         f64 step = 1.0 / e.config_.fixed_hz;
         f64 scaled = real_dt * e.time_scale_;
         if (!e.paused_) e.accumulator_ += scaled;
@@ -118,6 +152,7 @@ struct AppRunner {
             e.input_.begin_fixed_tick();
             e.fixed_schedule_.run(e.world_, *e.jobs_, static_cast<f32>(step));
             game->fixed_update(e, static_cast<f32>(step));
+            e.scenes_.fixed_update(e, static_cast<f32>(step));
             e.world_.flush();
             e.input_.end_fixed_tick();
             e.accumulator_ -= step;
@@ -129,17 +164,18 @@ struct AppRunner {
         e.step_ = false;
         e.alpha_ = static_cast<f32>(e.accumulator_ / step);
 
-        // --- per-frame update --------------------------------------------------------------------------------------
+        // Per-frame update
         e.input_.set_context(Input::Context::Frame);
         e.delta_ = e.paused_ ? 0.0f : static_cast<f32>(scaled);
         {
             PH_PROFILE_SCOPE("frame update");
             e.frame_schedule_.run(e.world_, *e.jobs_, e.delta_);
             game->update(e, e.delta_);
+            e.scenes_.update(e, e.delta_);
             e.world_.flush();
         }
 
-        // --- render ------------------------------------------------------------------------------------------------
+        // Render
         if (!screenshot.empty() && e.frame_ + 1 == (frame_limit ? frame_limit : 60)) {
             e.renderer_.capture_next_frame([path = screenshot](u32 w, u32 h, std::span<const u8> rgba) {
                 if (gfx::write_png(path, w, h, rgba)) info("screenshot: {} ({}x{})", path, w, h);
@@ -149,10 +185,12 @@ struct AppRunner {
         if (e.renderer_.begin_frame()) {
             PH_PROFILE_SCOPE("game render");
             game->render(e);
+            e.scenes_.render(e);
         }
         dev->end_frame(*game);
         e.renderer_.end_frame();
 
+        e.scenes_.apply_pending(e);
         e.input_.begin_frame();
         profiler::end_frame();
         ++e.frame_;
@@ -170,7 +208,9 @@ struct AppRunner {
     }
 
     void shutdown() {
+        if (engine) engine->scenes_.shutdown(*engine);
         if (engine && game) game->shutdown(*engine);
+        if (engine) engine->settings_.save();
         if (engine) SDL_WaitForGPUIdle(engine->gpu_.handle());
         dev.reset();
         game.reset();

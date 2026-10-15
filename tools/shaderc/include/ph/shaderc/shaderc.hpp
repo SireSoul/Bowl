@@ -24,7 +24,7 @@ struct CompileResult {
     std::vector<std::filesystem::path> includes;  // every file #included, for hot reload and depfiles
 };
 
-// Compiles Vulkan-style GLSL (#version 450) into a bundle with SPIR-V and Metal Shading Language.
+// Compiles Vulkan-style GLSL (#version 450) into a bundle with SPIR-V, Metal Shading Language and HLSL.
 // Resources must follow SDL_GPU's binding model:
 //   vertex:   set 0 = sampled textures, storage textures, storage buffers   set 1 = uniform buffers
 //   fragment: set 2 = sampled textures, storage textures, storage buffers   set 3 = uniform buffers

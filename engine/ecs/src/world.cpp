@@ -5,7 +5,7 @@
 
 namespace ph::ecs {
 
-// --- World ----------------------------------------------------------------------------------------------------------
+// World
 
 World::World() : deferred_(*this) { empty_ = &archetype_for(ComponentMask{}); }
 
@@ -90,6 +90,28 @@ void* World::component_ptr(Entity e, ComponentId c) const {
     return r.archetype->at(c, r.row);
 }
 
+bool World::add_component(Entity e, ComponentId c, FunctionRef<void(void*)> init) {
+    check_unlocked();
+    if (!alive(e)) return false;
+    const ComponentInfo& info = component_info(c);
+    if (!info.construct_default) return false;
+    Record& r = records_[e.index];
+    bool existed = r.archetype->has(c);
+    if (existed) {
+        void* p = r.archetype->at(c, r.row);
+        if (p && info.destroy) info.destroy(p);
+        if (p) info.construct_default(p);
+        init(p);
+        return true;
+    }
+    u32 row = move_entity(e, archetype_with(*r.archetype, c));
+    void* p = records_[e.index].archetype->at(c, row);
+    if (p) info.construct_default(p);
+    init(p);
+    run_add_hooks(c, e);
+    return true;
+}
+
 Archetype& World::archetype_for(const ComponentMask& mask) {
     if (auto it = by_mask_.find(mask); it != by_mask_.end()) return *it->second;
     std::vector<ComponentId> comps;
@@ -151,13 +173,27 @@ void World::run_remove_hooks(ComponentId c, Entity e) {
     for (auto& hook : h->on_remove) hook(*this, e);
 }
 
+void World::reset() {
+    check_unlocked();
+    deferred_.clear();
+    hooks_.clear();
+    resources_.clear();
+    archetypes_.clear(); // destroys every component
+    by_mask_.clear();
+    records_.clear();
+    free_.clear();
+    free_cursor_.store(0, std::memory_order_relaxed);
+    entity_count_ = 0;
+    empty_ = &archetype_for(ComponentMask{});
+}
+
 void World::flush() {
     // Applying can record more commands (hooks, run() callbacks); keep going until quiet.
     for (int pass = 0; pass < 64 && !deferred_.empty(); ++pass) deferred_.apply();
     PH_ASSERT(deferred_.empty(), "deferred commands keep scheduling more commands");
 }
 
-// --- CommandBuffer --------------------------------------------------------------------------------------------------
+// CommandBuffer
 
 CommandBuffer::CommandBuffer(CommandBuffer&& o) noexcept
     : world_(o.world_), commands_(std::move(o.commands_)), blocks_(std::move(o.blocks_)), block_used_(o.block_used_) {

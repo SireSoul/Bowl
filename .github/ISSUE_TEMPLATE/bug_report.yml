@@ -1,0 +1,57 @@
+name: Bug report
+description: Something doesn't work as documented, crashes, or looks wrong.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: Steps, or a small piece of game code that shows the problem. A sample plus command-line flags is ideal.
+      placeholder: |
+        1. Run `isometric --night`
+        2. Walk to the top-left corner
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and GPU backend
+      description: Shown at startup ("ready: ... backend") and in the F1 overlay.
+      placeholder: macOS 15, Metal / Windows 11, direct3d12 / Ubuntu 24.04, vulkan
+    validations:
+      required: true
+  - type: dropdown
+    id: preset
+    attributes:
+      label: Build
+      options:
+        - dev
+        - debug
+        - release
+        - other (say below)
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Engine commit
+      description: Output of `git rev-parse --short HEAD`.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: The console output, from startup to the problem.
+      render: text
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots (`--screenshot out.png`), compiler, what you've already tried.

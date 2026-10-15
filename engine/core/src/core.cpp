@@ -11,22 +11,11 @@
 
 namespace ph {
 
-// --- time -----------------------------------------------------------------------------------------------------------
-
 namespace {
 const auto process_start = std::chrono::steady_clock::now();
 }
 
 f64 now_seconds() { return std::chrono::duration<f64>(std::chrono::steady_clock::now() - process_start).count(); }
-
-// --- type ids -------------------------------------------------------------------------------------------------------
-
-TypeId detail::next_type_id() {
-    static std::atomic<TypeId> next{0};
-    return next.fetch_add(1, std::memory_order_relaxed);
-}
-
-// --- logging --------------------------------------------------------------------------------------------------------
 
 namespace {
 
@@ -94,10 +83,8 @@ std::vector<LogLine> logging::recent(usize max_lines) {
     return {s.recent.end() - static_cast<isize>(n), s.recent.end()};
 }
 
-// --- asserts --------------------------------------------------------------------------------------------------------
-
 void detail::assert_fail(const char* condition, const char* file, int line, const char* message) {
-    logging::write(LogLevel::Error, std::format("assertion failed: {}{}{}\n    at {}:{}", condition, message ? " — " : "",
+    logging::write(LogLevel::Error, std::format("assertion failed: {}{}{}\n    at {}:{}", condition, message ? ": " : "",
                                                 message ? message : "", file, line));
 #if defined(_MSC_VER)
     __debugbreak();

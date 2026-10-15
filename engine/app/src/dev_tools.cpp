@@ -4,6 +4,7 @@
 
 #if PH_DEV_TOOLS
 
+#include "ph/core/file.hpp"
 #include "ph/core/profiler.hpp"
 
 #include <imgui.h>
@@ -29,6 +30,8 @@ DevTools::DevTools(Engine& engine) : engine_(engine) {
     style.FontScaleDpi = scale;
     style.WindowRounding = 6;
     style.FrameRounding = 4;
+    if (auto font = engine.assets().resolve("engine/fonts/Roboto-Medium.ttf"))
+        io.Fonts->AddFontFromFileTTF(font->string().c_str(), 15.0f);
 
     ImGui_ImplSDL3_InitForSDLGPU(engine.window().handle());
     ImGui_ImplSDLGPU3_InitInfo init{};
@@ -76,7 +79,9 @@ void DevTools::begin_frame() {
 void DevTools::end_frame(Game& game) {
     if (!frame_open_) return;
     draw_main();
+    draw_inspector();
     game.dev_ui(engine_);
+    engine_.scenes().dev_ui(engine_);
     ImGui::Render();
 }
 
@@ -115,6 +120,7 @@ void DevTools::draw_main() {
     ImGui::Text("tick %llu  t=%.2fs  alpha %.2f", static_cast<unsigned long long>(engine_.tick()), engine_.time(), engine_.alpha());
 
     if (ImGui::CollapsingHeader("Profiler", ImGuiTreeNodeFlags_DefaultOpen)) draw_profiler();
+    if (ImGui::CollapsingHeader("Post & lighting")) draw_post();
     if (ImGui::CollapsingHeader("Systems")) {
         draw_systems("fixed", engine_.fixed_schedule());
         draw_systems("frame", engine_.frame_schedule());
@@ -123,6 +129,31 @@ void DevTools::draw_main() {
     if (ImGui::CollapsingHeader("Assets")) draw_assets();
     if (ImGui::CollapsingHeader("Log")) draw_log();
     ImGui::End();
+}
+
+void DevTools::draw_post() {
+    gfx::PostSettings& p = engine_.renderer().post();
+    ImGui::SliderFloat("exposure", &p.exposure, 0.1f, 4.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("contrast", &p.contrast, 0.5f, 1.5f);
+    ImGui::SliderFloat("saturation", &p.saturation, 0.0f, 2.0f);
+    ImGui::ColorEdit3("tint", &p.tint.r);
+    ImGui::Checkbox("tonemap (ACES)", &p.tonemap);
+    ImGui::SeparatorText("bloom");
+    ImGui::Checkbox("bloom", &p.bloom);
+    ImGui::BeginDisabled(!p.bloom);
+    ImGui::SliderFloat("threshold", &p.bloom_threshold, 0.0f, 3.0f);
+    ImGui::SliderFloat("knee", &p.bloom_knee, 0.0f, 1.0f);
+    ImGui::SliderFloat("intensity", &p.bloom_intensity, 0.0f, 3.0f);
+    ImGui::SliderFloat("radius", &p.bloom_radius, 0.2f, 3.0f);
+    ImGui::EndDisabled();
+    ImGui::SeparatorText("vignette");
+    ImGui::SliderFloat("strength", &p.vignette, 0.0f, 1.0f);
+    ImGui::SliderFloat("radius##vignette", &p.vignette_radius, 0.0f, 1.0f);
+    ImGui::SliderFloat("softness", &p.vignette_softness, 0.01f, 1.0f);
+    ImGui::SeparatorText("lighting");
+    ImGui::Checkbox("2D lighting", &p.lighting);
+    ImGui::ColorEdit3("ambient", &p.ambient.r, ImGuiColorEditFlags_Float);
+    ImGui::Text("%u pipelines cached", engine_.renderer().stats().pipelines);
 }
 
 void DevTools::draw_profiler() {
@@ -166,8 +197,81 @@ void DevTools::draw_systems(const char* label, ecs::Schedule& schedule) {
     ImGui::PopID();
 }
 
+namespace {
+
+// Edits reflected fields with ImGui widgets.
+class ImGuiFieldEditor final : public reflect::FieldVisitor {
+public:
+    explicit ImGuiFieldEditor(ecs::Entity* select) : select_(select) {}
+
+    void boolean(std::string_view name, bool& v) override {
+        ImGui::Checkbox(label(name), &v);
+    }
+    void integer(std::string_view name, i64& v, i64 min, i64 max) override {
+        if (ImGui::DragScalar(label(name), ImGuiDataType_S64, &v, 0.2f, &min, &max)) v = std::clamp(v, min, max);
+    }
+    void real(std::string_view name, f64& v) override {
+        ImGui::DragScalar(label(name), ImGuiDataType_Double, &v, 0.05f);
+    }
+    void text(std::string_view name, std::string& v) override {
+        char buffer[512];
+        std::snprintf(buffer, sizeof buffer, "%s", v.c_str());
+        if (ImGui::InputText(label(name), buffer, sizeof buffer)) v = buffer;
+    }
+    void vector(std::string_view name, f32* values, int count) override {
+        ImGui::DragScalarN(label(name), ImGuiDataType_Float, values, count, 0.25f);
+    }
+    void color(std::string_view name, Color& c) override {
+        ImGui::ColorEdit4(label(name), &c.r, ImGuiColorEditFlags_Float);
+    }
+    void entity(std::string_view name, u64 bits) override {
+        ecs::Entity e = ecs::Entity::from_bits(bits);
+        if (!e) {
+            ImGui::TextDisabled("%.*s: none", static_cast<int>(name.size()), name.data());
+            return;
+        }
+        std::string text = std::format("{}: entity {}:{}##{}", name, e.index, e.generation, name);
+        if (ImGui::SmallButton(text.c_str()) && select_) *select_ = e; // jump to it
+    }
+    bool begin_group(std::string_view name) override {
+        return ImGui::TreeNodeEx(label(name), ImGuiTreeNodeFlags_DefaultOpen);
+    }
+    void end_group() override { ImGui::TreePop(); }
+    void unsupported(std::string_view name, std::string_view type) override {
+        ImGui::TextDisabled("%.*s: %.*s", static_cast<int>(name.size()), name.data(), static_cast<int>(type.size()),
+                            type.data());
+    }
+
+private:
+    const char* label(std::string_view name) {
+        label_.assign(name);
+        return label_.c_str();
+    }
+    std::string label_;
+    ecs::Entity* select_;
+};
+
+} // namespace
+
 void DevTools::draw_entities() {
     auto& world = engine_.world();
+    if (ImGui::Button("Save world")) {
+        serial::Context ctx{&engine_.assets()};
+        std::string text = json::stringify(ecs::save_world(world, ctx));
+        bool ok = write_file_bytes("devtools_world.json", text.data(), text.size());
+        info("dev tools: {} devtools_world.json ({} warnings)", ok ? "saved" : "could not write", ctx.warnings.size());
+        for (const auto& w : ctx.warnings) warn("  {}", w);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Load (adds to world)")) {
+        if (auto text = read_file_text("devtools_world.json")) {
+            serial::Context ctx{&engine_.assets()};
+            auto parsed = json::parse(*text);
+            usize n = parsed ? ecs::load_entities(world, parsed.value, ctx).size() : 0;
+            info("dev tools: loaded {} entities ({} warnings)", n, ctx.warnings.size());
+            for (const auto& w : ctx.warnings) warn("  {}", w);
+        }
+    }
     for (const auto& a : world.archetypes()) {
         if (a->empty()) continue;
         std::string name;
@@ -181,12 +285,66 @@ void DevTools::draw_entities() {
             usize shown = std::min<usize>(a->size(), 64);
             for (usize i = 0; i < shown; ++i) {
                 ecs::Entity e = a->entities()[i];
-                ImGui::BulletText("entity %u (gen %u)", e.index, e.generation);
+                std::string item = std::format("entity {} (gen {})", e.index, e.generation);
+                if (ImGui::Selectable(item.c_str(), selected_ == e)) selected_ = e;
             }
             if (a->size() > shown) ImGui::TextDisabled("... %zu more", a->size() - shown);
             ImGui::TreePop();
         }
     }
+}
+
+void DevTools::draw_inspector() {
+    auto& world = engine_.world();
+    if (!selected_ || !world.alive(selected_)) {
+        selected_ = {};
+        return;
+    }
+    ImGui::SetNextWindowPos({450, 200}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize({380, 420}, ImGuiCond_FirstUseEver);
+    bool open = true;
+    std::string title = std::format("Entity {}:{}###inspector", selected_.index, selected_.generation);
+    if (!ImGui::Begin(title.c_str(), &open)) {
+        ImGui::End();
+        return;
+    }
+    ecs::Entity e = selected_;
+    if (ImGui::Button("Duplicate")) {
+        serial::Context ctx{&engine_.assets()};
+        auto copy = ecs::load_entities(world, ecs::save_entities(world, std::span(&e, 1), ctx), ctx);
+        if (!copy.empty()) selected_ = copy[0];
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Copy JSON")) {
+        serial::Context ctx{&engine_.assets()};
+        ImGui::SetClipboardText(json::stringify(ecs::save_entities(world, std::span(&e, 1), ctx)).c_str());
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Destroy")) {
+        world.destroy(e);
+        selected_ = {};
+    }
+    if (world.alive(e)) {
+        std::vector<ecs::ComponentId> comps(world.components_of(e).begin(), world.components_of(e).end());
+        for (ecs::ComponentId c : comps) {
+            const ecs::ComponentInfo& info = ecs::component_info(c);
+            std::string header(info.name);
+            if (!ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) continue;
+            ImGui::PushID(c);
+            if (info.visit) {
+                ImGuiFieldEditor editor(&selected_);
+                info.visit(world.component_ptr(e, c), editor);
+            } else if (info.size == 0) {
+                ImGui::TextDisabled("tag");
+            } else {
+                ImGui::TextDisabled("not reflected: add PH_REFLECT(%.*s, fields...) to edit it here",
+                                    static_cast<int>(info.name.size()), info.name.data());
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::End();
+    if (!open) selected_ = {};
 }
 
 void DevTools::draw_assets() {

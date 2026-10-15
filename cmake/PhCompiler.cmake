@@ -1,7 +1,9 @@
 # Compiler settings shared by every engine, tool, test and game target.
 
-# ph_configure_target(<target>) — warnings, defines and platform flags for code we own.
+# ph_configure_target(<target>): warnings, defines and platform flags for code we own.
 function(ph_configure_target target)
+    # PUBLIC, so a game that adds the engine with add_subdirectory compiles engine headers as C++20 too.
+    target_compile_features(${target} PUBLIC cxx_std_20)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /utf-8 /MP)
         target_compile_definitions(${target} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)
@@ -11,6 +13,10 @@ function(ph_configure_target target)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wshadow -Wnon-virtual-dtor
                                                  -Wno-missing-field-initializers)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            # GCC's -Wshadow also flags lambda locals that shadow the enclosing function's; match it.
+            target_compile_options(${target} PRIVATE -Wshadow-uncaptured-local)
+        endif()
         if(PH_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE -Werror)
         endif()

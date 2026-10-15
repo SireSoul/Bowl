@@ -25,8 +25,8 @@ struct SystemContext {
 //     schedule.add("spawner", [](SystemContext& ctx) { ... });               // exclusive: runs alone
 //     schedule.add("ai", fn).reads<Position>().writes<Brain>();              // declared access: may run in parallel
 //
-// Structural changes go through ctx.commands and are applied at barrier() points and at the end of run(), in system
-// order — so results never depend on thread timing.
+// Structural changes go through ctx.commands and are applied in system order at barrier() points and at the end of
+// run(), so thread timing never changes the result.
 class Schedule : NonCopyable {
 public:
     struct System {
@@ -72,6 +72,12 @@ public:
 
     // Applies every command recorded so far before later systems run.
     void barrier();
+    // Removes every system.
+    void clear() {
+        systems_.clear();
+        batches_.clear();
+        dirty_ = true;
+    }
 
     void run(World& world, JobSystem& jobs, f32 dt);
 
@@ -102,12 +108,12 @@ template <class F, class... Ts> constexpr bool takes_context = std::is_invocable
 
 template <class... Ts, class F> Schedule::Builder Schedule::each(std::string name, F f, QueryFilter filter) {
     auto query = std::make_shared<std::unique_ptr<Query<Ts...>>>();
-    Builder b = add(std::move(name), [query, filter, f = std::move(f)](SystemContext& ctx) mutable {
+    Builder b = add(std::move(name), [query, filter, fn = std::move(f)](SystemContext& ctx) mutable {
         if (!*query) *query = std::make_unique<Query<Ts...>>(ctx.world, filter);
         if constexpr (detail::takes_context<F, Ts...>) {
-            (*query)->each([&](Entity e, Ts&... cs) { f(ctx, e, cs...); });
+            (*query)->each([&](Entity e, Ts&... cs) { fn(ctx, e, cs...); });
         } else {
-            (*query)->each(f);
+            (*query)->each(fn);
         }
     });
     b.template reads<>();
@@ -124,7 +130,7 @@ Schedule::Builder Schedule::par_each(std::string name, F f, QueryFilter filter, 
         std::vector<CommandBuffer> chunk_commands;
     };
     auto state = std::make_shared<State>();
-    Builder b = add(std::move(name), [state, filter, min_chunk, f = std::move(f)](SystemContext& ctx) mutable {
+    Builder b = add(std::move(name), [state, filter, min_chunk, fn = std::move(f)](SystemContext& ctx) mutable {
         if (!state->query) state->query = std::make_unique<Query<Ts...>>(ctx.world, filter);
         if constexpr (detail::takes_context<F, Ts...>) {
             usize count = state->query->count();
@@ -132,11 +138,11 @@ Schedule::Builder Schedule::par_each(std::string name, F f, QueryFilter filter, 
             while (state->chunk_commands.size() < chunks) state->chunk_commands.emplace_back(ctx.world);
             state->query->par_each_chunked(ctx.jobs, min_chunk, [&](usize chunk, Entity e, Ts&... cs) {
                 SystemContext local{ctx.world, state->chunk_commands[chunk], ctx.jobs, ctx.dt};
-                f(local, e, cs...);
+                fn(local, e, cs...);
             });
             for (usize i = 0; i < chunks; ++i) ctx.commands.append(std::move(state->chunk_commands[i]));
         } else {
-            state->query->par_each(ctx.jobs, f, min_chunk);
+            state->query->par_each(ctx.jobs, fn, min_chunk);
         }
     });
     b.template reads<>();

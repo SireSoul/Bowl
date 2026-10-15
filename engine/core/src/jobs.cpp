@@ -1,7 +1,5 @@
 #include "ph/core/jobs.hpp"
 
-#include "ph/core/assert.hpp"
-
 #include <algorithm>
 
 namespace ph {

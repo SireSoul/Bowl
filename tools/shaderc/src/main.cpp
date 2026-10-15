@@ -1,6 +1,6 @@
-// ph-shaderc: compiles a GLSL shader into a .phsh bundle (SPIR-V + MSL).
+// ph-shaderc: compiles a GLSL shader into a .phsh bundle (SPIR-V + MSL + HLSL).
 //
-//     ph-shaderc sprite.frag.glsl -o sprite.frag.phsh [--depfile sprite.frag.phsh.d] [-g] [--print-msl]
+//     ph-shaderc sprite.frag.glsl -o sprite.frag.phsh [--depfile sprite.frag.phsh.d] [-g] [--print-msl|--print-hlsl]
 
 #include "ph/core/file.hpp"
 #include "ph/shaderc/shaderc.hpp"
@@ -23,19 +23,21 @@ static std::string depfile_escape(const fs::path& p) {
 
 int main(int argc, char** argv) {
     fs::path input, output, depfile;
-    bool debug = false, print_msl = false;
+    bool debug = false, print_msl = false, print_hlsl = false;
     for (int i = 1; i < argc; ++i) {
         std::string_view arg = argv[i];
         if (arg == "-o" && i + 1 < argc) output = argv[++i];
         else if (arg == "--depfile" && i + 1 < argc) depfile = argv[++i];
         else if (arg == "-g") debug = true;
         else if (arg == "--print-msl") print_msl = true;
+        else if (arg == "--print-hlsl") print_hlsl = true;
         else if (arg == "-h" || arg == "--help") {
-            std::puts("usage: ph-shaderc <input.(vert|frag).glsl> -o <output.phsh> [--depfile <file>] [-g] [--print-msl]");
+            std::puts("usage: ph-shaderc <input.(vert|frag).glsl> -o <output.phsh> [--depfile <file>] [-g] "
+                      "[--print-msl] [--print-hlsl]");
             return 0;
         } else input = arg;
     }
-    if (input.empty() || (output.empty() && !print_msl)) {
+    if (input.empty() || (output.empty() && !print_msl && !print_hlsl)) {
         std::fputs("ph-shaderc: need an input file and -o <output>\n", stderr);
         return 2;
     }
@@ -61,9 +63,9 @@ int main(int argc, char** argv) {
     if (!result.log.empty()) std::fputs(result.log.c_str(), result.ok ? stdout : stderr);
     if (!result.ok) return 1;
 
-    if (print_msl)
-        if (auto* msl = result.bundle.find(ph::ShaderBlobFormat::Msl))
-            std::fwrite(msl->code.data(), 1, msl->code.size(), stdout);
+    for (auto [wanted, format] : {std::pair{print_msl, ph::ShaderBlobFormat::Msl}, std::pair{print_hlsl, ph::ShaderBlobFormat::Hlsl}})
+        if (wanted)
+            if (auto* blob = result.bundle.find(format)) std::fwrite(blob->code.data(), 1, blob->code.size(), stdout);
 
     if (!output.empty()) {
         auto bytes = result.bundle.serialize();

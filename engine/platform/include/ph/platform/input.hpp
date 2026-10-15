@@ -1,10 +1,12 @@
 #pragma once
 
+#include "ph/core/json.hpp"
 #include "ph/core/math.hpp"
 #include "ph/core/types.hpp"
 
 #include <array>
 #include <bitset>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -62,7 +64,7 @@ struct InputBinding {
 //     Vec2 move = input.vector("left", "right", "up", "down");
 //
 // "pressed"/"released" are edges. Inside fixed-timestep updates they mean "since the previous fixed tick", in
-// per-frame code "since the previous frame" — so a tap is never lost or doubled, whatever the frame rate.
+// per-frame code "since the previous frame". A tap is never lost or seen twice, whatever the frame rate.
 class Input : NonCopyable {
 public:
     static constexpr int max_gamepads = 4;
@@ -71,7 +73,8 @@ public:
     Input();
     ~Input();
 
-    // --- raw devices ---------------------------------------------------------------------------------------------
+    // Raw devices
+
     bool down(Key k) const { return down_.test(key_code(k)); }
     bool pressed(Key k) const { return pressed_[ctx()].test(key_code(k)); }
     bool released(Key k) const { return released_[ctx()].test(key_code(k)); }
@@ -92,10 +95,24 @@ public:
     // Text typed this frame (UTF-8), for name entry and chat.
     std::string_view text() const { return text_; }
 
-    // --- actions -------------------------------------------------------------------------------------------------
+    // Actions
+
+    // Adds bindings to an action (creating it if needed); an action can have any number.
     void bind(std::string_view action, InputBinding binding);
     void bind(std::string_view action, std::initializer_list<InputBinding> bindings);
     void unbind(std::string_view action);
+    void unbind_all() { actions_.clear(); }
+    bool has_action(std::string_view action) const { return find(action) != nullptr; }
+    const std::vector<InputBinding>* bindings(std::string_view action) const;
+
+    // Rebinding: the first key/button/stick pushed this frame, e.g. for "press a key for Jump" screens.
+    std::optional<InputBinding> last_pressed() const { return last_pressed_; }
+    // Readable name for prompts and settings screens: "Space", "Left mouse", "Gamepad a", "Gamepad leftx+".
+    static std::string describe(const InputBinding& binding);
+    // Save/restore bindings (readable JSON: {"jump": [{"key": "Space"}, {"button": "a"}]}). Loading replaces the
+    // bindings of the actions it mentions and leaves others alone.
+    json::Value save_bindings() const;
+    void load_bindings(const json::Value& json);
     bool down(std::string_view action) const;
     bool pressed(std::string_view action) const;
     bool released(std::string_view action) const;
@@ -105,7 +122,8 @@ public:
     Vec2 vector(std::string_view neg_x, std::string_view pos_x, std::string_view neg_y, std::string_view pos_y,
                 f32 dead_zone = 0.15f) const;
 
-    // --- driven by the App: begin_frame, events..., end_events, then per fixed tick begin/end_fixed_tick -----------
+    // Called by the App each frame: begin_frame, handle_event for each event, end_events, then
+    // begin_fixed_tick/end_fixed_tick around every fixed tick.
     void begin_frame();
     void end_events();
     void begin_fixed_tick();
@@ -150,6 +168,7 @@ private:
     std::unordered_map<u64, Action> actions_;
     Context context_ = Context::Frame;
     bool block_keyboard_ = false, block_mouse_ = false;
+    std::optional<InputBinding> last_pressed_;
 };
 
 } // namespace ph

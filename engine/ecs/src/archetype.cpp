@@ -4,15 +4,17 @@
 #include <atomic>
 #include <cstring>
 #include <mutex>
+#include <string>
 
 namespace ph::ecs {
 
-// --- component registry ---------------------------------------------------------------------------------------------
+// Component registry
 
 namespace {
 
 struct Registry {
     std::array<ComponentInfo, max_components> infos;
+    std::array<std::string, max_components> names; // owned: a registering module may be unloaded later
     std::atomic<usize> count{0};
     std::mutex mutex;
 };
@@ -36,11 +38,24 @@ void relocate(const ComponentInfo& info, void* dst, void* src) {
 ComponentId detail::register_component(const ComponentInfo& info) {
     auto& r = registry();
     std::lock_guard lock(r.mutex);
-    usize id = r.count.load(std::memory_order_relaxed);
-    PH_ASSERT(id < max_components, "too many component types: raise PH_ECS_MAX_COMPONENTS");
-    r.infos[id] = info;
-    r.count.store(id + 1, std::memory_order_release);
-    return static_cast<ComponentId>(id);
+    usize count = r.count.load(std::memory_order_relaxed);
+    // One id per type name, whichever module asks: the host and a hot-reloaded game library share ids. The first
+    // registration's code is kept; a dormant one (its library was unloaded) is refreshed by the next registration.
+    for (usize i = 0; i < count; ++i)
+        if (r.names[i] == info.name) {
+            if (r.infos[i].dormant) {
+                r.infos[i] = info;
+                r.infos[i].name = r.names[i];
+                r.infos[i].dormant = false;
+            }
+            return static_cast<ComponentId>(i);
+        }
+    PH_ASSERT(count < max_components, "too many component types: raise PH_ECS_MAX_COMPONENTS");
+    r.names[count] = std::string(info.name);
+    r.infos[count] = info;
+    r.infos[count].name = r.names[count];
+    r.count.store(count + 1, std::memory_order_release);
+    return static_cast<ComponentId>(count);
 }
 
 const ComponentInfo& component_info(ComponentId id) {
@@ -50,7 +65,38 @@ const ComponentInfo& component_info(ComponentId id) {
 
 usize component_type_count() { return registry().count.load(std::memory_order_acquire); }
 
-// --- Archetype ------------------------------------------------------------------------------------------------------
+std::vector<std::pair<ComponentId, ComponentInfo>> mark_components_dormant(bool (*owned)(const ComponentInfo&, void*),
+                                                                           void* user) {
+    auto& r = registry();
+    std::lock_guard lock(r.mutex);
+    std::vector<std::pair<ComponentId, ComponentInfo>> before;
+    usize count = r.count.load(std::memory_order_relaxed);
+    for (usize i = 0; i < count; ++i) {
+        ComponentInfo& info = r.infos[i];
+        if (info.dormant || !owned(info, user)) continue;
+        before.emplace_back(static_cast<ComponentId>(i), info);
+        std::string_view name = info.name;
+        info = ComponentInfo{};
+        info.name = name;
+        info.dormant = true;
+    }
+    return before;
+}
+
+void restore_components(const std::vector<std::pair<ComponentId, ComponentInfo>>& saved) {
+    auto& r = registry();
+    std::lock_guard lock(r.mutex);
+    for (const auto& [id, info] : saved) r.infos[id] = info;
+}
+
+std::optional<ComponentId> find_component(std::string_view name) {
+    usize n = component_type_count();
+    for (usize i = 0; i < n; ++i)
+        if (registry().infos[i].name == name) return static_cast<ComponentId>(i);
+    return std::nullopt;
+}
+
+// Archetype
 
 Archetype::Archetype(u32 id, std::vector<ComponentId> components) : id_(id), components_(std::move(components)) {
     std::sort(components_.begin(), components_.end());

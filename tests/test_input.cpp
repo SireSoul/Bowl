@@ -24,6 +24,11 @@ TEST_CASE("input: actions combine bindings") {
     CHECK(input.down("jump"));
     CHECK(input.pressed("jump"));
     CHECK_FALSE(input.down("unknown action"));
+
+    input.bind("jump", InputBinding::key(Key::Space)); // bind adds, even a duplicate
+    CHECK(input.bindings("jump")->size() == 3);
+    input.unbind_all();
+    CHECK_FALSE(input.has_action("jump"));
 }
 
 TEST_CASE("input: a tap is seen once per frame and once per fixed tick") {

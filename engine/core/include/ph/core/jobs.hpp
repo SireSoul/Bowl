@@ -23,8 +23,8 @@ private:
     std::atomic<u32> pending_{0};
 };
 
-// A fixed pool of worker threads. The thread that waits always helps, so a pool with 0 workers still works
-// (everything runs inline) — that is what single-threaded platforms and deterministic test runs use.
+// A fixed pool of worker threads. A thread waiting on a TaskGroup runs queued jobs itself, so a pool with zero
+// workers still works: everything runs inline on the caller (useful for single-core targets and tests).
 class JobSystem : NonCopyable {
 public:
     // workers < 0: hardware threads - 1.
@@ -38,9 +38,9 @@ public:
     void run(TaskGroup& group, std::function<void()> job);
     void wait(TaskGroup& group);
 
-    // Calls fn(begin, end) over [0, count) in contiguous chunks of at least min_chunk items, and returns when all are
-    // done. Chunk boundaries depend only on count and min_chunk — never on thread count — so per-chunk results merge
-    // deterministically.
+    // Calls fn(begin, end) over [0, count) in contiguous chunks of at least min_chunk items and returns when all are
+    // done. Chunk boundaries depend only on count and min_chunk, not on the number of threads, so results collected
+    // per chunk can be merged in a deterministic order.
     void parallel_for(usize count, usize min_chunk, FunctionRef<void(usize begin, usize end)> fn);
 
     // Items per chunk parallel_for uses for this count; chunk i covers [i*size, min(count, (i+1)*size)).

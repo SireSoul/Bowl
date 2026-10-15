@@ -1,9 +1,12 @@
 #pragma once
 
+#include "ph/app/scene.hpp"
 #include "ph/audio/audio.hpp"
 #include "ph/core/assets.hpp"
 #include "ph/core/jobs.hpp"
+#include "ph/core/localization.hpp"
 #include "ph/core/log.hpp"
+#include "ph/core/settings.hpp"
 #include "ph/ecs/ecs.hpp"
 #include "ph/gfx/renderer.hpp"
 #include "ph/platform/input.hpp"
@@ -25,6 +28,11 @@ struct AppConfig {
     bool pixel_art = false;          // nearest-filtered textures and a pixel-snapped camera
     std::string gpu_driver;          // "", "vulkan", "metal", "direct3d12"
     LogLevel log_level = LogLevel::Info;
+    std::string language = "en";     // lang/<language>.json, falling back to fallback_language
+    std::string fallback_language = "en";
+    // Where settings and saves live: the OS's per-user app data folder for <organization>/<application>.
+    std::string organization = "PLACEHOLDERENGINENAME";
+    std::string application;         // empty: the window title
     std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
 };
 
@@ -36,7 +44,11 @@ public:
     virtual ~Game() = default;
     // Called first, before the window exists.
     virtual AppConfig configure() { return {}; }
+    // Setup that code changes may need redone: register systems, bind inputs, load assets, set resources.
+    // Runs at startup, and again after each game-code hot reload.
     virtual void init(Engine&) {}
+    // Create the world (spawn entities). Runs once, after the first init; a hot reload keeps the world instead.
+    virtual void start(Engine&) {}
     // Simulation at a fixed rate (after the fixed schedule). Deterministic code goes here.
     virtual void fixed_update(Engine&, f32 /*dt*/) {}
     // Once per frame (after the frame schedule): animation, camera, UI.
@@ -63,6 +75,8 @@ public:
     Input& input() { return input_; }
     audio::AudioEngine& audio() { return audio_; }
     AssetManager& assets() { return assets_; }
+    // Strings for the current language, from assets lang/<code>.json (see AppConfig::language).
+    Localization& i18n() { return i18n_; }
     JobSystem& jobs() { return *jobs_; }
     ecs::World& world() { return world_; }
     // Runs every fixed tick, before Game::fixed_update.
@@ -71,7 +85,22 @@ public:
     ecs::Schedule& frame_schedule() { return frame_schedule_; }
     // The main world camera; its viewport follows the window.
     gfx::Camera2D& camera() { return camera_; }
+    // Screens such as the title, gameplay and menus. They run after the Game's own callbacks each frame.
+    SceneStack& scenes() { return scenes_; }
+    // Player preferences, saved to user_data_path()/settings.json at exit. Controls saved under "input" (with
+    // save_controls) are applied after Game::init, so player rebinds override the game's defaults.
+    Settings& settings() { return settings_; }
+    void save_controls() { settings_.set("input", input_.save_bindings()); }
+    // A writable per-user folder for settings and save games (created on first use).
+    const std::filesystem::path& user_data_path() const { return user_data_; }
     const AppConfig& config() const { return config_; }
+    // Command-line arguments (argv[1..]), including the engine's own flags.
+    const std::vector<std::string>& args() const { return args_; }
+    bool has_arg(std::string_view flag) const {
+        for (const auto& a : args_)
+            if (a == flag) return true;
+        return false;
+    }
 
     f64 time() const { return time_; }               // simulated seconds (fixed ticks * fixed_dt)
     f32 delta() const { return delta_; }             // this frame, scaled
@@ -95,6 +124,9 @@ private:
     friend class DevTools;
 
     AppConfig config_;
+    std::vector<std::string> args_;
+    Settings settings_;
+    std::filesystem::path user_data_;
     Window window_;
     gfx::GpuDevice gpu_;
     audio::AudioEngine audio_;
@@ -105,7 +137,9 @@ private:
     gfx::Camera2D camera_;
     // Declared after the device: destroyed first, so textures and shaders release before the GPU goes away.
     AssetManager assets_;
+    Localization i18n_{assets_};
     gfx::Renderer renderer_;
+    SceneStack scenes_;
 
     f64 time_ = 0, accumulator_ = 0;
     f32 delta_ = 0, alpha_ = 0, time_scale_ = 1;

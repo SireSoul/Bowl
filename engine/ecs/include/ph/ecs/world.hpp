@@ -43,7 +43,7 @@ public:
     World();
     ~World();
 
-    // --- entities --------------------------------------------------------------------------------------------------
+    // Entities
     Entity create();
     template <class... Ts>
         requires(sizeof...(Ts) > 0 && (Component<std::decay_t<Ts>> && ...))
@@ -58,7 +58,8 @@ public:
     }
     usize entity_count() const { return entity_count_; }
 
-    // --- components ------------------------------------------------------------------------------------------------
+    // Components
+
     // Adds T (constructed from args) or replaces the existing one. Returns the stored component.
     template <Component T, class... Args> T& add(Entity e, Args&&... args);
     // Adds or replaces several components with a single archetype move.
@@ -78,21 +79,28 @@ public:
     // Component ids of an entity, for tools (see component_info(id).name).
     std::span<const ComponentId> components_of(Entity e) const;
     void* component_ptr(Entity e, ComponentId c) const;
+    // Adds a component by id, for loaders and tools that only know the type at runtime. It is default-constructed,
+    // then `init` fills it in (init gets nullptr for tags). Replaces an existing one. Returns false if the type isn't
+    // savable (see SavableComponent), since only those can be default-constructed this way.
+    bool add_component(Entity e, ComponentId c, FunctionRef<void(void*)> init);
 
-    // --- queries ---------------------------------------------------------------------------------------------------
-    // Ts may be const-qualified to declare read-only access. Keep the Query around (e.g. in a system) — it caches the
-    // matching archetypes and updates incrementally.
+    // Queries
+
+    // Ts may be const-qualified to declare read-only access. Keep the Query around (in a system, say): it caches the
+    // matching archetypes and picks up new ones as they appear.
     template <class... Ts> Query<Ts...> query(QueryFilter filter = {});
     // One-shot convenience: f(Ts&...) or f(Entity, Ts&...).
     template <class... Ts, class F> void each(F&& f);
 
-    // --- hooks -----------------------------------------------------------------------------------------------------
+    // Hooks
+
     // on_add runs after T is added to an entity; on_remove runs before T is removed or its entity destroyed (the
     // component is still readable). Hooks run with the world locked; use deferred() for structural changes.
     template <Component T> void on_add(Hook hook) { hooks_for(component_id<T>()).on_add.push_back(std::move(hook)); }
     template <Component T> void on_remove(Hook hook) { hooks_for(component_id<T>()).on_remove.push_back(std::move(hook)); }
 
-    // --- resources (singletons: time, input, renderer handles, game state, ...) ------------------------------------
+    // Resources: one value per type, for things like time, input, renderer handles and game state
+
     template <class T, class... Args> T& set_resource(Args&&... args);
     template <class T> T* try_resource() const;
     template <class T> T& resource() const {
@@ -102,13 +110,18 @@ public:
     }
     template <class T> void remove_resource() { resources_.erase(type_id<T>()); }
 
-    // --- deferral --------------------------------------------------------------------------------------------------
+    // Deferred changes
+
     CommandBuffer& deferred() { return deferred_; }
     // Applies deferred() commands. The App calls this between schedules.
     void flush();
+    // Back to a brand-new world: entities, archetypes, hooks and resources all go (no hooks run). Game-code hot
+    // reload calls this while the old game library is still loaded, since its destructors live there.
+    void reset();
     bool locked() const { return lock_.load(std::memory_order_relaxed) > 0; }
 
-    // --- introspection ---------------------------------------------------------------------------------------------
+    // Introspection
+
     std::span<const std::unique_ptr<Archetype>> archetypes() const { return archetypes_; }
     // Bumped whenever a new archetype appears; queries use it to refresh their caches.
     usize archetype_generation() const { return archetypes_.size(); }
@@ -175,7 +188,7 @@ private:
     CommandBuffer deferred_;
 };
 
-// --- Query ----------------------------------------------------------------------------------------------------------
+// Query
 
 namespace detail {
 
@@ -320,7 +333,7 @@ private:
     usize seen_ = 0;
 };
 
-// --- World templates ------------------------------------------------------------------------------------------------
+// World templates
 
 template <class... Ts> Query<Ts...> World::query(QueryFilter filter) { return Query<Ts...>(*this, filter); }
 
@@ -402,7 +415,7 @@ template <class T> T* World::try_resource() const {
     return it == resources_.end() ? nullptr : &static_cast<ResourceHolder<T>*>(it->second.get())->value;
 }
 
-// --- CommandBuffer templates ----------------------------------------------------------------------------------------
+// CommandBuffer templates
 
 template <class T> void CommandBuffer::AddCommand<T>::apply(World& w) {
     if (w.alive(e)) w.add<T>(e, std::move(value));

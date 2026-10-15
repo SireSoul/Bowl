@@ -5,7 +5,7 @@
 
 namespace ph::gfx {
 
-// --- Camera2D -------------------------------------------------------------------------------------------------------
+// Camera2D
 
 Mat4 Camera2D::view_projection() const {
     Vec2 pos = position;
@@ -35,11 +35,13 @@ Rect Camera2D::visible_bounds() const {
     return {lo.x, lo.y, hi.x - lo.x, hi.y - lo.y};
 }
 
-// --- SpriteBatch ----------------------------------------------------------------------------------------------------
+// SpriteBatch
 
-void SpriteBatch::begin(const Camera2D& camera, SpriteSort sort) {
+void SpriteBatch::begin(const Camera2D& camera, SpriteSort sort, BlendMode blend, const Material* material) {
     camera_ = camera;
     sort_ = sort;
+    blend_ = blend;
+    material_ = material;
     sprites_.clear();
     textures_.clear();
 }
@@ -70,6 +72,32 @@ void SpriteBatch::draw_region(const Texture& texture, Rect source, Vec2 position
     s.uv = {source.x * inv.x, source.y * inv.y, source.right() * inv.x, source.bottom() * inv.y};
     s.color = color;
     draw(texture, s);
+}
+
+void SpriteBatch::draw_outline(Rect r, Color color, f32 t, f32 depth) {
+    draw_rect({r.x, r.y, r.w, t}, color, depth);
+    draw_rect({r.x, r.bottom() - t, r.w, t}, color, depth);
+    draw_rect({r.x, r.y + t, t, r.h - 2 * t}, color, depth);
+    draw_rect({r.right() - t, r.y + t, t, r.h - 2 * t}, color, depth);
+}
+
+void SpriteBatch::draw_nine_slice(const Texture& texture, Rect dest, Vec4 insets, Color color, f32 depth) {
+    f32 tw = static_cast<f32>(texture.width()), th = static_cast<f32>(texture.height());
+    f32 l = insets.x, t = insets.y, r = insets.z, b = insets.w;
+    // Shrink the borders if the destination is smaller than both borders together.
+    f32 sx = std::min(1.0f, dest.w / std::max(l + r, 1e-3f)), sy = std::min(1.0f, dest.h / std::max(t + b, 1e-3f));
+    f32 dl = l * sx, dr = r * sx, dt = t * sy, db = b * sy;
+    f32 src_x[4] = {0, l, tw - r, tw}, src_y[4] = {0, t, th - b, th};
+    f32 dst_x[4] = {dest.x, dest.x + dl, dest.right() - dr, dest.right()};
+    f32 dst_y[4] = {dest.y, dest.y + dt, dest.bottom() - db, dest.bottom()};
+    for (int row = 0; row < 3; ++row)
+        for (int col = 0; col < 3; ++col) {
+            Rect src{src_x[col], src_y[row], src_x[col + 1] - src_x[col], src_y[row + 1] - src_y[row]};
+            Vec2 at{dst_x[col], dst_y[row]};
+            Vec2 size{dst_x[col + 1] - dst_x[col], dst_y[row + 1] - dst_y[row]};
+            if (size.x <= 0 || size.y <= 0 || src.w <= 0 || src.h <= 0) continue;
+            draw_region(texture, src, at, size, color, depth, 0, {0, 0});
+        }
 }
 
 void SpriteBatch::draw_rect(Rect rect, Color color, f32 depth) {

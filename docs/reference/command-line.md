@@ -1,0 +1,64 @@
+# Command line
+
+## Flags every game understands
+
+The engine reads these before the game starts. All arguments, including these, are also available to the game as
+`engine.args()` and `engine.has_arg("--flag")`.
+
+| Flag | |
+| --- | --- |
+| `--frames N` | Quit after N frames |
+| `--screenshot <file.png>` | Save the frame shown at frame 60, or the last frame with `--frames`. Includes the overlay if it's open |
+| `--overlay` | Open the dev overlay at startup (dev builds) |
+| `--inspect N` | Open the overlay with the entity at index N selected |
+| `--no-vsync` | Don't wait for the display's refresh; useful for measuring frame times |
+| `--driver <name>` | GPU backend: `vulkan`, `metal` or `direct3d12` |
+| `--lang <code>` | Language for localized strings, such as `es` |
+
+Together, `--frames` and `--screenshot` make visual checks scriptable. CI uses them to render a sample on Direct3D 12:
+
+```bash
+isometric --driver direct3d12 --night --frames 30 --screenshot d3d12.png
+```
+
+## Sample flags
+
+| Sample | Flag | |
+| --- | --- | --- |
+| `tutorial` | `--play` | Skip the title screen |
+| `isometric` | `--night` | Start at night: lights, bloom, fireflies |
+| `isometric` | `--menu` | Start with the pause menu open |
+| `isometric` | `--dialogue` | Start a conversation |
+| `isometric` | `--behind-pillar` | Start behind a pillar, to show y-sorting |
+
+Games add their own the same way: `if (engine.has_arg("--skip-intro")) ...`.
+
+## ph-shaderc
+
+```bash
+ph-shaderc <input.vert.glsl | input.frag.glsl> -o <output.phsh> [--depfile <file>] [-g] [--print-msl] [--print-hlsl]
+```
+
+| Option | |
+| --- | --- |
+| `-o <file>` | Write the `.phsh` bundle |
+| `--depfile <file>` | Write a Makefile-style list of the files the shader includes |
+| `-g` | Keep debug information in the SPIR-V |
+| `--print-msl` | Print the generated Metal source to stdout |
+| `--print-hlsl` | Print the generated HLSL to stdout |
+| `-h`, `--help` | Usage |
+
+Exit codes: 0 on success, 1 for compile or file errors, 2 for bad arguments. The executable is in
+`build/<preset>/tools/shaderc/`. See [shaders.md](../guides/shaders.md#ph-shaderc).
+
+## Test runner
+
+`ph_tests` accepts [doctest's options](https://github.com/doctest/doctest/blob/master/doc/markdown/commandline.md).
+The useful ones:
+
+| | |
+| --- | --- |
+| `-tc="<pattern>"` | Run test cases whose names match, such as `-tc="ecs*"` |
+| `-ltc` | List test cases |
+| `-s` | Show successful checks too |
+| `-d` | Print each test case's duration |

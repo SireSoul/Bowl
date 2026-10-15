@@ -19,12 +19,18 @@ class GpuDevice;
 
 enum class Filter : u8 { Nearest, Linear };
 
+// A rectangle of whole pixels in a texture, top-left origin.
+struct PixelRect {
+    u32 x = 0, y = 0, w = 0, h = 0;
+};
+
 struct TextureDesc {
     u32 width = 0;
     u32 height = 0;
     const void* rgba8 = nullptr; // width*height*4 bytes, straight alpha unless premultiplied is set
     bool premultiplied = false;
-    Filter filter = Filter::Linear; // Linear also builds mipmaps
+    Filter filter = Filter::Linear;
+    bool mipmaps = true; // only with Linear filtering
     std::string_view name;
 };
 
@@ -46,6 +52,7 @@ private:
     SDL_GPUTexture* texture_ = nullptr;
     u32 width_ = 0, height_ = 0, id_ = 0;
     Filter filter_ = Filter::Linear;
+    bool mipmapped_ = false;
 };
 
 // One compiled shader stage on the GPU. Loaded as an asset from "<path>" -> "<path>.phsh" (or, in dev builds,
@@ -55,6 +62,10 @@ public:
     ~Shader();
     SDL_GPUShader* handle() const { return shader_; }
     ShaderStage stage() const { return stage_; }
+    u32 samplers() const { return samplers_; }
+    u32 uniform_buffers() const { return uniform_buffers_; }
+    // Unique per shader object (never reused), for pipeline caches.
+    u32 id() const { return id_; }
 
 private:
     friend class GpuDevice;
@@ -62,6 +73,7 @@ private:
     GpuDevice* device_ = nullptr;
     SDL_GPUShader* shader_ = nullptr;
     ShaderStage stage_ = ShaderStage::Vertex;
+    u32 samplers_ = 0, uniform_buffers_ = 0, id_ = 0;
 };
 
 struct GpuDeviceDesc {
@@ -88,12 +100,20 @@ public:
     bool vsync() const { return vsync_; }
 
     std::unique_ptr<Texture> create_texture(const TextureDesc& desc);
+    // Replaces all pixels of a texture (same size). Rebuilds mipmaps if it has them.
+    bool update_texture(Texture& texture, const void* rgba8, bool premultiplied);
+    // Replaces one rectangle. rgba8 points at the rectangle's top-left pixel in a source image `row_pixels` wide,
+    // so a region of a larger CPU-side image can be sent without copying it out first.
+    bool update_texture_region(Texture& texture, PixelRect rect, const void* rgba8, u32 row_pixels, bool premultiplied);
     std::unique_ptr<Shader> create_shader(const ShaderBundle& bundle, std::string_view name);
 
     // Uploads raw bytes into a buffer through a temporary transfer buffer, on its own command buffer.
     bool upload(SDL_GPUBuffer* buffer, const void* data, u32 size, u32 offset = 0);
 
 private:
+    bool upload_pixels(SDL_GPUTexture* texture, PixelRect rect, const void* rgba8, u32 row_pixels, bool premultiplied,
+                       bool mips);
+
     SDL_GPUDevice* device_ = nullptr;
     SDL_Window* window_ = nullptr;
     std::string driver_;
@@ -101,7 +121,8 @@ private:
     bool vsync_ = true;
 };
 
-// Registers Texture (PNG/JPG/TGA/BMP via stb_image) and Shader loaders with the asset manager.
+// Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader, Font (.ttf/.otf), SpriteSheet (Aseprite JSON) and
+// Tilemap (Tiled .tmj) loaders with the asset manager.
 // default_filter: Nearest for pixel art, Linear (with mipmaps) for everything else.
 void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter default_filter = Filter::Linear);
 

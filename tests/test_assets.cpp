@@ -101,3 +101,29 @@ TEST_CASE("assets: code-made assets") {
     CHECK(assets.find<Text>("gen/hello") == a);
     CHECK(assets.list().size() == 1);
 }
+
+TEST_CASE("assets: rollback drops what came after a mark and restores replaced loaders") {
+    fs::path dir = temp_dir("rollback");
+    write(dir / "a.txt", "a");
+    AssetManager assets;
+    assets.mount("", dir);
+    register_text(assets);
+    auto before = assets.load<Text>("a.txt");
+    u64 mark = assets.mark();
+
+    // After the mark: a replacement loader, a new asset, a callback.
+    assets.register_loader<Text>([](AssetLoadContext&) { return std::make_unique<Text>(Text{"replaced"}); });
+    assets.add("gen/x", std::make_unique<Text>(Text{"x"}));
+    int calls = 0;
+    assets.on_reload([&](std::string_view, bool) { ++calls; });
+    CHECK(assets.load<Text>("b.txt")->value == "replaced");
+
+    assets.rollback(mark);
+    CHECK_FALSE(assets.find<Text>("gen/x"));
+    CHECK_FALSE(assets.find<Text>("b.txt"));
+    CHECK(assets.find<Text>("a.txt") == before); // made before the mark: kept
+    write(dir / "c.txt", "c");
+    CHECK(assets.load<Text>("c.txt")->value == "c"); // the original loader is back
+    assets.reload("a.txt");
+    CHECK(calls == 0); // the callback went with the rollback
+}

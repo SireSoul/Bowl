@@ -17,16 +17,27 @@ public:
     void begin_frame();
     void end_frame(Game& game);
     bool visible() const { return visible_; }
+    void set_visible(bool visible) { visible_ = visible; }
+    void select(ecs::Entity e) {
+#if PH_DEV_TOOLS
+        selected_ = e;
+#else
+        (void)e;
+#endif
+    }
 
 private:
 #if PH_DEV_TOOLS
     void draw_main();
     void draw_profiler();
+    void draw_post();
     void draw_systems(const char* label, ecs::Schedule& schedule);
     void draw_entities();
+    void draw_inspector();
     void draw_assets();
     void draw_log();
     bool frame_open_ = false;
+    ecs::Entity selected_;
 #endif
     [[maybe_unused]] Engine& engine_;
     bool visible_ = false;
