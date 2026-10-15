@@ -34,7 +34,8 @@ namespace ph::gfx {
 
 namespace {
 
-std::unique_ptr<Shader> load_shader(AssetLoadContext& ctx, GpuDevice& device) {
+// The bundle for "<path>": compiled from "<path>.glsl" in dev builds, read from "<path>.phsh" otherwise.
+std::optional<ShaderBundle> load_bundle(AssetLoadContext& ctx, std::string_view type) {
     std::string base(ctx.path());
 #if PH_RUNTIME_SHADER_COMPILER
     // Dev builds compile the GLSL source directly, so saving a .glsl file updates the running game.
@@ -42,8 +43,8 @@ std::unique_ptr<Shader> load_shader(AssetLoadContext& ctx, GpuDevice& device) {
         auto source = ctx.read_text(base + ".glsl");
         auto stage = shaderc::stage_from_filename(file->filename().string());
         if (!source || !stage) {
-            log_asset_error(ctx.path(), "Shader", "unreadable source or unknown stage");
-            return nullptr;
+            log_asset_error(ctx.path(), type, "unreadable source or unknown stage");
+            return std::nullopt;
         }
         shaderc::CompileOptions options;
         options.name = file->filename().string();
@@ -52,24 +53,31 @@ std::unique_ptr<Shader> load_shader(AssetLoadContext& ctx, GpuDevice& device) {
         auto result = shaderc::compile_glsl(*source, options);
         for (const auto& inc : result.includes) ctx.depends_on(inc);
         if (!result.ok) {
-            log_asset_error(ctx.path(), "Shader", result.log);
-            return nullptr;
+            log_asset_error(ctx.path(), type, result.log);
+            return std::nullopt;
         }
         if (!result.log.empty()) warn("shader '{}': {}", ctx.path(), result.log);
-        return device.create_shader(result.bundle, ctx.path());
+        return std::move(result.bundle);
     }
 #endif
     auto bytes = ctx.read(base + ".phsh");
     if (!bytes) {
-        log_asset_error(ctx.path(), "Shader", "no " + base + ".phsh (or .glsl in dev builds) in any mount");
-        return nullptr;
+        log_asset_error(ctx.path(), type, "no " + base + ".phsh (or .glsl in dev builds) in any mount");
+        return std::nullopt;
     }
     auto bundle = ShaderBundle::parse(*bytes);
-    if (!bundle) {
-        log_asset_error(ctx.path(), "Shader", "corrupt or outdated .phsh bundle; rebuild shaders");
-        return nullptr;
-    }
-    return device.create_shader(*bundle, ctx.path());
+    if (!bundle) log_asset_error(ctx.path(), type, "corrupt or outdated .phsh bundle; rebuild shaders");
+    return bundle;
+}
+
+std::unique_ptr<Shader> load_shader(AssetLoadContext& ctx, GpuDevice& device) {
+    auto bundle = load_bundle(ctx, "Shader");
+    return bundle ? device.create_shader(*bundle, ctx.path()) : nullptr;
+}
+
+std::unique_ptr<ComputeShader> load_compute_shader(AssetLoadContext& ctx, GpuDevice& device) {
+    auto bundle = load_bundle(ctx, "ComputeShader");
+    return bundle ? device.create_compute_shader(*bundle, ctx.path()) : nullptr;
 }
 
 std::unique_ptr<Texture> load_texture(AssetLoadContext& ctx, GpuDevice& device, Filter filter) {
@@ -110,6 +118,7 @@ bool write_png(const std::filesystem::path& path, u32 width, u32 height, std::sp
 
 void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter default_filter) {
     assets.register_loader<Shader>([&device](AssetLoadContext& ctx) { return load_shader(ctx, device); });
+    assets.register_loader<ComputeShader>([&device](AssetLoadContext& ctx) { return load_compute_shader(ctx, device); });
     assets.register_loader<Texture>(
         [&device, default_filter](AssetLoadContext& ctx) { return load_texture(ctx, device, default_filter); });
     assets.register_loader<Font>([&device](AssetLoadContext& ctx) -> std::unique_ptr<Font> {

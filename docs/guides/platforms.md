@@ -28,7 +28,7 @@ SDL_GPU chooses the best backend for the platform. Force one with `--driver` or 
 
 | Backend | Shaders |
 | --- | --- |
-| Direct3D 12 | HLSL from the shader bundle, compiled to DXBC when loaded |
+| Direct3D 12 | HLSL from the shader bundle, compiled to DXBC when first loaded and cached on disk |
 | Metal | MSL from the shader bundle |
 | Vulkan | SPIR-V from the shader bundle |
 

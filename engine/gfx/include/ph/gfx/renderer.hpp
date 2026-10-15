@@ -56,6 +56,22 @@ struct PostEffect {
     bool enabled = true;
 };
 
+// One run of a compute shader (Renderer::dispatch).
+struct ComputeDispatch {
+    const ComputeShader* shader = nullptr;
+    std::vector<const GpuBuffer*> read; // `readonly` storage buffers, in binding order (set 0)
+    std::vector<GpuBuffer*> write;      // read-write storage buffers, in binding order (set 1)
+    std::vector<u8> uniforms;           // set 2 binding 0, std140
+    u32 groups[3] = {1, 1, 1};
+
+    template <class T> void set_uniforms(const T& data) {
+        static_assert(std::is_trivially_copyable_v<T> && sizeof(T) % 16 == 0, "uniform blocks are std140");
+        uniforms.assign(reinterpret_cast<const u8*>(&data), reinterpret_cast<const u8*>(&data) + sizeof(T));
+    }
+    // Enough groups along x for one thread per item.
+    void cover(u32 items) { groups[0] = shader ? (items + shader->threads(0) - 1) / shader->threads(0) : 0; }
+};
+
 // How the built-in light shader (light_material) lights the scene.
 struct LightLook {
     // Lights shade normal-mapped sprites (submit_normals). Height is how far above the ground lights hang, relative to
@@ -115,6 +131,12 @@ public:
     void submit_normals(const SpriteBatch& batch);
     // Shadow casters for light_material lights: anything drawn here (by its alpha) blocks light. Walls, trees, crates.
     void submit_occluders(const SpriteBatch& batch);
+    // Runs a compute shader this frame, before anything is drawn. Dispatches run in the order they're made.
+    void dispatch(ComputeDispatch job);
+    // Sprites that a compute shader wrote into a buffer (SpriteInstance layout, `count` of them), all with one texture
+    // (null: solid color). Drawn with the scene, in submission order.
+    void submit(const GpuBuffer& sprites, u32 count, const Texture* texture, const Camera2D& camera,
+                BlendMode blend = BlendMode::Alpha, const Material* material = nullptr);
     // Your own full-screen passes, run in order each frame.
     std::vector<PostEffect>& post_effects() { return post_effects_; }
     // Sprites already in GPU memory, seen through `camera`. Nothing is uploaded; they draw in submission order with the
@@ -225,6 +247,7 @@ private:
     std::vector<Draw> draws_;
     std::vector<Pass> passes_, light_passes_, ui_passes_, emissive_passes_, normal_passes_, occluder_passes_;
     std::vector<PostEffect> post_effects_;
+    std::vector<ComputeDispatch> compute_;
     std::vector<u32> order_;
     Stats stats_, last_stats_;
     Overlay overlay_;

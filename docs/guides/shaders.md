@@ -21,6 +21,7 @@ A shader is one stage in one file, named by stage:
 ```
 assets/shaders/hologram.frag.glsl     a fragment shader
 assets/shaders/wave.vert.glsl         a vertex shader
+assets/shaders/flock.comp.glsl        a compute shader
 ```
 
 Load it by its path *without* `.glsl`:
@@ -43,6 +44,16 @@ SDL_GPU, which the renderer is built on, fixes which descriptor set each kind of
 | --- | --- | --- |
 | Vertex | `set = 0` | `set = 1` |
 | Fragment | `set = 2` | `set = 3` |
+
+Compute shaders have their own layout:
+
+| Set | Holds |
+| --- | --- |
+| `set = 0` | Sampled textures, then `readonly` storage textures and buffers |
+| `set = 1` | Read-write storage textures and buffers |
+| `set = 2` | Uniform buffers |
+
+Storage marked `readonly` in GLSL goes in set 0; anything the shader writes goes in set 1.
 
 Within a set, number bindings from 0 with no gaps. Uniform blocks use `std140`; storage buffers `std430`.
 
@@ -139,8 +150,8 @@ The stage comes from the file name (`.vert.glsl` or `.frag.glsl`). The pipeline 
 and SPIRV-Cross (SPIR-V to MSL and HLSL), with resource slots remapped to what SDL_GPU expects on each backend.
 `--print-msl` and `--print-hlsl` are the quickest way to see what a backend will actually run.
 
-You rarely run it by hand: `ph_add_game(... ASSETS dir)` compiles every `*.vert.glsl` and `*.frag.glsl` under the
-asset folder at build time. When cross-compiling (iOS, Android), point `PH_SHADERC_EXECUTABLE` at a host build of the
+You rarely run it by hand: `ph_add_game(... ASSETS dir)` compiles every `*.vert.glsl`, `*.frag.glsl` and `*.comp.glsl`
+under the asset folder at build time. When cross-compiling (iOS, Android), point `PH_SHADERC_EXECUTABLE` at a host build of the
 tool.
 
 ## The .phsh bundle
@@ -151,9 +162,11 @@ A `.phsh` file holds, for one shader stage:
 - Metal Shading Language source, for Metal
 - HLSL source (Shader Model 5.1), for Direct3D 12, compiled to DXBC when the game loads it
 - the resource counts SDL_GPU needs to create the shader (samplers, storage textures, storage buffers, uniform
-  buffers)
+  buffers) and, for compute shaders, the read-write counts and the thread-group size
 
-The device picks the right blob for its backend. The format is versioned; a bundle from an older build is rejected
+The device picks the right blob for its backend. On Direct3D 12 the HLSL is compiled to DXBC the first time a
+shader loads and kept in the player's data folder (`shader-cache/`), so later runs skip the compile; a changed shader
+never matches an old entry. The format is versioned; a bundle from an older build is rejected
 with a message to rebuild shaders.
 
 ## Engine shaders
@@ -165,12 +178,62 @@ with a message to rebuild shaders.
 | `fullscreen.vert.glsl` | A full-screen triangle for post-processing passes |
 | `post/bloom_prefilter.frag.glsl` | Bloom's bright pass |
 | `post/bloom_down.frag.glsl`, `post/bloom_up.frag.glsl` | The bloom blur chain |
-| `post/final.frag.glsl` | Lighting, bloom, grading, tonemapping, vignette |
+| `post/final.frag.glsl` | Bloom, grading, tonemapping, LUT, lens effects, vignette |
+| `post/composite.frag.glsl` | Lighting: the scene times the light map, with emissive sprites over it |
+| `light.frag.glsl` | Lights with normal mapping and shadows (`light_material`) |
+| `text_sdf.frag.glsl` | Distance-field text (`sdf_text_material`) |
+| `particles.comp.glsl` | GPU particles (`GpuParticles`) |
 
 They live in `engine/assets/shaders/` and hot-reload like game shaders, which is handy when working on the renderer.
 
+## Compute shaders
+
+Compute shaders run work on the GPU that isn't drawing: simulations, flocking, generating data. Load one as a
+`gfx::ComputeShader`, give it `gfx::GpuBuffer`s to work on, and dispatch it through the renderer:
+
+```glsl
+#version 450
+layout(local_size_x = 64) in;
+layout(std430, set = 0, binding = 0) readonly buffer In { vec2 targets[]; };
+layout(std430, set = 1, binding = 0) buffer Boids { vec4 boids[]; };   // xy position, zw velocity
+layout(std140, set = 2, binding = 0) uniform Params { vec4 params; };    // x: dt, y: count
+
+void main() {
+    uint i = gl_GlobalInvocationID.x;
+    if (i >= uint(params.y)) return;
+    vec4 b = boids[i];
+    b.zw += (targets[i] - b.xy) * params.x;
+    b.xy += b.zw * params.x;
+    boids[i] = b;
+}
+```
+
+```cpp
+Asset<gfx::ComputeShader> flock = engine.assets().load<gfx::ComputeShader>("shaders/flock.comp");
+auto boids = engine.gpu().create_buffer(count * sizeof(Vec4), "boids");      // starts zeroed
+auto targets = engine.gpu().create_buffer(count * sizeof(Vec2), "targets");
+targets->upload(target_data.data(), count * sizeof(Vec2));
+
+// every frame
+gfx::ComputeDispatch job;
+job.shader = flock.get();
+job.read = {targets.get()};
+job.write = {boids.get()};
+job.set_uniforms(Params{engine.delta(), f32(count), 0, 0});
+job.cover(count);                     // enough groups of 64 for every boid
+engine.renderer().dispatch(std::move(job));
+```
+
+Dispatches run at the start of the frame's GPU work, in the order they're made, before anything is drawn, so a
+buffer a compute shader writes can be drawn in the same frame. A shader that writes `SpriteInstance`s (the layout
+in `sprite.vert.glsl`) can be drawn straight from its buffer with
+`renderer.submit(buffer, count, texture, camera, blend)`, without the data ever coming back to the CPU; GPU
+particles work that way (see [particles](particles-and-tweens.md#gpu-particles)).
+
+Buffers are read and written by compute shaders and read by sprite drawing. Storage textures aren't bound by
+`ComputeDispatch` yet.
+
 ## Limitations
 
-- Vertex and fragment shaders only. Compute shaders aren't supported by `ph-shaderc` yet.
 - Materials replace the fragment stage only; sprites always use the engine's vertex shader.
-- Direct3D 12 compiles shaders at load time (fast, but not free); caching the result on disk is on the roadmap.
+- Direct3D 12 uses DXBC (Shader Model 5.1). DXIL (Shader Model 6) would need DXC.

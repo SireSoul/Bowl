@@ -82,6 +82,122 @@ std::vector<Resource> collect(const spirv_cross::Compiler& c, const spirv_cross:
     return out;
 }
 
+// Compute shaders, in SDL_GPU's layout for them:
+//   set 0: sampled textures, then read-only storage textures, then read-only storage buffers
+//   set 1: read-write storage textures, then read-write storage buffers
+//   set 2: uniform buffers
+// Storage marked `readonly` in GLSL is read-only; anything else is read-write.
+bool finish_compute(const std::vector<u32>& spirv, const CompileOptions& options, CompileResult& result) {
+    spirv_cross::CompilerMSL msl(spirv);
+    auto resources = msl.get_shader_resources();
+    auto sampled = collect(msl, resources.sampled_images);
+    auto images = collect(msl, resources.storage_images);
+    auto buffers = collect(msl, resources.storage_buffers);
+    auto uniforms = collect(msl, resources.uniform_buffers);
+
+    std::vector<Resource> ro_images, rw_images, ro_buffers, rw_buffers;
+    for (const Resource& r : images)
+        (msl.has_decoration(r.id, spv::DecorationNonWritable) ? ro_images : rw_images).push_back(r);
+    for (const Resource& r : buffers)
+        (msl.get_buffer_block_flags(r.id).get(spv::DecorationNonWritable) ? ro_buffers : rw_buffers).push_back(r);
+
+    auto check = [&](const std::vector<Resource>& list, u32 set, const char* what) {
+        for (const Resource& r : list)
+            if (r.set != set) {
+                result.log += std::format("{}: {} '{}' must use set = {} in a compute shader (it uses set = {})\n",
+                                          options.name, what, r.name, set, r.set);
+                return false;
+            }
+        return true;
+    };
+    if (!check(sampled, 0, "sampled texture") || !check(ro_images, 0, "readonly storage texture") ||
+        !check(ro_buffers, 0, "readonly storage buffer") || !check(rw_images, 1, "read-write storage texture") ||
+        !check(rw_buffers, 1, "read-write storage buffer") || !check(uniforms, 2, "uniform buffer"))
+        return false;
+
+    ShaderBundle& bundle = result.bundle;
+    bundle.stage = ShaderStage::Compute;
+    bundle.samplers = static_cast<u32>(sampled.size());
+    bundle.storage_textures = static_cast<u32>(ro_images.size());
+    bundle.storage_buffers = static_cast<u32>(ro_buffers.size());
+    bundle.readwrite_storage_textures = static_cast<u32>(rw_images.size());
+    bundle.readwrite_storage_buffers = static_cast<u32>(rw_buffers.size());
+    bundle.uniform_buffers = static_cast<u32>(uniforms.size());
+    for (u32 i = 0; i < 3; ++i) bundle.threads[i] = std::max(1u, msl.get_execution_mode_argument(spv::ExecutionModeLocalSize, i));
+
+    ShaderBundle::Blob spirv_blob{ShaderBlobFormat::SpirV, "main", {}};
+    spirv_blob.code.resize(spirv.size() * sizeof(u32));
+    std::memcpy(spirv_blob.code.data(), spirv.data(), spirv_blob.code.size());
+    bundle.blobs.push_back(std::move(spirv_blob));
+
+    // MSL: [[texture]] sampled, read-only, read-write textures; [[sampler]] with the sampled textures; [[buffer]]
+    // uniforms, read-only, read-write buffers.
+    auto model = spv::ExecutionModelGLCompute;
+    auto bind = [&](const Resource& r, u32 buffer, u32 texture, u32 sampler) {
+        spirv_cross::MSLResourceBinding b;
+        b.stage = model;
+        b.desc_set = r.set;
+        b.binding = r.binding;
+        b.msl_buffer = buffer;
+        b.msl_texture = texture;
+        b.msl_sampler = sampler;
+        msl.add_msl_resource_binding(b);
+    };
+    u32 textures = 0, buffer_slot = 0;
+    for (u32 i = 0; i < sampled.size(); ++i) bind(sampled[i], 0, textures++, i);
+    for (const Resource& r : ro_images) bind(r, 0, textures++, 0);
+    for (const Resource& r : rw_images) bind(r, 0, textures++, 0);
+    for (const Resource& r : uniforms) bind(r, buffer_slot++, 0, 0);
+    for (const Resource& r : ro_buffers) bind(r, buffer_slot++, 0, 0);
+    for (const Resource& r : rw_buffers) bind(r, buffer_slot++, 0, 0);
+    auto msl_options = msl.get_msl_options();
+    msl_options.set_msl_version(2, 1);
+    msl.set_msl_options(msl_options);
+    try {
+        std::string msl_source = msl.compile();
+        ShaderBundle::Blob msl_blob{ShaderBlobFormat::Msl, msl.get_cleansed_entry_point_name("main", model), {}};
+        msl_blob.code.assign(msl_source.begin(), msl_source.end());
+        bundle.blobs.push_back(std::move(msl_blob));
+    } catch (const std::exception& e) {
+        result.log += std::format("{}: SPIR-V -> MSL failed: {}\n", options.name, e.what());
+        return false;
+    }
+
+    // HLSL: t[] (space0) sampled, read-only textures, read-only buffers; s[] with the sampled textures; u[] (space1)
+    // read-write textures, then buffers; b[] (space2) uniforms.
+    try {
+        spirv_cross::CompilerHLSL hlsl(spirv);
+        spirv_cross::CompilerHLSL::Options hlsl_options;
+        hlsl_options.shader_model = 51;
+        hlsl.set_hlsl_options(hlsl_options);
+        auto hbind = [&](const Resource& r, char kind, u32 reg) {
+            spirv_cross::HLSLResourceBinding b;
+            b.stage = model;
+            b.desc_set = r.set;
+            b.binding = r.binding;
+            if (kind == 'b') b.cbv = {r.set, reg};
+            else if (kind == 'u') b.uav = {r.set, reg};
+            else b.srv = b.sampler = {r.set, reg};
+            hlsl.add_hlsl_resource_binding(b);
+        };
+        u32 t = 0, u = 0;
+        for (const Resource& r : sampled) hbind(r, 't', t++);
+        for (const Resource& r : ro_images) hbind(r, 't', t++);
+        for (const Resource& r : ro_buffers) hbind(r, 't', t++);
+        for (const Resource& r : rw_images) hbind(r, 'u', u++);
+        for (const Resource& r : rw_buffers) hbind(r, 'u', u++);
+        for (u32 i = 0; i < uniforms.size(); ++i) hbind(uniforms[i], 'b', i);
+        std::string hlsl_source = hlsl.compile();
+        ShaderBundle::Blob hlsl_blob{ShaderBlobFormat::Hlsl, "main", {}};
+        hlsl_blob.code.assign(hlsl_source.begin(), hlsl_source.end());
+        bundle.blobs.push_back(std::move(hlsl_blob));
+    } catch (const std::exception& e) {
+        result.log += std::format("{}: SPIR-V -> HLSL failed: {}\n", options.name, e.what());
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 std::optional<ShaderStage> stage_from_filename(std::string_view filename) {
@@ -93,10 +209,6 @@ std::optional<ShaderStage> stage_from_filename(std::string_view filename) {
 
 CompileResult compile_glsl(std::string_view source, const CompileOptions& options) {
     CompileResult result;
-    if (options.stage == ShaderStage::Compute) {
-        result.log = "compute shaders are not supported by ph-shaderc yet";
-        return result;
-    }
     init_glslang();
 
     // GLSL -> SPIR-V
@@ -131,6 +243,10 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
     glslang::SpvOptions spv_options;
     spv_options.generateDebugInfo = options.debug_info;
     glslang::GlslangToSpv(*program.getIntermediate(lang), spirv, &spv_options);
+    if (options.stage == ShaderStage::Compute) {
+        result.ok = finish_compute(spirv, options, result);
+        return result;
+    }
 
     // Reflection: SDL_GPU needs resource counts, and wants them in specific descriptor sets
     spirv_cross::CompilerMSL msl(spirv);

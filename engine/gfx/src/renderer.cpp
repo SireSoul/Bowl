@@ -241,6 +241,7 @@ bool Renderer::begin_frame() {
     emissive_passes_.clear();
     normal_passes_.clear();
     occluder_passes_.clear();
+    compute_.clear();
     stats_ = {};
 
     cmd_ = SDL_AcquireGPUCommandBuffer(device_->handle());
@@ -255,6 +256,22 @@ bool Renderer::begin_frame() {
     }
     target_size_ = {static_cast<f32>(w), static_cast<f32>(h)};
     return swapchain_ != nullptr;
+}
+
+void Renderer::dispatch(ComputeDispatch job) {
+    if (!cmd_ || !job.shader || !job.shader->handle()) return;
+    compute_.push_back(std::move(job));
+}
+
+void Renderer::submit(const GpuBuffer& sprites, u32 count, const Texture* texture, const Camera2D& camera,
+                      BlendMode blend, const Material* material) {
+    count = std::min<u32>(count, sprites.size() / static_cast<u32>(sizeof(SpriteInstance)));
+    if (!swapchain_ || count == 0) return;
+    Pass pass{camera.view_projection(), static_cast<u32>(draws_.size()), 1, blend, material, sprites.handle()};
+    draws_.push_back({0, count, texture ? texture : white_.get()});
+    passes_.push_back(pass);
+    stats_.sprites += count;
+    ++stats_.batches;
 }
 
 void Renderer::record(const SpriteBatch& batch, std::vector<Pass>& passes) {
@@ -436,6 +453,25 @@ void Renderer::end_frame() {
         SDL_GPUBufferRegion dst{sprite_buffer_, 0, bytes};
         SDL_UploadToGPUBuffer(copy, &src, &dst, true);
         SDL_EndGPUCopyPass(copy);
+    }
+
+    // Compute work, before anything that might draw what it writes.
+    for (const ComputeDispatch& job : compute_) {
+        std::vector<SDL_GPUStorageBufferReadWriteBinding> rw;
+        for (GpuBuffer* b : job.write) rw.push_back({b->handle(), false, {}});
+        SDL_GPUComputePass* pass =
+            SDL_BeginGPUComputePass(cmd_, nullptr, 0, rw.data(), static_cast<u32>(rw.size()));
+        SDL_BindGPUComputePipeline(pass, job.shader->handle());
+        if (!job.read.empty()) {
+            std::vector<SDL_GPUBuffer*> ro;
+            for (const GpuBuffer* b : job.read) ro.push_back(b->handle());
+            SDL_BindGPUComputeStorageBuffers(pass, 0, ro.data(), static_cast<u32>(ro.size()));
+        }
+        if (!job.uniforms.empty())
+            SDL_PushGPUComputeUniformData(cmd_, 0, job.uniforms.data(), static_cast<u32>(job.uniforms.size()));
+        if (job.groups[0] && job.groups[1] && job.groups[2])
+            SDL_DispatchGPUCompute(pass, job.groups[0], job.groups[1], job.groups[2]);
+        SDL_EndGPUComputePass(pass);
     }
 
     if (swapchain_ && overlay_.prepare) overlay_.prepare(cmd_);

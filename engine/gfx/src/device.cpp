@@ -1,7 +1,9 @@
 #include "ph/gfx/device.hpp"
 
 #include "ph/core/assert.hpp"
+#include "ph/core/file.hpp"
 #include "ph/core/log.hpp"
+#include "ph/core/type_id.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -14,6 +16,7 @@
 #include <atomic>
 #include <bit>
 #include <cstring>
+#include <format>
 #include <vector>
 
 namespace ph::gfx {
@@ -21,8 +24,12 @@ namespace ph::gfx {
 namespace {
 std::atomic<u32> next_texture_id{1};
 
+const char* hlsl_profile(ShaderStage stage) {
+    return stage == ShaderStage::Fragment ? "ps_5_1" : stage == ShaderStage::Compute ? "cs_5_1" : "vs_5_1";
+}
+
 // D3D12 takes DXBC; the HLSL compiler (d3dcompiler_47.dll) ships with Windows, so shaders compile on the player's
-// machine at load time. Compiled bytecode isn't cached on disk yet.
+// machine at load time (and are cached on disk: see GpuDevice::code_for).
 std::optional<std::vector<u8>> compile_hlsl_to_dxbc([[maybe_unused]] const ShaderBundle::Blob& hlsl,
                                                     [[maybe_unused]] ShaderStage stage,
                                                     [[maybe_unused]] std::string_view name, std::string& err) {
@@ -31,8 +38,8 @@ std::optional<std::vector<u8>> compile_hlsl_to_dxbc([[maybe_unused]] const Shade
     ID3DBlob* errors = nullptr;
     std::string source_name(name);
     HRESULT hr = D3DCompile(hlsl.code.data(), hlsl.code.size(), source_name.c_str(), nullptr, nullptr,
-                            hlsl.entry_point.c_str(), stage == ShaderStage::Fragment ? "ps_5_1" : "vs_5_1",
-                            D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code, &errors);
+                            hlsl.entry_point.c_str(), hlsl_profile(stage), D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &code,
+                            &errors);
     if (errors) {
         err.assign(static_cast<const char*>(errors->GetBufferPointer()), errors->GetBufferSize());
         errors->Release();
@@ -61,11 +68,53 @@ Shader::~Shader() {
     if (shader_ && device_ && device_->handle()) SDL_ReleaseGPUShader(device_->handle(), shader_);
 }
 
+ComputeShader::~ComputeShader() {
+    if (pipeline_ && device_ && device_->handle()) SDL_ReleaseGPUComputePipeline(device_->handle(), pipeline_);
+}
+
+GpuBuffer::~GpuBuffer() {
+    if (buffer_ && device_ && device_->handle()) SDL_ReleaseGPUBuffer(device_->handle(), buffer_);
+}
+
+bool GpuBuffer::upload(const void* data, u32 bytes, u32 offset) {
+    if (offset + bytes > size_) return false;
+    return device_->upload(buffer_, data, bytes, offset);
+}
+
+// Shader cache
+
+static std::filesystem::path cache_file(const std::filesystem::path& dir, u64 key) {
+    return dir / std::format("{:016x}.bin", key);
+}
+
+std::optional<std::vector<u8>> load_cached_shader(const std::filesystem::path& dir, u64 key) {
+    if (dir.empty()) return std::nullopt;
+    auto bytes = read_file_bytes(cache_file(dir, key));
+    // Stored with the key in front, so a file renamed or cut short is never mistaken for the right code.
+    if (!bytes || bytes->size() < 8) return std::nullopt;
+    u64 stored = 0;
+    std::memcpy(&stored, bytes->data(), 8);
+    if (stored != key) return std::nullopt;
+    return std::vector<u8>(bytes->begin() + 8, bytes->end());
+}
+
+void store_cached_shader(const std::filesystem::path& dir, u64 key, std::span<const u8> code) {
+    if (dir.empty()) return;
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    std::vector<u8> bytes(8 + code.size());
+    std::memcpy(bytes.data(), &key, 8);
+    std::memcpy(bytes.data() + 8, code.data(), code.size());
+    if (!write_file_bytes(cache_file(dir, key), bytes.data(), bytes.size()))
+        warn("gpu: can't write the shader cache in {}", dir.string());
+}
+
 GpuDevice::~GpuDevice() { shutdown(); }
 
 bool GpuDevice::init(SDL_Window* window, const GpuDeviceDesc& desc) {
     window_ = window;
     vsync_ = desc.vsync;
+    shader_cache_ = desc.shader_cache;
     SDL_GPUShaderFormat formats = SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_MSL;
 #ifdef _WIN32
     formats |= SDL_GPU_SHADERFORMAT_DXBC; // compiled at runtime from the bundle's HLSL (see create_shader)
@@ -205,25 +254,94 @@ bool GpuDevice::upload_pixels(SDL_GPUTexture* texture, PixelRect rect, const voi
     return ok;
 }
 
-std::unique_ptr<Shader> GpuDevice::create_shader(const ShaderBundle& bundle, std::string_view name) {
-    const ShaderBundle::Blob* blob = bundle.find(shader_format_);
-    ShaderBundle::Blob compiled;
-    if (!blob && shader_format_ == ShaderBlobFormat::Dxbc) {
+std::optional<ShaderBundle::Blob> GpuDevice::code_for(const ShaderBundle& bundle, std::string_view name) {
+    if (const ShaderBundle::Blob* blob = bundle.find(shader_format_)) return *blob;
+    if (shader_format_ == ShaderBlobFormat::Dxbc)
         if (const ShaderBundle::Blob* hlsl = bundle.find(ShaderBlobFormat::Hlsl)) {
+            // Cached by the HLSL text and the profile, so a changed shader never picks up old code.
+            std::string_view text(reinterpret_cast<const char*>(hlsl->code.data()), hlsl->code.size());
+            u64 key = fnv1a(text) ^ (fnv1a(hlsl_profile(bundle.stage)) * 31);
+            if (auto cached = load_cached_shader(shader_cache_, key))
+                return ShaderBundle::Blob{ShaderBlobFormat::Dxbc, hlsl->entry_point, std::move(*cached)};
             std::string err;
             if (auto dxbc = compile_hlsl_to_dxbc(*hlsl, bundle.stage, name, err)) {
-                compiled = {ShaderBlobFormat::Dxbc, hlsl->entry_point, std::move(*dxbc)};
-                blob = &compiled;
-            } else {
-                error("gpu: HLSL for shader '{}' didn't compile: {}", name, err);
-                return nullptr;
+                store_cached_shader(shader_cache_, key, *dxbc);
+                return ShaderBundle::Blob{ShaderBlobFormat::Dxbc, hlsl->entry_point, std::move(*dxbc)};
             }
+            error("gpu: HLSL for shader '{}' didn't compile: {}", name, err);
+            return std::nullopt;
         }
-    }
-    if (!blob) {
-        error("gpu: shader '{}' has no code for the {} backend (rebuild shaders?)", name, driver_);
+    error("gpu: shader '{}' has no code for the {} backend (rebuild shaders?)", name, driver_);
+    return std::nullopt;
+}
+
+std::unique_ptr<ComputeShader> GpuDevice::create_compute_shader(const ShaderBundle& bundle, std::string_view name) {
+    if (bundle.stage != ShaderStage::Compute) {
+        error("gpu: '{}' isn't a compute shader", name);
         return nullptr;
     }
+    auto blob = code_for(bundle, name);
+    if (!blob) return nullptr;
+    SDL_GPUComputePipelineCreateInfo info{};
+    std::vector<u8> code = blob->code;
+    info.format = shader_format_ == ShaderBlobFormat::Msl    ? SDL_GPU_SHADERFORMAT_MSL
+                  : shader_format_ == ShaderBlobFormat::Dxbc ? SDL_GPU_SHADERFORMAT_DXBC
+                                                             : SDL_GPU_SHADERFORMAT_SPIRV;
+    if (info.format == SDL_GPU_SHADERFORMAT_MSL) code.push_back(0); // MSL source must be NUL-terminated
+    info.code = code.data();
+    info.code_size = blob->code.size();
+    info.entrypoint = blob->entry_point.c_str();
+    info.num_samplers = bundle.samplers;
+    info.num_readonly_storage_textures = bundle.storage_textures;
+    info.num_readonly_storage_buffers = bundle.storage_buffers;
+    info.num_readwrite_storage_textures = bundle.readwrite_storage_textures;
+    info.num_readwrite_storage_buffers = bundle.readwrite_storage_buffers;
+    info.num_uniform_buffers = bundle.uniform_buffers;
+    info.threadcount_x = bundle.threads[0];
+    info.threadcount_y = bundle.threads[1];
+    info.threadcount_z = bundle.threads[2];
+    SDL_GPUComputePipeline* pipeline = SDL_CreateGPUComputePipeline(device_, &info);
+    if (!pipeline) {
+        error("gpu: SDL_CreateGPUComputePipeline '{}' failed: {}", name, SDL_GetError());
+        return nullptr;
+    }
+    auto c = std::unique_ptr<ComputeShader>(new ComputeShader());
+    c->device_ = this;
+    c->pipeline_ = pipeline;
+    for (int i = 0; i < 3; ++i) c->threads_[i] = bundle.threads[i];
+    c->readonly_buffers_ = bundle.storage_buffers;
+    c->readwrite_buffers_ = bundle.readwrite_storage_buffers;
+    return c;
+}
+
+std::unique_ptr<GpuBuffer> GpuDevice::create_buffer(u32 bytes, std::string_view name) {
+    bytes = std::max(bytes, 16u);
+    SDL_GPUBufferCreateInfo info{SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ | SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ |
+                                     SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_WRITE,
+                                 bytes, 0};
+    SDL_GPUBuffer* buffer = SDL_CreateGPUBuffer(device_, &info);
+    if (!buffer) {
+        error("gpu: buffer '{}' ({} bytes) failed: {}", name, bytes, SDL_GetError());
+        return nullptr;
+    }
+    SDL_SetGPUBufferName(device_, buffer, std::string(name).c_str());
+    auto b = std::unique_ptr<GpuBuffer>(new GpuBuffer());
+    b->device_ = this;
+    b->buffer_ = buffer;
+    b->size_ = bytes;
+    std::vector<u8> zeros(bytes, 0);
+    upload(buffer, zeros.data(), bytes);
+    return b;
+}
+
+std::unique_ptr<Shader> GpuDevice::create_shader(const ShaderBundle& bundle, std::string_view name) {
+    if (bundle.stage == ShaderStage::Compute) {
+        error("gpu: '{}' is a compute shader; load it as a ComputeShader", name);
+        return nullptr;
+    }
+    auto code = code_for(bundle, name);
+    if (!code) return nullptr;
+    const ShaderBundle::Blob* blob = &*code;
     SDL_GPUShaderCreateInfo info{};
     info.code = blob->code.data();
     info.code_size = blob->code.size();

@@ -8,6 +8,7 @@
 // Run with --frames N to quit after N frames (used for automated smoke runs).
 
 #include "ph/app/main.hpp"
+#include "ph/gfx/gpu_particles.hpp"
 #include "ph/gfx/sprite_sheet.hpp"
 #include "ph/gfx/text.hpp"
 
@@ -95,6 +96,8 @@ public:
         sdf_look_ = gfx::sdf_text_material(engine.assets(), {.outline_color = Color::hex(0x1a1f3d), .outline = 0.25f});
         if (engine.has_arg("--film")) film(engine);
         ball_ = engine.assets().add("generated/ball", make_ball_texture(engine.gpu()));
+        // --gpu-particles: a fountain simulated entirely on the GPU, under the sprites.
+        if (engine.has_arg("--gpu-particles")) fountain_.init(engine.gpu(), engine.assets(), 200000);
         blip_ = engine.assets().add("generated/blip", make_blip());
 
         // Fixed-rate simulation. Each of these runs in parallel across entities; the scheduler also runs systems with
@@ -179,6 +182,14 @@ public:
         });
         const Rect& b = engine.world().resource<Arena>().bounds;
         batch_.draw_rect({b.x - 4, b.bottom(), b.w + 8, 4}, Color::hex(0x6b7cff), 1e9f);
+        if (fountain_.capacity() > 1) {
+            gfx::GpuParticleSettings fountain{.rate = 60000, .position = {0, 200}, .radius = 6, .velocity = {0, -520},
+                                              .speed_spread = 160, .gravity = {0, 420}, .drag = 0.3f, .life_min = 1.5f,
+                                              .life_max = 3, .size_start = 5, .size_end = 1,
+                                              .color_start = {0.5f, 0.8f, 2.0f, 1}, .color_end = {0.9f, 0.3f, 1.4f, 0}};
+            fountain_.update(engine.renderer(), engine.delta(), fountain);
+            fountain_.draw(engine.renderer(), engine.camera(), ball_.get());
+        }
         engine.renderer().submit(batch_);
 
         // Screen-space HUD on its own camera, drawn after the world.
@@ -335,6 +346,7 @@ private:
     gfx::Material sdf_look_;
     std::unique_ptr<gfx::Texture> film_lut_;
     gfx::Material scanlines_;
+    gfx::GpuParticles fountain_;
     Asset<audio::Sound> blip_;
     gfx::SpriteBatch batch_, ui_;
     int spawn_rate_ = 40;

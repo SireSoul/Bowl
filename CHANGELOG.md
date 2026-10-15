@@ -6,6 +6,12 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Compute shaders: `ph-shaderc` compiles `.comp.glsl` for every backend in SDL_GPU's compute layout;
+  `gfx::ComputeShader` assets, `gfx::GpuBuffer`, `Renderer::dispatch` (`ComputeDispatch`), and
+  `Renderer::submit` for sprites a compute shader wrote. `gfx::GpuParticles`: particles simulated and drawn on the GPU
+  (the sprites sample's `--gpu-particles`).
+- Direct3D 12 keeps the DXBC it compiles from HLSL in `shader-cache/` in the user data folder
+  (`GpuDeviceDesc::shader_cache`, `load_cached_shader`, `store_cached_shader`).
 - Look: your own full-screen effects (`Renderer::post_effects`, `PostEffect`, `PostStage::Scene` and `Final`),
   color-grading lookup tables (`PostSettings::lut`, `make_neutral_lut`), chromatic aberration and film grain;
   emissive sprites (`submit_emissive`); normal-mapped lighting and shadows from occluders (`light_material`,
@@ -59,6 +65,7 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- `.phsh` bundles are format version 2 (compute fields); version 1 bundles still load.
 - Lighting is applied in its own pass before bloom (so scene effects see the lit image); bloom still comes from the
   scene's own bright pixels. `Renderer::submit(StaticSprites)` and the new submissions share one sprite path.
 - **Breaking:** `audio::Music`'s constructor takes the codec (`Music::Codec`). Loading through assets is unchanged.

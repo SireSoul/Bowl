@@ -1,6 +1,7 @@
 #include "ph/core/file.hpp"
 #include "ph/core/reflect.hpp"
 #include "ph/ecs/world_io.hpp"
+#include "ph/gfx/device.hpp"
 #include "ph/gfx/sprite.hpp"
 
 #include <doctest/doctest.h>
@@ -126,4 +127,19 @@ TEST_CASE("world files load as assets") {
     ecs::World other;
     CHECK(ecs::load_entities(other, level->document, ctx).size() == 1);
     CHECK_FALSE(assets.load<ecs::WorldFile>("bad.world"));
+}
+
+TEST_CASE("shader cache: stores code by key and refuses mismatches") {
+    auto dir = std::filesystem::temp_directory_path() / "ph_shader_cache_test";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    std::vector<u8> code = {1, 2, 3, 4, 5};
+    CHECK_FALSE(gfx::load_cached_shader(dir, 42));
+    gfx::store_cached_shader(dir, 42, code);
+    auto back = gfx::load_cached_shader(dir, 42);
+    REQUIRE(back);
+    CHECK(*back == code);
+    CHECK_FALSE(gfx::load_cached_shader(dir, 43));
+    CHECK_FALSE(gfx::load_cached_shader({}, 42)); // no cache folder: nothing cached
+    std::filesystem::remove_all(dir, ec);
 }

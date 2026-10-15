@@ -29,9 +29,9 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   effect chain, color-grading LUTs, chromatic aberration, film grain~~ (done)
 - ~~2D lighting: additive light map, ambient color, emissive sprites, normal-mapped sprites, shadow casting~~ (done)
 - ~~Custom materials: user fragment shaders per batch, extra textures, uniforms, blend modes~~ (done)
-- ~~D3D12: HLSL in shader bundles, compiled to DXBC on Windows; CI renders a sample on D3D12 (WARP)~~ (done).
-  Later: cache compiled DXBC on disk, DXIL via DXC for Shader Model 6 features
-- ~~Particles (CPU, deterministic, reflected settings)~~ and ~~easing + tweens~~ (done). Later: GPU particles (compute)
+- ~~D3D12: HLSL in shader bundles, compiled to DXBC on Windows and cached on disk; CI renders a sample on D3D12
+  (WARP)~~ (done). Later: DXIL via DXC for Shader Model 6 features
+- ~~Particles (CPU, deterministic, reflected settings), GPU particles, compute shaders~~ and ~~easing + tweens~~ (done)
 
 ## M4: iterate faster than anyone
 - ~~Game-code hot reload: game library reloaded on rebuild, world kept, rebuilt automatically when a source file is
@@ -64,6 +64,5 @@ would otherwise be for.
 ## Known limitations
 - Max 256 component types (`PH_ECS_MAX_COMPONENTS` raises it)
 - Archetypes are never freed. Fine for games, but worth compacting eventually
-- Compute shaders aren't supported by `ph-shaderc` yet
 - Game shaders can't `#include` the engine's shader files by path
 - Assets load synchronously on the main thread; there's no background loading yet
