@@ -124,10 +124,30 @@ Archetype& World::archetype_for(const ComponentMask& mask) {
     if (auto it = by_mask_.find(mask); it != by_mask_.end()) return *it->second;
     std::vector<ComponentId> comps;
     mask.for_each([&](ComponentId c) { comps.push_back(c); });
-    archetypes_.push_back(std::make_unique<Archetype>(static_cast<u32>(archetypes_.size()), std::move(comps)));
+    archetypes_.push_back(std::make_unique<Archetype>(next_archetype_id_++, std::move(comps)));
     Archetype* a = archetypes_.back().get();
     by_mask_.emplace(mask, a);
     return *a;
+}
+
+usize World::compact() {
+    check_unlocked();
+    auto unused = [&](const std::unique_ptr<Archetype>& a) { return a->empty() && a.get() != empty_; };
+    usize freed = static_cast<usize>(std::count_if(archetypes_.begin(), archetypes_.end(), unused));
+    if (freed == 0) return 0;
+    // Nothing may point at what goes: the mask lookup, and the add/remove shortcuts between archetypes.
+    for (const auto& a : archetypes_) {
+        if (unused(a)) {
+            by_mask_.erase(a->mask());
+            continue;
+        }
+        auto gone = [&](const auto& kv) { return kv.second->empty() && kv.second != empty_; };
+        std::erase_if(a->add_edges, gone);
+        std::erase_if(a->remove_edges, gone);
+    }
+    std::erase_if(archetypes_, unused);
+    ++layout_epoch_;
+    return freed;
 }
 
 Archetype& World::archetype_with(Archetype& from, ComponentId added) {
@@ -187,6 +207,7 @@ void World::reset() {
     hooks_.clear();
     resources_.clear();
     archetypes_.clear(); // destroys every component
+    ++layout_epoch_; // queries made before must not keep pointers into the old archetypes
     by_mask_.clear();
     records_.clear();
     free_.clear();

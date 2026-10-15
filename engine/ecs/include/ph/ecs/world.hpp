@@ -130,6 +130,13 @@ public:
     std::span<const std::unique_ptr<Archetype>> archetypes() const { return archetypes_; }
     // Bumped whenever a new archetype appears; queries use it to refresh their caches.
     usize archetype_generation() const { return archetypes_.size(); }
+    // Bumped by compact(), which removes archetypes: queries start their caches over when it changes.
+    u64 layout_epoch() const { return layout_epoch_; }
+
+    // Frees the archetypes (component combinations) no entity uses any more. Each one costs a little memory and a
+    // little time in queries, so a world that goes through many combinations (between levels, after a big cleanup)
+    // can call this now and then. Returns how many were freed.
+    usize compact();
 
     struct LockGuard {
         World& w;
@@ -186,6 +193,8 @@ private:
     std::vector<std::unique_ptr<Archetype>> archetypes_;
     std::unordered_map<ComponentMask, Archetype*, ComponentMaskHash> by_mask_;
     Archetype* empty_ = nullptr;
+    u64 layout_epoch_ = 0;
+    u32 next_archetype_id_ = 0;
 
     std::vector<std::unique_ptr<Hooks>> hooks_;
     std::unordered_map<TypeId, std::unique_ptr<ResourceBase>> resources_;
@@ -324,6 +333,11 @@ public:
 
 private:
     void refresh() {
+        if (epoch_ != world_->layout_epoch()) { // archetypes were freed: start over
+            epoch_ = world_->layout_epoch();
+            matches_.clear();
+            seen_ = 0;
+        }
         auto archetypes = world_->archetypes();
         for (; seen_ < archetypes.size(); ++seen_) {
             Archetype* a = archetypes[seen_].get();
@@ -336,6 +350,7 @@ private:
     std::vector<Archetype*> matches_;
     std::vector<usize> offsets_;
     usize seen_ = 0;
+    u64 epoch_ = 0;
 };
 
 // World templates

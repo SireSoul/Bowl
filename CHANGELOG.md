@@ -6,6 +6,7 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- `ecs::World::compact` frees archetypes no entity uses; queries notice (`World::layout_epoch`) and refresh.
 - Game shaders can `#include "engine/shaders/common.glsl"`: ph-shaderc takes include roots (`--include
   <prefix>=<folder>`, `CompileOptions::include_roots`), and builds and dev reloads pass the engine's.
 - Bowl Editor: Level, Data and Paint workspaces. Data edits every JSON file in the assets folder as a tree and as text,
