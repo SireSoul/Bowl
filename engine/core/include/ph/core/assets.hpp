@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ph/core/archive.hpp"
 #include "ph/core/file.hpp"
 #include "ph/core/type_id.hpp"
 #include "ph/core/types.hpp"
@@ -85,8 +86,8 @@ template <class T> using AssetLoader = std::function<std::unique_ptr<T>(AssetLoa
 // pixels, decoded samples). Must be thread-safe. Null: nothing to prepare.
 using AssetDecoder = std::function<std::shared_ptr<void>(std::string_view path, std::span<const u8> bytes)>;
 
-// Loads and caches assets by virtual path from an ordered list of mounted folders. Main thread only (load_async does
-// its file reading and decoding on a thread of its own).
+// Loads and caches assets by virtual path from an ordered list of mounted folders and archives. Main thread only
+// (load_async does its file reading and decoding on a thread of its own).
 // If a reload fails (say, a shader with a syntax error), the previous value stays in place.
 class AssetManager : NonCopyable {
 public:
@@ -95,7 +96,14 @@ public:
 
     // Files under `virtual_prefix` (e.g. "engine/" or "") resolve into `directory`. Earlier mounts win.
     void mount(std::string virtual_prefix, std::filesystem::path directory);
+    // The same, from an archive (.phpak, see ph/core/archive.hpp). False if it isn't one.
+    bool mount_archive(std::string virtual_prefix, const std::filesystem::path& archive);
+    // The real file a virtual path reads from, for code that needs one (a font library, a compiler). Nothing when the
+    // file is missing or inside an archive: read() works for both.
     std::optional<std::filesystem::path> resolve(std::string_view virtual_path) const;
+    bool exists(std::string_view virtual_path) const;
+    // A file's bytes by virtual path, from whichever mount has it. Not cached and not watched: load assets with load().
+    std::optional<std::vector<u8>> read(std::string_view virtual_path) const;
 
     template <class T> void register_loader(AssetLoader<T> loader) {
         auto& slot = loaders_[type_id<T>()];
@@ -149,6 +157,7 @@ public:
     std::vector<Info> list() const;
 
 private:
+    friend class AssetLoadContext;
     struct LoaderSlot {
         std::shared_ptr<void> loader; // AssetLoader<T>
         u64 serial;
@@ -184,13 +193,22 @@ private:
     struct Mount {
         std::string prefix;
         std::filesystem::path directory;
+        std::shared_ptr<const Archive> archive; // set: read from this instead of the directory
     };
+    // Where a virtual path's bytes come from: a real file, or a file in an archive.
+    struct Source {
+        std::filesystem::path file;
+        std::shared_ptr<const Archive> archive;
+        std::string name;
+    };
+    std::optional<Source> locate(std::string_view virtual_path) const;
+    static std::optional<std::vector<u8>> read_source(const Source& source);
 
     template <class T> Entry& make_entry(Key key, bool from_file);
     template <class T>
     bool run_loader(Entry& entry, std::optional<std::vector<u8>> prefetched = {}, std::shared_ptr<void> prepared = {});
     struct Background; // the loading thread and its queues
-    void start_background(const Key& key, std::filesystem::path file, std::shared_ptr<AssetDecoder> decoder);
+    void start_background(const Key& key, Source source, std::shared_ptr<AssetDecoder> decoder);
     void watch_dependencies(Entry& entry, const std::vector<std::filesystem::path>& files);
     void notify(std::string_view path, bool ok);
 
@@ -261,8 +279,8 @@ template <class T> Asset<T> AssetManager::load_async(std::string_view path) {
     if (auto it = entries_.find(key); it != entries_.end())
         return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(it->second->slot));
     Entry& entry = make_entry<T>(key, true);
-    auto file = resolve(path);
-    if (!file) { // nothing to read: fail (and start watching) the usual way
+    auto source = locate(path);
+    if (!source) { // nothing to read: fail (and start watching) the usual way
         run_loader<T>(entry);
         return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(entry.slot));
     }
@@ -271,7 +289,7 @@ template <class T> Asset<T> AssetManager::load_async(std::string_view path) {
         return run_loader<T>(e, std::move(bytes), std::move(prepared));
     };
     auto decoder = decoders_.find(type_id<T>());
-    start_background(key, std::move(*file), decoder == decoders_.end() ? nullptr : decoder->second);
+    start_background(key, std::move(*source), decoder == decoders_.end() ? nullptr : decoder->second);
     return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(entry.slot));
 }
 

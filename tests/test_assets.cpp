@@ -1,3 +1,4 @@
+#include "ph/core/archive.hpp"
 #include "ph/core/assets.hpp"
 #include "ph/core/file.hpp"
 
@@ -190,4 +191,50 @@ TEST_CASE("assets: background loads read and decode on another thread, then fini
     // A missing file fails at once, like load().
     CHECK_FALSE(assets.load_async<Shouted>("missing.txt"));
     CHECK(assets.loading() == 0);
+}
+
+TEST_CASE("assets: archives hold a folder and mount like one") {
+    fs::path src = temp_dir("archive_src"), out = temp_dir("archive_out");
+    write(src / "a.txt", "alpha");
+    write(src / "sub" / "b.txt", "beta");
+    fs::create_directories(src / "empty");
+    REQUIRE(write_archive(out / "pack.phpak", src));
+
+    auto archive = Archive::open(out / "pack.phpak");
+    REQUIRE(archive);
+    CHECK(archive->names() == std::vector<std::string>{"a.txt", "sub/b.txt"});
+    CHECK(archive->contains("sub/b.txt"));
+    CHECK_FALSE(archive->contains("b.txt"));
+    auto b = archive->read("sub/b.txt");
+    REQUIRE(b);
+    CHECK(std::string(b->begin(), b->end()) == "beta");
+    CHECK_FALSE(archive->read("missing"));
+    write(out / "not.phpak", "PHPK but not really");
+    CHECK_FALSE(Archive::open(out / "not.phpak"));
+    CHECK_FALSE(Archive::open(out / "missing.phpak"));
+
+    // The same folder makes the same archive.
+    REQUIRE(write_archive(out / "again.phpak", src));
+    CHECK(read_file_bytes(out / "pack.phpak") == read_file_bytes(out / "again.phpak"));
+
+    // Mounted: loads, sync and in the background; earlier mounts still win.
+    fs::path loose = temp_dir("archive_loose");
+    write(loose / "a.txt", "loose alpha");
+    AssetManager assets;
+    register_text(assets);
+    REQUIRE(assets.mount_archive("data/", out / "pack.phpak"));
+    assets.mount("data/", loose);
+    CHECK_FALSE(assets.mount_archive("", out / "not.phpak"));
+    CHECK(assets.load<Text>("data/a.txt")->value == "alpha");
+    auto later = assets.load_async<Text>("data/sub/b.txt");
+    for (int i = 0; i < 500 && assets.loading(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        assets.finish_loads();
+    }
+    REQUIRE(later);
+    CHECK(later->value == "beta");
+    CHECK(assets.exists("data/sub/b.txt"));
+    CHECK_FALSE(assets.resolve("data/sub/b.txt")); // no real file to point at
+    CHECK(assets.read("data/a.txt") == std::optional<std::vector<u8>>(std::vector<u8>{'a', 'l', 'p', 'h', 'a'}));
+    CHECK_FALSE(assets.exists("data/nothing.txt"));
 }

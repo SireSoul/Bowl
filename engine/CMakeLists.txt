@@ -29,6 +29,7 @@ find_package(Threads REQUIRED)
 
 ph_module(core
     SOURCES
+        core/src/archive.cpp
         core/src/assets.cpp
         core/src/core.cpp
         core/src/file.cpp

@@ -28,7 +28,8 @@
         "CMAKE_BUILD_TYPE": "Release",
         "PH_DEV_TOOLS": "OFF",
         "PH_FETCH_SDL": "ON",
-        "PH_MACOS_BUNDLES": "ON"
+        "PH_MACOS_BUNDLES": "ON",
+        "PH_PACK_ASSETS": "ON"
       }
     }
   ],

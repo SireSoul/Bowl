@@ -114,7 +114,7 @@ struct AppRunner {
         audio::register_asset_loaders(e.assets_);
         register_string_table_loader(e.assets_);
         ecs::register_world_file_loader(e.assets_);
-        if (e.assets_.resolve("lang/" + e.config_.fallback_language + ".json")) {
+        if (e.assets_.exists("lang/" + e.config_.fallback_language + ".json")) {
             e.i18n_.set_fallback(e.config_.fallback_language);
             e.i18n_.set_language(e.config_.language);
         }
@@ -163,8 +163,14 @@ struct AppRunner {
         e.assets_.mount("engine/", PH_ENGINE_ASSET_SOURCE_DIR);
         if (!e.config_.game_asset_dir.empty()) e.assets_.mount("", e.config_.game_asset_dir);
 #endif
-        e.assets_.mount("engine/", base / "engine");
-        e.assets_.mount("", base / "assets");
+        // Shipping builds may have their folders packed into archives (PH_PACK_ASSETS).
+        auto mount = [&](const char* prefix, const char* name) {
+            std::error_code ec;
+            fs::path archive = base / (std::string(name) + ".phpak");
+            if (!fs::is_regular_file(archive, ec) || !e.assets_.mount_archive(prefix, archive)) e.assets_.mount(prefix, base / name);
+        };
+        mount("engine/", "engine");
+        mount("", "assets");
     }
 
     SDL_AppResult iterate() {

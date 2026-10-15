@@ -32,6 +32,7 @@ tools/
   shaderc/                ph-shaderc: library and command-line tool
   atlas/                  ph-atlas: packs pictures into an atlas with sprite-sheet JSON
   icon/                   ph-icon: application icons from one picture
+  pack/                   ph-pack: asset archives (.phpak)
 editor/                   Bowl Editor
 samples/
   icon.png                the samples' application icon

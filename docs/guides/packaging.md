@@ -23,7 +23,7 @@ What it changes from `dev`:
 | Assertions | on | off |
 | SDL | installed copy if present, else static | always built from source and linked statically |
 | macOS | plain executables | `.app` bundles |
-| Assets read from | your source folders first | next to the executable only |
+| Assets read from | your source folders first | next to the executable only, packed into `.phpak` archives (`PH_PACK_ASSETS`) |
 
 Static SDL means the game has no SDL library to ship alongside it.
 
@@ -41,8 +41,8 @@ Every game target (every `ph_add_game`) is laid out in `dist`:
 dist/
   my_game/
     my_game(.exe)
-    engine/        engine shaders and the default font
-    assets/        your assets, with compiled shaders
+    engine.phpak   engine shaders and the default font
+    assets.phpak   your assets, with compiled shaders
 ```
 
 **macOS**: one self-contained application bundle per game.
@@ -52,14 +52,17 @@ dist/
   my_game.app/
     Contents/
       MacOS/my_game
-      Resources/engine/
-      Resources/assets/
+      Resources/engine.phpak
+      Resources/assets.phpak
       Info.plist
 ```
 
 The bundle's identifier defaults to `com.bowl.<target>`; set yours with
 `ph_add_game(my_game ... BUNDLE_ID com.yourstudio.mygame)`. The bundle version comes from the `project(... VERSION)`
 in your `CMakeLists.txt`.
+
+Without `PH_PACK_ASSETS` (the default outside the `release` preset), `engine/` and `assets/` are folders of loose files
+instead of archives; the engine reads either (see [Assets](assets.md#archives)).
 
 Zip the folder (or the `.app`) and it runs on another machine of the same OS and architecture. Or let
 [`ph_package`](#installers) make installers.
@@ -225,5 +228,4 @@ real Deck before shipping: performance, suspend and resume, and the on-screen ke
 
 These are on the [roadmap](../roadmap.md):
 
-- iOS and Android packaging;
-- packing assets into an archive (they're loose files today).
+- iOS and Android packaging.

@@ -6,6 +6,9 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Asset archives: `ph::Archive`, `write_archive`, `AssetManager::mount_archive`, `read` and `exists`; the `ph-pack`
+  tool; `PH_PACK_ASSETS` (on in the `release` preset) ships `engine.phpak` and `assets.phpak`, which the App mounts
+  when they're next to the game.
 - Packaging: `ph_add_game(... NAME <name> ICON <png> [ICON_PIXEL_ART])` makes the `.icns`, the `.ico` (built into the
   `.exe`), Linux PNG and desktop files, and the window icon (`ph::embedded_icon`, `Window::set_icon`); the `ph-icon`
   tool. Installing signs macOS bundles (`PH_MACOS_SIGN_IDENTITY`, ad hoc by default; `PH_MACOS_ENTITLEMENTS`) and,

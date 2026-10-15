@@ -57,15 +57,36 @@ The engine sets up these mounts:
 
 | Prefix | Dev builds | All builds |
 | --- | --- | --- |
-| `engine/` | `<engine source>/engine/assets/` first | `<exe dir>/engine/` |
-| (none) | your game's `ASSETS` folder first | `<exe dir>/assets/` |
+| `engine/` | `<engine source>/engine/assets/` first | `<exe dir>/engine.phpak` if it's there, else `<exe dir>/engine/` |
+| (none) | your game's `ASSETS` folder first | `<exe dir>/assets.phpak` if it's there, else `<exe dir>/assets/` |
 
 So `"characters/hero.png"` is `assets/characters/hero.png` in your source tree, and `"engine/fonts/Roboto-Medium.ttf"`
 is the engine's font. Because dev builds read the source folders directly, saving a file there is all it takes to
 update the game. Release builds read only the copies next to the executable.
 
-Add your own mounts with `assets.mount(prefix, folder)` (for mods or downloadable content, for example);
-`assets.resolve(path)` returns the real file a path maps to, if any.
+Add your own mounts with `assets.mount(prefix, folder)` (for mods or downloadable content, for example), or
+`assets.mount_archive(prefix, file)` for an archive. `assets.read(path)` reads a file's bytes from whichever mount
+has it, and `assets.exists(path)` says whether one does. `assets.resolve(path)` returns the real file a path maps to,
+for code that needs a file on disk; files inside archives have none.
+
+### Archives
+
+An archive (`.phpak`) holds a whole folder in one file. Shipping builds made with `PH_PACK_ASSETS` (on in the
+`release` preset) put `engine/` and `assets/` into `engine.phpak` and `assets.phpak`, and the engine mounts those
+instead: fewer files to install, and nothing for players to poke at by accident. The `ph-pack` tool makes and lists
+them:
+
+```bash
+ph-pack assets -o assets.phpak
+```
+
+```bash
+ph-pack --list assets.phpak
+```
+
+Files are stored as they are, without compression; pictures and sounds are compressed already. Archives are read
+only and never hot-reload. In code, `ph::Archive` (`ph/core/archive.hpp`) opens one and `ph::write_archive` makes
+one.
 
 ## Asset handles
 

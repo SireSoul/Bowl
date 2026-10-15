@@ -47,8 +47,7 @@ would otherwise be for.
 
 ## M5: everywhere
 - ~~Packaging: release builds with static SDL, macOS .app bundles, `cmake --install` layouts, app icons, code signing
-  and notarization, installers (DMG, NSIS), Linux AppImage and Flatpak, Steam Deck checks~~ (done). Later: packing
-  assets into an archive
+  and notarization, installers (DMG, NSIS), Linux AppImage and Flatpak, Steam Deck checks, asset archives~~ (done)
 - iOS and Android projects (SDL3 already supports them; needs bundle and asset packaging)
 - Web build (Emscripten + WebGPU once SDL_GPU supports it)
 - Consoles through SDL's console ports (needs developer agreements)

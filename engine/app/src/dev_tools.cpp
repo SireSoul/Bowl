@@ -14,6 +14,7 @@
 #include <imgui_impl_sdlgpu3.h>
 
 #include <algorithm>
+#include <cstring>
 #include <format>
 
 namespace ph {
@@ -32,8 +33,11 @@ DevTools::DevTools(Engine& engine) : engine_(engine) {
     style.FontScaleDpi = scale;
     style.WindowRounding = 6;
     style.FrameRounding = 4;
-    if (auto font = engine.assets().resolve("engine/fonts/Roboto-Medium.ttf"))
-        io.Fonts->AddFontFromFileTTF(font->string().c_str(), 15.0f);
+    if (auto font = engine.assets().read("engine/fonts/Roboto-Medium.ttf")) {
+        void* data = IM_ALLOC(font->size()); // the atlas owns and frees it
+        std::memcpy(data, font->data(), font->size());
+        io.Fonts->AddFontFromMemoryTTF(data, static_cast<int>(font->size()), 15.0f);
+    }
 
     ImGui_ImplSDL3_InitForSDLGPU(engine.window().handle());
     ImGui_ImplSDLGPU3_InitInfo init{};

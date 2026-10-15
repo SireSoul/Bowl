@@ -22,6 +22,7 @@ Set them on the configure line (`-DPH_DEV_TOOLS=OFF`) or in your own presets.
 | `PH_FETCH_SDL` | `OFF` | Build SDL3 from source (statically) even if an installed SDL3 is found |
 | `PH_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in engine, tool, test and game code as errors (CI turns this on for Linux and macOS) |
 | `PH_MACOS_BUNDLES` | `OFF` | Build macOS games as `.app` bundles |
+| `PH_PACK_ASSETS` | `OFF` | Pack each game's `engine/` and `assets/` folders into `.phpak` archives ([assets](../guides/assets.md#archives)) |
 | `PH_MACOS_SIGN_IDENTITY` | `-` | codesign identity for installed `.app` bundles: `-` signs ad hoc, `Developer ID Application: ...` for shipping, empty skips ([packaging](../guides/packaging.md#signing-and-notarization)) |
 | `PH_MACOS_ENTITLEMENTS` | empty | An entitlements file for codesign |
 | `PH_WINDOWS_SIGN_COMMAND` | empty | A command (a CMake list) run on each installed `.exe` to sign it, such as `signtool;sign;/fd;SHA256;/a` |
@@ -41,7 +42,7 @@ From `CMakePresets.json`. Each configure preset has a matching build preset; `de
 | --- | --- | --- |
 | `dev` | `RelWithDebInfo` | `PH_DEV_TOOLS=ON` |
 | `debug` | `Debug` | `PH_DEV_TOOLS=ON` |
-| `release` | `Release` | `PH_DEV_TOOLS=OFF`, `PH_FETCH_SDL=ON`, `PH_MACOS_BUNDLES=ON` |
+| `release` | `Release` | `PH_DEV_TOOLS=OFF`, `PH_FETCH_SDL=ON`, `PH_MACOS_BUNDLES=ON`, `PH_PACK_ASSETS=ON` |
 
 All presets build into `build/<preset>` and export `compile_commands.json`.
 
@@ -54,6 +55,7 @@ All presets build into `build/<preset>` and export `compile_commands.json`.
 | `ph-shaderc` | The shader compiler executable |
 | `ph_shaderc` | The shader compiler as a library |
 | `ph-icon` | Makes application icons (`.icns`, `.ico`, PNGs) from one picture; `ph_add_game(... ICON)` runs it |
+| `ph-pack` | Packs a folder into an asset archive (`.phpak`), or lists one |
 | `ph_engine_assets` | Compiles the engine's shaders |
 | `ph_tests`, `ph_bench_ecs` | Tests and benchmark |
 | `<game>_assets` | Created by `ph_add_game`: copies and compiles a game's assets |
