@@ -1097,6 +1097,7 @@ struct Glyph {
     Vec2 offset;    // from the pen position on the baseline to the bitmap's top-left, in pixels
     f32 advance = 0;
     bool visible = false; // false for whitespace
+    bool color = false;   // a color glyph (emoji): drawn as it is, not in the text color
 };
 ```
 
@@ -1168,6 +1169,12 @@ const Texture* sdf_page(u16 index);
 usize page_count() const;
 ```
 
+A page's pixels (RGBA8, premultiplied, page_size x page_size), for tools and tests.
+
+```cpp
+std::span<const u8> page_pixels(u16 index) const;
+```
+
 ```cpp
 enum class TextAlign : u8 { Left, Center, Right };
 ```
@@ -1212,6 +1219,7 @@ struct PlacedGlyph {
     u32 index = 0;      // among the visible characters, from 0
     u16 page = 0;
     bool sdf = false;
+    bool color_glyph = false; // an emoji: its color is white with the text's alpha, so it keeps its own colors
     Rect source;        // in the font page
     Vec2 position;      // top-left corner in the world
     Vec2 size;          // in the world

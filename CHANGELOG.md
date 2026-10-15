@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Color emoji: fonts with `sbix`, `CBDT`/`CBLC` or `COLR`/`CPAL` (v0) tables draw their characters in color
+  (`Font::Glyph::color`, `PlacedGlyph::color_glyph`); `Font::page_pixels`.
 - API reference: `docs/reference/api`, one page per module made from the headers' comments by `ph-apidoc`
   (`ph_api_docs` target).
 - Asset archives: `ph::Archive`, `write_archive`, `AssetManager::mount_archive`, `read` and `exists`; the `ph-pack`

@@ -64,6 +64,7 @@ ph_module(platform
 
 ph_module(gfx
     SOURCES
+        gfx/src/color_glyphs.cpp
         gfx/src/device.cpp
         gfx/src/gpu_particles.cpp
         gfx/src/loaders.cpp

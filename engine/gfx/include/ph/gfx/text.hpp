@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -25,6 +26,7 @@ public:
         Vec2 offset;    // from the pen position on the baseline to the bitmap's top-left, in pixels
         f32 advance = 0;
         bool visible = false; // false for whitespace
+        bool color = false;   // a color glyph (emoji): drawn as it is, not in the text color
     };
     struct Metrics {
         f32 ascent, descent, line_gap; // pixels at the given size; descent is negative
@@ -60,6 +62,10 @@ public:
     const Texture* page(u16 index);
     const Texture* sdf_page(u16 index);
     usize page_count() const { return pages_.size(); }
+    // A page's pixels (RGBA8, premultiplied, page_size x page_size), for tools and tests.
+    std::span<const u8> page_pixels(u16 index) const {
+        return index < pages_.size() ? std::span<const u8>(pages_[index].pixels) : std::span<const u8>();
+    }
 
 private:
     Font() = default;
@@ -129,6 +135,7 @@ struct PlacedGlyph {
     u32 index = 0;      // among the visible characters, from 0
     u16 page = 0;
     bool sdf = false;
+    bool color_glyph = false; // an emoji: its color is white with the text's alpha, so it keeps its own colors
     Rect source;        // in the font page
     Vec2 position;      // top-left corner in the world
     Vec2 size;          // in the world

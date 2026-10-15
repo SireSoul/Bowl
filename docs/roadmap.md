@@ -6,7 +6,7 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - ~~Sprite sheets and animation: Aseprite JSON (tags, durations, ping-pong, repeat, trimming), `SpriteAnimator`,
   slices (hitboxes, nine-slice, pivots), animation events by name, frames by name, the `ph-atlas` packer~~ (done)
 - ~~Text: TTF fonts, `draw_text`, UTF-8, kerning, wrapping, alignment, outlines and shadows, rich text markup,
-  font fallback chains, SDF text~~ (done). Later: color emoji, right-to-left and complex scripts (shaping)
+  font fallback chains, SDF text, color emoji~~ (done). Later: right-to-left and complex scripts (shaping)
 - ~~Tilemaps: Tiled `.tmj`/`.tsj` and `.tmx`/`.tsx`, orthogonal, isometric, staggered and hexagonal, infinite
   maps, compressed layers, flips, animated tiles, objects, properties, y-sorting, GPU-cached chunks for very large
   maps, object templates, Wang sets as data~~ (done)

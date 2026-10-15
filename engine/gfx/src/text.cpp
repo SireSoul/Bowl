@@ -1,11 +1,15 @@
 #include "ph/gfx/text.hpp"
 
+#include "color_glyphs.hpp"
 #include "ph/core/log.hpp"
 #include "ph/core/utf8.hpp"
 
 #include <algorithm>
 #include <charconv>
+#include <climits>
 #include <cmath>
+#include <optional>
+#include <span>
 
 #if defined(__clang__) || defined(__GNUC__)
 #pragma GCC diagnostic push
@@ -24,12 +28,59 @@ namespace ph::gfx {
 struct Font::Impl {
     std::vector<u8> data;
     stbtt_fontinfo info{};
+    color::Tables colors; // emoji
 };
 
 struct Font::Face {
     const stbtt_fontinfo* info = nullptr;
     int index = 0; // 0: the font's "missing" glyph
+    const Impl* impl = nullptr;
 };
+
+namespace {
+
+// A color glyph's picture at `scale` (emoji): a PNG from sbix or CBDT, or COLR layers drawn in their palette colors.
+// Nothing for a plain glyph.
+std::optional<color::Bitmap> color_picture(const stbtt_fontinfo* info, std::span<const u8> data, const color::Tables& tables,
+                                           int index, f32 scale) {
+    if (!tables.any()) return std::nullopt;
+    if (auto b = color::bitmap_glyph(data, tables, static_cast<u32>(index), scale * static_cast<f32>(tables.units_per_em)))
+        return b;
+    auto layers = color::layers(data, tables, static_cast<u32>(index));
+    if (layers.empty()) return std::nullopt;
+    int ux0 = INT_MAX, uy0 = INT_MAX, ux1 = INT_MIN, uy1 = INT_MIN;
+    for (const auto& [glyph, c] : layers) {
+        int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+        stbtt_GetGlyphBitmapBox(info, static_cast<int>(glyph), scale, scale, &x0, &y0, &x1, &y1);
+        if (x1 <= x0 || y1 <= y0) continue;
+        ux0 = std::min(ux0, x0), uy0 = std::min(uy0, y0), ux1 = std::max(ux1, x1), uy1 = std::max(uy1, y1);
+    }
+    if (ux1 <= ux0 || uy1 <= uy0) return std::nullopt;
+    color::Bitmap b;
+    b.width = static_cast<u32>(ux1 - ux0);
+    b.height = static_cast<u32>(uy1 - uy0);
+    b.rgba.assign(static_cast<usize>(b.width) * b.height * 4, 0);
+    b.offset = {static_cast<f32>(ux0), static_cast<f32>(uy0)};
+    for (const auto& [glyph, c] : layers) { // bottom layer first, each painted over the last
+        int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+        stbtt_GetGlyphBitmapBox(info, static_cast<int>(glyph), scale, scale, &x0, &y0, &x1, &y1);
+        int w = x1 - x0, h = y1 - y0;
+        if (w <= 0 || h <= 0) continue;
+        std::vector<u8> alpha(static_cast<usize>(w) * static_cast<usize>(h));
+        stbtt_MakeGlyphBitmap(info, alpha.data(), w, h, w, scale, scale, static_cast<int>(glyph));
+        Color paint = c.value_or(Color::white()); // the text color layer: white, tinted when drawn
+        for (int row = 0; row < h; ++row)
+            for (int col = 0; col < w; ++col) {
+                f32 a = alpha[static_cast<usize>(row * w + col)] / 255.0f * paint.a;
+                u8* p = &b.rgba[(static_cast<usize>(y0 - uy0 + row) * b.width + static_cast<usize>(x0 - ux0 + col)) * 4];
+                const f32 src[4] = {paint.r * a, paint.g * a, paint.b * a, a};
+                for (int k = 0; k < 4; ++k) p[k] = static_cast<u8>(std::lround(src[k] * 255.0f + p[k] * (1.0f - a)));
+            }
+    }
+    return b;
+}
+
+} // namespace
 
 Font::~Font() = default;
 
@@ -43,6 +94,7 @@ std::unique_ptr<Font> Font::from_memory(GpuDevice* device, std::vector<u8> ttf, 
         error("font '{}': not a TrueType/OpenType font", name);
         return nullptr;
     }
+    font->impl_->colors = color::find_tables(font->impl_->data, static_cast<u32>(offset));
     font->device_ = device;
     font->name_ = std::string(name);
     return font;
@@ -60,12 +112,12 @@ void Font::set_fallbacks(std::vector<Asset<Font>> fonts) {
 }
 
 Font::Face Font::face_for(u32 codepoint) const {
-    if (int i = stbtt_FindGlyphIndex(&impl_->info, static_cast<int>(codepoint)); i != 0) return {&impl_->info, i};
+    if (int i = stbtt_FindGlyphIndex(&impl_->info, static_cast<int>(codepoint)); i != 0) return {&impl_->info, i, impl_.get()};
     for (const Asset<Font>& f : fallbacks_)
         if (f && f.get() != this)
             if (int i = stbtt_FindGlyphIndex(&f->impl_->info, static_cast<int>(codepoint)); i != 0)
-                return {&f->impl_->info, i};
-    return {&impl_->info, 0};
+                return {&f->impl_->info, i, f->impl_.get()};
+    return {&impl_->info, 0, impl_.get()};
 }
 
 bool Font::has_glyph(u32 codepoint) const { return face_for(codepoint).index != 0; }
@@ -133,8 +185,22 @@ const Font::Glyph& Font::glyph(u32 codepoint, f32 pixel_size) {
     Glyph g;
     g.advance = advance * scale;
     g.offset = {static_cast<f32>(x0), static_cast<f32>(y0)};
-    u32 w = static_cast<u32>(std::max(0, x1 - x0)), h = static_cast<u32>(std::max(0, y1 - y0));
     u32 ax = 0, ay = 0;
+    if (auto picture = color_picture(face.info, face.impl->data, face.impl->colors, face.index, scale)) {
+        if (place(pages_, picture->width, picture->height, g.page, ax, ay)) {
+            std::vector<u8>& pixels = pages_[g.page].pixels;
+            for (u32 row = 0; row < picture->height; ++row)
+                std::copy_n(&picture->rgba[static_cast<usize>(row) * picture->width * 4], picture->width * 4,
+                            &pixels[((ay + row) * page_size + ax) * 4]);
+            g.source = {static_cast<f32>(ax), static_cast<f32>(ay), static_cast<f32>(picture->width),
+                        static_cast<f32>(picture->height)};
+            g.offset = picture->offset;
+            g.visible = true;
+            g.color = true;
+        }
+        return glyphs_[key] = g;
+    }
+    u32 w = static_cast<u32>(std::max(0, x1 - x0)), h = static_cast<u32>(std::max(0, y1 - y0));
     if (w > 0 && h > 0 && place(pages_, w, h, g.page, ax, ay)) {
         std::vector<u8> alpha(w * h);
         stbtt_MakeGlyphBitmap(face.info, alpha.data(), static_cast<int>(w), static_cast<int>(h), static_cast<int>(w),
@@ -426,6 +492,10 @@ Laid lay_out(Font& font, std::string_view source, Vec2 position, const TextStyle
                     if (r.effect == Effect::Wave) p.position.y += std::sin(style.time * 6.0f + static_cast<f32>(p.index) * 0.6f) * style.size * 0.12f;
                     if (r.effect == Effect::Shake)
                         p.position += Vec2{jitter(p.index, style.time, 0), jitter(p.index, style.time, 1)} * (style.size * 0.05f);
+                }
+                if (g.color) { // emoji keep their own colors; the text color only fades them
+                    p.color = Color::white().with_alpha(p.color.a);
+                    p.color_glyph = true;
                 }
                 out.glyphs.push_back(p);
             }

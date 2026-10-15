@@ -143,12 +143,29 @@ fall back on:
 
 ```cpp
 font->set_fallbacks({engine.assets().load<gfx::Font>("fonts/NotoSansJP-Regular.otf"),
-                     engine.assets().load<gfx::Font>("fonts/NotoEmoji-Regular.ttf")});
+                     engine.assets().load<gfx::Font>("fonts/NotoColorEmoji.ttf")});
 ```
 
 Each character comes from the first font that has it, scaled to match. Characters none of them have are drawn as `?`.
-`font->has_glyph(cp)` tells you whether a character will draw. Color emoji fonts (bitmap or COLR glyphs) aren't
-supported; use a monochrome emoji font.
+`font->has_glyph(cp)` tells you whether a character will draw.
+
+### Color emoji
+
+Color emoji fonts work like any other: a color font's characters are drawn in their own colors, and the text color
+only fades them (its alpha applies; its red, green and blue don't). All three kinds of color font are read:
+
+| Kind | Fonts |
+| --- | --- |
+| PNG pictures, `CBDT` | Noto Color Emoji |
+| PNG pictures, `sbix` | Apple Color Emoji |
+| Layers of shapes, `COLR` version 0 | Segoe UI Emoji (Windows), Twemoji Mozilla |
+
+Pictures are scaled from the nearest size the font has, so very large emoji soften a little. `COLR` layers marked
+"text color" draw in white. Color glyphs show in bitmap text, not in distance-field text. `glyph.color` (and
+`PlacedGlyph::color_glyph` in `layout_text`) says which characters are color glyphs.
+
+Check an emoji font's license before shipping it: Noto Color Emoji's (the SIL Open Font License) allows it; the
+emoji fonts that come with macOS and Windows can't be shipped with a game.
 
 ## Fonts in more detail
 
