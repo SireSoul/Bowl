@@ -91,6 +91,9 @@ public:
     // Nine-slice: corners stay their size, edges stretch one way, the middle both. insets = left, top, right, bottom
     // border sizes in texture pixels (drawn at that many world units).
     void draw_nine_slice(const Texture& texture, Rect dest, Vec4 insets, Color color = Color::white(), f32 depth = 0);
+    // The same, from a part of a texture (an atlas or sprite sheet frame) given in pixels.
+    void draw_nine_slice(const Texture& texture, Rect source, Rect dest, Vec4 insets, Color color = Color::white(),
+                         f32 depth = 0);
 
     usize size() const { return sprites_.size(); }
     const Camera2D& camera() const { return camera_; }

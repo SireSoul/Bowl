@@ -6,6 +6,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Sprite sheets: Aseprite slices (`SpriteSlice`, `slice_rect`, `draw_nine_slice` from a slice), animation events from
+  tag user data (`SpriteAnimator::fired`), frame names (`frame_index`). `SpriteBatch::draw_nine_slice` from part of a
+  texture.
+- `ph-atlas`: packs a folder of PNGs into an atlas with sprite-sheet JSON (trimming, padding, numbered files become
+  animations). The packer is the `ph_atlas` library.
 - Collision: `Capsule` and convex `Polygon` shapes, and `Shape` (any of the four) with `collide`, `overlaps`,
   `contains`, `raycast` and `bounds` for every pair.
 - `physics::Collider` component, `update_triggers` and the `TriggerEvents` resource (entered, inside, exited, with

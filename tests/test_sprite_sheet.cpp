@@ -1,3 +1,4 @@
+#include "ph/atlas/atlas.hpp"
 #include "ph/gfx/sprite_sheet.hpp"
 
 #include <doctest/doctest.h>
@@ -96,4 +97,117 @@ TEST_CASE("sprite sheet: grid") {
     CHECK(sheet.frames.size() == 6);
     CHECK(sheet.animations.size() == 1);
     CHECK(sheet.animations[0].to == 5);
+}
+
+namespace {
+// Two 32x32 frames: tags with events in their user data, a hitbox slice that moves on frame 1, and a nine-slice
+// panel. The first frame is trimmed (packed 16x24 at x 0, sitting at 8,8 in the full frame).
+constexpr const char* sliced_json = R"({
+  "frames": {
+    "knight 0.aseprite": { "frame": { "x": 0, "y": 0, "w": 16, "h": 24 }, "spriteSourceSize": { "x": 8, "y": 8, "w": 16, "h": 24 },
+                           "sourceSize": { "w": 32, "h": 32 }, "duration": 100 },
+    "knight 1.aseprite": { "frame": { "x": 16, "y": 0, "w": 32, "h": 32 }, "spriteSourceSize": { "x": 0, "y": 0, "w": 32, "h": 32 },
+                           "sourceSize": { "w": 32, "h": 32 }, "duration": 100 }
+  },
+  "meta": {
+    "image": "knight.png",
+    "frameTags": [ { "name": "walk", "from": 0, "to": 1, "direction": "forward", "data": "0:step, 1=step 1:dust bogus 9" } ],
+    "slices": [
+      { "name": "hitbox", "data": "hurts", "keys": [
+          { "frame": 0, "bounds": { "x": 10, "y": 12, "w": 12, "h": 20 } },
+          { "frame": 1, "bounds": { "x": 14, "y": 12, "w": 12, "h": 20 }, "pivot": { "x": 6, "y": 20 } } ] },
+      { "name": "panel", "keys": [ { "frame": 0, "bounds": { "x": 8, "y": 8, "w": 16, "h": 24 },
+          "center": { "x": 4, "y": 4, "w": 8, "h": 16 } } ] }
+    ]
+  }
+})";
+} // namespace
+
+TEST_CASE("sprite sheet: slices, frame names and animation events") {
+    SpriteSheet sheet;
+    std::string image, err;
+    auto doc = json::parse(sliced_json);
+    REQUIRE(doc);
+    REQUIRE(SpriteSheet::parse_aseprite(doc.value, sheet, image, err));
+
+    CHECK(sheet.frame_index("knight 1.aseprite") == 1);
+    CHECK(sheet.frame_index("knight 1") == 1); // without the extension
+    CHECK(sheet.frame_index("nope") == -1);
+
+    const SpriteSlice* hit = sheet.slice("hitbox");
+    REQUIRE(hit);
+    CHECK(hit->data == "hurts");
+    CHECK(hit->at(0)->bounds.x == 10);
+    CHECK(hit->at(5)->bounds.x == 14); // the last key applies from its frame on
+    CHECK(hit->at(1)->pivot->x == 6);
+    CHECK_FALSE(sheet.slice("missing"));
+
+    // World rectangle: the frame's pivot (default: its center, 16,16) is drawn at the position.
+    auto r = slice_rect(sheet, "hitbox", 0, {100, 100});
+    REQUIRE(r);
+    CHECK(r->x == doctest::Approx(94));
+    CHECK(r->y == doctest::Approx(96));
+    auto mirrored = slice_rect(sheet, "hitbox", 0, {100, 100}, {-1, 1});
+    REQUIRE(mirrored);
+    CHECK(mirrored->x == doctest::Approx(94)); // 10..22 around 16 mirrors to 10..22: a centered box stays put
+    auto twice = slice_rect(sheet, "hitbox", 1, {0, 0}, {2, 2});
+    REQUIRE(twice);
+    CHECK(twice->w == doctest::Approx(24));
+
+    const SpriteAnimation* walk = sheet.find("walk");
+    REQUIRE(walk);
+    REQUIRE(walk->events.size() == 3); // "bogus" and "9" aren't <frame>:<name>
+    CHECK(walk->events[2].name == "dust");
+
+    SpriteAnimator anim;
+    anim.sheet = Asset<SpriteSheet>(std::make_shared<AssetSlot<SpriteSheet>>(AssetSlot<SpriteSheet>{
+        std::make_unique<SpriteSheet>(sheet), 1, "knight.json"}));
+    anim.play("walk", true); // a fresh animator is already on animation 0, so start it over explicitly
+    CHECK(anim.fired("step")); // frame 0 has one
+    CHECK_FALSE(anim.fired("dust"));
+    anim.update(0.05f);
+    CHECK_FALSE(anim.fired("step")); // still on frame 0: nothing new
+    anim.update(0.06f);
+    CHECK(anim.fired("step"));
+    CHECK(anim.fired("dust"));
+    anim.update(0.2f); // two frames at once: 0 again, then 1; both counted
+    CHECK(anim.fired("step"));
+}
+
+TEST_CASE("atlas: packs, trims and writes a sheet SpriteSheet can read") {
+    // Three pictures: a 4x4 with a 2x2 opaque middle, and two frames of a "walk".
+    auto image = [](std::string name, u32 w, u32 h, Rect opaque) {
+        atlas::Image img{std::move(name), w, h, std::vector<u8>(static_cast<usize>(w) * h * 4, 0)};
+        for (u32 y = 0; y < h; ++y)
+            for (u32 x = 0; x < w; ++x)
+                if (opaque.contains({static_cast<f32>(x), static_cast<f32>(y)})) img.rgba[(y * w + x) * 4 + 3] = 255;
+        return img;
+    };
+    std::vector<atlas::Image> images = {image("dot", 4, 4, {1, 1, 2, 2}), image("walk_0", 8, 8, {0, 0, 8, 8}),
+                                        image("walk_1", 8, 8, {0, 0, 8, 8})};
+    std::string error;
+    auto packed = atlas::pack(images, {}, error);
+    REQUIRE(packed);
+    const atlas::Placed& dot = packed->placed[0];
+    CHECK(dot.source.w == 2);   // trimmed
+    CHECK(dot.offset == Vec2{1, 1});
+    CHECK(dot.size == Vec2{4, 4});
+    // No two pictures overlap, and each keeps a pixel of padding.
+    for (usize a = 0; a < packed->placed.size(); ++a)
+        for (usize b = a + 1; b < packed->placed.size(); ++b)
+            CHECK_FALSE(packed->placed[a].source.expanded(0.5f).overlaps(packed->placed[b].source));
+
+    SpriteSheet sheet;
+    std::string img, err;
+    REQUIRE(SpriteSheet::parse_aseprite(atlas::sheet_json(*packed, images, "atlas.png"), sheet, img, err));
+    CHECK(img == "atlas.png");
+    CHECK(sheet.frame_index("dot") == 0);
+    CHECK(sheet.frames[0].offset == Vec2{1, 1});
+    const SpriteAnimation* walk = sheet.find("walk");
+    REQUIRE(walk);
+    CHECK(walk->from == 1);
+    CHECK(walk->to == 2);
+
+    CHECK_FALSE(atlas::pack(images, {.max_size = 8}, error)); // too small
+    CHECK_FALSE(error.empty());
 }

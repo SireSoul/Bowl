@@ -21,7 +21,7 @@ add_executable(ph_tests
     test_text.cpp
     test_tilemap.cpp
     test_ui.cpp)
-target_link_libraries(ph_tests PRIVATE ph::engine doctest::doctest)
+target_link_libraries(ph_tests PRIVATE ph::engine ph_atlas doctest::doctest)
 target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"
     PH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(PH_BOX2D)

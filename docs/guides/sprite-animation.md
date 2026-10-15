@@ -72,11 +72,76 @@ world.each<const Position, const gfx::SpriteAnimator>([&](const Position& p, con
 | `speed` | Playback speed multiplier |
 | `playing` | Set to `false` to pause |
 | `finished` | A non-looping animation (tag repeat count above 0) reached its end; it holds the last frame |
-| `frame_changed` | `true` for the update that moved to a new frame: the moment to play a footstep or apply a hit |
+| `frame_changed` | `true` for the update that moved to a new frame |
+| `fired(event)` | Whether the last update (or `play`) reached a frame with this event; see below |
 | `loops_done` | Completed loops |
 
 Animation is visual, so it usually belongs in the frame schedule. If an animation drives gameplay (a hit lands on
 frame 3), step it in the fixed schedule instead, so it happens at the same tick on every machine.
+
+## Events
+
+Name the moments that matter in Aseprite instead of hard-coding frame numbers: in the tag's properties, put the events
+in its **User Data** text, as `<frame>:<name>` with the frame counted from the tag's first frame:
+
+```
+2:step 6:step 4:dust
+```
+
+Then ask the animator:
+
+```cpp
+if (anim.fired("step")) engine.audio().play(footstep);
+if (anim.fired("hit")) deal_damage(target);
+```
+
+`fired` covers every frame the update passed through, so nothing is missed at low frame rates or high speeds. Events
+are part of the sheet, so re-exporting with moved events changes the game without touching code.
+
+## Slices: hitboxes, panels, attachment points
+
+Aseprite's **slices** are named rectangles on the sprite, and they can change from frame to frame. The engine loads
+them all (enable **Slices** in the export's meta options):
+
+```cpp
+// A hitbox that follows the animation, in world coordinates, for the frame drawn at `position`:
+if (auto box = gfx::slice_rect(*sheet, "hitbox", anim.frame, position, scale)) check_hits(*box);
+
+// A nine-slice panel: give the slice a 9-slices center in Aseprite, then draw it at any size.
+gfx::draw_nine_slice(ui_batch, *panel_sheet, "frame", 0, {40, 40, 300, 120});
+
+const gfx::SpriteSlice* s = sheet->slice("hand");      // with keys per frame, a pivot and user data
+```
+
+`slice_rect` accounts for the sheet's pivot and for mirroring (negative scale), so a hitbox drawn for a character
+facing left is where the character's sword is.
+
+## Frames by name
+
+`sheet.frame_index("door_open")` finds a frame by its exported name (with or without the file extension), which is
+the natural way to use an atlas of separate pictures.
+
+## Packing pictures into an atlas: ph-atlas
+
+Many small pictures drawn from one texture cost one draw call instead of many. `ph-atlas` packs a folder of PNGs into
+one atlas image and writes JSON next to it that `SpriteSheet` loads like an Aseprite export:
+
+```bash
+ph-atlas art/props -o assets/props.png
+```
+
+- Each picture becomes a frame named after its file (with its subfolder: `"trees/oak"`).
+- Transparent edges are trimmed and remembered, so pictures still line up; `--no-trim` keeps them.
+- Files named `walk_0.png`, `walk_1.png`, ... (or `walk 0.png`) also become an animation called `walk`; `--fps` sets
+  its speed (10 by default).
+- `--padding` (1) keeps pictures apart so filtering doesn't bleed; `--max` (4096) caps the atlas size.
+
+```cpp
+Asset<gfx::SpriteSheet> props = engine.assets().load<gfx::SpriteSheet>("props.json");
+gfx::draw_frame(batch, *props, props->frame_index("trees/oak"), position);
+```
+
+The tool is in `build/<preset>/tools/atlas/`. Its packing code is the `ph_atlas` library, for tools of your own.
 
 ## Sheets without Aseprite
 
@@ -91,8 +156,3 @@ Asset<gfx::SpriteSheet> explosion = engine.assets().add("fx/explosion.sheet", st
 ```
 
 A sheet loaded from Aseprite JSON without tags also gets a single `"default"` animation over all frames.
-
-## What's not there yet
-
-Aseprite slices (for hitboxes and nine-slice panels), animation events by name, and a texture atlas packer are on
-the [roadmap](../roadmap.md).

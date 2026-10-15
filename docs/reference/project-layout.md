@@ -26,6 +26,8 @@ engine/
   app/                    Engine, Game, scenes, the main loop, dev tools, hot reload host
 tools/
   shaderc/                ph-shaderc: library and command-line tool
+  atlas/                  ph-atlas: packs pictures into an atlas with sprite-sheet JSON
+editor/                   Bowl Editor
 samples/
   tutorial/               Fireflies, the game docs/tutorial.md builds
   isometric/              y-sorted isometric map, night lighting, menu, dialogue

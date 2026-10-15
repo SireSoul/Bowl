@@ -32,6 +32,7 @@ include(PhShaders)
 
 add_subdirectory(tools/shaderc)
 add_subdirectory(engine)
+add_subdirectory(tools/atlas)
 
 if(PH_BUILD_TESTS)
     enable_testing()
