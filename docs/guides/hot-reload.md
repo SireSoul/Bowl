@@ -44,18 +44,30 @@ With hot reload on, the build produces two things:
 
 ### Using it
 
-1. Run `my_game` as usual.
-2. Change your code.
-3. Rebuild only the library:
+Run `my_game`, edit your code, save. That's it: the game notices the saved file, rebuilds `my_game_code` in the
+background and swaps the new code in. The log shows each step:
 
-   ```bash
-   cmake --build --preset dev --target my_game_code
-   ```
+```
+auto-build: source changed, building
+auto-build: built in 2.9 s
+hot reload #1: new code running, 1512 entities restored in 216 ms
+```
 
-4. Within a second of the build finishing, the log says something like
-   `hot reload #1: new code running, 1512 entities restored in 214 ms`.
+If the code doesn't compile, the compiler's errors appear in the log (and the overlay's **Log** panel) and the game
+keeps running the previous code. Fix the error, save, and it carries on.
 
-Many editors can run that build command on save, which makes the loop: save, wait a moment, look.
+The game watches the folders that hold the game's source files, and everything below them, for C and C++ files.
+Hidden folders and build folders are skipped. Headers that live somewhere else (an `include/` folder next to `src/`)
+aren't watched; saving a source file picks up their changes too.
+
+You can still build by hand, from your editor or the command line:
+
+```bash
+cmake --build --preset dev --target my_game_code
+```
+
+Start the game with `--no-auto-build` to turn automatic builds off, for example while your editor builds on save
+itself (two builds of the same target at once can trip over each other).
 
 ### Writing reloadable code
 

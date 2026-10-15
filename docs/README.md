@@ -1,6 +1,6 @@
 # Documentation
 
-Everything about using and working on PLACEHOLDERENGINENAME. If you're new, read these in order:
+Everything about using and working on Bowl. If you're new, read these in order:
 
 1. [Getting started](getting-started.md): install a toolchain, build, run the samples and tests
 2. [Tutorial](tutorial.md): build a complete small game, one feature at a time

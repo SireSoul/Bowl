@@ -67,7 +67,7 @@ Turns an executable target into a game:
 | Argument | |
 | --- | --- |
 | `ASSETS <dir>` | The game's asset folder, relative to the current `CMakeLists.txt`. Optional for games with no files |
-| `BUNDLE_ID <id>` | macOS bundle identifier, used when `PH_MACOS_BUNDLES` is on. Default `com.placeholderenginename.<target>` |
+| `BUNDLE_ID <id>` | macOS bundle identifier, used when `PH_MACOS_BUNDLES` is on. Default `com.bowl.<target>` |
 | `HOT_RELOAD` | Build the game's sources as `<target>_code`, a library the `<target>` host reloads when it's rebuilt. Dev builds on macOS and Linux with CMake 3.27+; ignored elsewhere. See [hot-reload.md](../guides/hot-reload.md#game-code) |
 
 Add sources to the target before calling `ph_add_game` when using `HOT_RELOAD`: the sources are moved into the library
@@ -105,23 +105,23 @@ Games don't have to live in this repository. Two ways to bring the engine in:
 cmake_minimum_required(VERSION 3.25)
 project(my_game VERSION 0.1.0 LANGUAGES C CXX)
 
-add_subdirectory(external/PLACEHOLDERENGINENAME)
+add_subdirectory(external/Bowl)
 
 add_executable(my_game src/main.cpp)
 ph_add_game(my_game ASSETS assets)
 ```
 
 If the engine's folder isn't inside your project's folder, pass a build directory name as the second argument:
-`add_subdirectory(../PLACEHOLDERENGINENAME engine)`.
+`add_subdirectory(../Bowl engine)`.
 
 **With FetchContent**, pinned to a commit or tag:
 
 ```cmake
 include(FetchContent)
-FetchContent_Declare(placeholderenginename
+FetchContent_Declare(bowl
     GIT_REPOSITORY https://github.com/SireSoul/PLACEHOLDERENGINENAME.git
     GIT_TAG <commit or tag>)
-FetchContent_MakeAvailable(placeholderenginename)
+FetchContent_MakeAvailable(bowl)
 
 add_executable(my_game src/main.cpp)
 ph_add_game(my_game ASSETS assets)

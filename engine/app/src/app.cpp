@@ -54,7 +54,7 @@ struct AppRunner {
         }
         if (e.config_.game_asset_dir.empty() && game_asset_dir) e.config_.game_asset_dir = game_asset_dir;
         logging::set_level(e.config_.log_level);
-        info("PLACEHOLDERENGINENAME starting: {} on {}", e.config_.window.title, SDL_GetPlatform());
+        info("Bowl starting: {} on {}", e.config_.window.title, SDL_GetPlatform());
 
         SDL_SetAppMetadata(e.config_.window.title.c_str(), "0.1.0", nullptr);
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {

@@ -1,4 +1,4 @@
-# PLACEHOLDERENGINENAME
+# Bowl
 
 A code-first 2D game engine in C++20, built on SDL3. One renderer for Vulkan, Metal and Direct3D 12, a parallel
 archetype ECS, hot reload for assets, shaders and game code, and dev tools that run inside the game.
@@ -14,9 +14,6 @@ change a texture, a shader, a Tiled map or the game's own code while it runs, an
 
 It's built for 2D games with a lot going on, top-down and isometric included, that want to look good and save and
 load their worlds without a pile of boilerplate.
-
-(The name is a placeholder. It only shows up in `CMakeLists.txt`, the docs and a couple of log and window strings;
-the code uses the namespace `ph`.)
 
 ## Features
 

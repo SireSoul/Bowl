@@ -11,7 +11,7 @@ struct SDL_Window;
 namespace ph {
 
 struct WindowDesc {
-    std::string title = "PLACEHOLDERENGINENAME";
+    std::string title = "Bowl";
     i32 width = 1280;
     i32 height = 720;
     bool resizable = true;

@@ -57,7 +57,7 @@ dist/
       Info.plist
 ```
 
-The bundle's identifier defaults to `com.placeholderenginename.<target>`; set yours with
+The bundle's identifier defaults to `com.bowl.<target>`; set yours with
 `ph_add_game(my_game ... BUNDLE_ID com.yourstudio.mygame)`. The bundle version comes from the `project(... VERSION)`
 in your `CMakeLists.txt`.
 

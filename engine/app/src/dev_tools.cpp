@@ -88,7 +88,7 @@ void DevTools::end_frame(Game& game) {
 void DevTools::draw_main() {
     ImGui::SetNextWindowPos({12, 12}, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize({420, 560}, ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("PLACEHOLDERENGINENAME")) {
+    if (!ImGui::Begin("Bowl")) {
         ImGui::End();
         return;
     }

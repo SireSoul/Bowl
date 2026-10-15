@@ -31,7 +31,7 @@ struct AppConfig {
     std::string language = "en";     // lang/<language>.json, falling back to fallback_language
     std::string fallback_language = "en";
     // Where settings and saves live: the OS's per-user app data folder for <organization>/<application>.
-    std::string organization = "PLACEHOLDERENGINENAME";
+    std::string organization = "Bowl";
     std::string application;         // empty: the window title
     std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
 };

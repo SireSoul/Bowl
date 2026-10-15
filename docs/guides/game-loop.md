@@ -94,7 +94,7 @@ ph::AppConfig configure() override {
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `window.title` | `"PLACEHOLDERENGINENAME"` | Window title, and the app name for the settings folder |
+| `window.title` | `"Bowl"` | Window title, and the app name for the settings folder |
 | `window.width`, `window.height` | 1280 x 720 | Initial size in logical points |
 | `window.resizable` | `true` | |
 | `window.fullscreen` | `false` | |
@@ -106,7 +106,7 @@ ph::AppConfig configure() override {
 | `gpu_driver` | `""` | Force `"vulkan"`, `"metal"` or `"direct3d12"`; also `--driver` |
 | `log_level` | `Info` | Lowest level logged |
 | `language`, `fallback_language` | `"en"` | Localization; also `--lang` |
-| `organization`, `application` | `"PLACEHOLDERENGINENAME"`, title | Where settings and saves go (see below) |
+| `organization`, `application` | `"Bowl"`, title | Where settings and saves go (see below) |
 
 ## The Engine
 

@@ -45,13 +45,17 @@ function(ph_make_hot_reloadable target)
     get_target_property(sources ${target} SOURCES)
     get_target_property(source_dir ${target} SOURCE_DIR)
     set(abs_sources "")
+    set(source_dirs "")
     foreach(s IN LISTS sources)
-        if(IS_ABSOLUTE "${s}")
-            list(APPEND abs_sources "${s}")
-        else()
-            list(APPEND abs_sources "${source_dir}/${s}")
+        if(NOT IS_ABSOLUTE "${s}")
+            set(s "${source_dir}/${s}")
         endif()
+        list(APPEND abs_sources "${s}")
+        get_filename_component(dir "${s}" DIRECTORY)
+        list(APPEND source_dirs "${dir}")
     endforeach()
+    list(REMOVE_DUPLICATES source_dirs)
+    string(REPLACE ";" "|" source_dirs "${source_dirs}")
 
     set(code ${target}_code)
     add_library(${code} MODULE ${abs_sources})
@@ -65,7 +69,15 @@ function(ph_make_hot_reloadable target)
 
     set_property(TARGET ${target} PROPERTY SOURCES "${PH_ENGINE_SOURCE_DIR}/app/hot/host_main.cpp")
     set_target_properties(${target} PROPERTIES ENABLE_EXPORTS ON)
-    target_compile_definitions(${target} PRIVATE PH_HOT_RELOAD_LIBRARY_PATH="$<TARGET_FILE:${code}>")
+    # The host rebuilds the library itself when a source file is saved: it watches the folders holding the sources
+    # and runs this build.
+    target_compile_definitions(${target} PRIVATE
+        PH_HOT_RELOAD_LIBRARY_PATH="$<TARGET_FILE:${code}>"
+        PH_HOT_RELOAD_SOURCE_DIRS="${source_dirs}"
+        PH_HOT_RELOAD_CMAKE="${CMAKE_COMMAND}"
+        PH_HOT_RELOAD_BUILD_DIR="${CMAKE_BINARY_DIR}"
+        PH_HOT_RELOAD_TARGET="${code}"
+        PH_HOT_RELOAD_CONFIG="$<CONFIG>")
     foreach(lib ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app ph_imgui ph_shaderc)
         if(TARGET ${lib})
             if(APPLE)
@@ -86,7 +98,7 @@ endfunction()
 # Dev builds read assets straight from the source folders instead, so edits hot-reload.
 # With PH_MACOS_BUNDLES (on in the release preset) a macOS game is a .app with these folders in Contents/Resources.
 # `cmake --install <build dir> --prefix <folder>` lays out a shippable copy of every game.
-#   BUNDLE_ID com.example.game   macOS bundle identifier (default: com.placeholderenginename.<target>)
+#   BUNDLE_ID com.example.game   macOS bundle identifier (default: com.bowl.<target>)
 #   HOT_RELOAD                   dev builds on macOS/Linux: the game's sources become <target>_code, a library the
 #                                <target> executable reloads whenever it's rebuilt (see ph/app/hot_reload.hpp)
 function(ph_add_game target)
@@ -106,7 +118,7 @@ function(ph_add_game target)
     if(APPLE AND NOT IOS AND PH_MACOS_BUNDLES)
         set(bundle ON)
         if(NOT ARG_BUNDLE_ID)
-            string(TOLOWER "com.placeholderenginename.${target}" ARG_BUNDLE_ID)
+            string(TOLOWER "com.bowl.${target}" ARG_BUNDLE_ID)
         endif()
         set_target_properties(${target} PROPERTIES
             MACOSX_BUNDLE TRUE

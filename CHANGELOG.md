@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Game-code hot reload rebuilds the code by itself when a source file is saved; compile errors go to the log and the
+  previous code keeps running. `--no-auto-build` turns it off. `AutoBuilder` does the watching and building.
 - Tracy support (`-DPH_TRACY=ON`): profiler zones with source locations, frame marks, worker thread names, log
   lines and plots show up in the Tracy profiler. `profiler::plot` and `profiler::set_thread_name`.
 - `tutorial` sample: Fireflies, the game `docs/tutorial.md` builds step by step. CI compiles it, so the tutorial stays

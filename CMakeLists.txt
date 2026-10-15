@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
-# The engine's name lives here and in README.md. Code uses the short namespace `ph`.
-project(PLACEHOLDERENGINENAME VERSION 0.1.0 LANGUAGES C CXX)
+# Bowl Engine. Code uses the short namespace `ph`.
+project(Bowl VERSION 0.1.0 LANGUAGES C CXX)
 
 option(PH_BUILD_TESTS   "Build unit tests and benchmarks"                          ${PROJECT_IS_TOP_LEVEL})
 option(PH_BUILD_SAMPLES "Build sample games"                                       ${PROJECT_IS_TOP_LEVEL})

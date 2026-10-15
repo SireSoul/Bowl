@@ -74,7 +74,7 @@ class SpritesGame final : public Game {
 public:
     AppConfig configure() override {
         AppConfig config;
-        config.window.title = "PLACEHOLDERENGINENAME: sprites";
+        config.window.title = "Bowl: sprites";
         return config;
     }
 
@@ -184,7 +184,7 @@ public:
         Vec2 screen = engine.window().size();
         ui_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None);
         gfx::TextStyle title{.size = 28, .color = Color::white(), .raster_scale = engine.window().pixel_density()};
-        gfx::draw_text(ui_, *font_, "PLACEHOLDERENGINENAME", {24, 20}, title);
+        gfx::draw_text(ui_, *font_, "Bowl", {24, 20}, title);
         gfx::TextStyle body = title;
         body.size = 16;
         body.color = Color::hex(0xb8c0ff);

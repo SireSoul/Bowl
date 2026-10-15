@@ -11,14 +11,14 @@ namespace ph::ecs {
 
 // Saving and loading entities as JSON, for save games, scenes, prefabs and copy/paste in tools.
 //
-//     { "format": "PLACEHOLDERENGINENAME.world", "version": 1,
+//     { "format": "Bowl.world", "version": 1,
 //       "entities": [ { "id": 0, "components": { "game::Health": { "current": 80, "max": 100 }, "game::Player": {} } } ] }
 //
 // Components are saved by type name when they're savable: reflected with PH_REFLECT, given ph_to_json/ph_from_json
 // hooks, or empty tags. Others are skipped (once-per-type warning in ctx.warnings). Entity fields that point at other
 // saved entities are rewritten to file ids and back, so references survive a round trip.
 
-inline constexpr std::string_view world_format = "PLACEHOLDERENGINENAME.world";
+inline constexpr std::string_view world_format = "Bowl.world";
 inline constexpr int world_format_version = 1;
 
 // Saves the given entities (dead ones are skipped).

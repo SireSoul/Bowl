@@ -130,7 +130,7 @@ The format:
 
 ```json
 {
-  "format": "PLACEHOLDERENGINENAME.world",
+  "format": "Bowl.world",
   "version": 1,
   "entities": [
     { "id": 0, "components": { "Health": { "current": 80, "max": 100 }, "Player": {} } },

@@ -33,8 +33,8 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - ~~Particles (CPU, deterministic, reflected settings)~~ and ~~easing + tweens~~ (done). Later: GPU particles (compute)
 
 ## M4: iterate faster than anyone
-- ~~Game-code hot reload: game library reloaded on rebuild, world kept (macOS, Linux)~~ (done). Still to do: Windows
-  (needs engine export annotations), auto-rebuild on source save, keeping non-savable state
+- ~~Game-code hot reload: game library reloaded on rebuild, world kept (macOS, Linux)~~ (done), ~~rebuilt automatically when a source file is saved~~ (done). Still to do: Windows (needs engine export
+  annotations), keeping non-savable state
 - Editor app built on the engine itself (scene view, inspector, asset browser), still optional: code-first stays primary
 - ~~Tracy profiler integration~~ (done, CPU). GPU timelines need timestamp queries in SDL_GPU
 

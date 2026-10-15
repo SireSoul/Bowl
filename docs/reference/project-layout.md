@@ -106,7 +106,7 @@ my_game/
   CMakeLists.txt
   CMakePresets.json        copied from the engine and adjusted
   external/
-    PLACEHOLDERENGINENAME/ the engine, as a Git submodule
+    Bowl/ the engine, as a Git submodule
   src/
     main.cpp               PH_MAIN and the Game class
     components.hpp         PH_COMPONENT structs
