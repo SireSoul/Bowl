@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ph/core/assets.hpp"
 #include "ph/core/math.hpp"
 #include "ph/core/type_id.hpp"
 #include "ph/core/types.hpp"
@@ -46,6 +47,14 @@ public:
     virtual bool begin_group(std::string_view name) = 0;      // false: skip its fields
     virtual void end_group() = 0;
     virtual void unsupported(std::string_view name, std::string_view type) = 0;
+    // Asset<T> fields. `path` is the asset's path ("" for none); change it and return true to load that path instead,
+    // which needs assets() to return the manager to load from.
+    virtual bool asset(std::string_view name, std::string& path, std::string_view type) {
+        (void)path;
+        unsupported(name, type);
+        return false;
+    }
+    virtual AssetManager* assets() { return nullptr; }
 };
 
 template <class T> void visit(FieldVisitor& v, std::string_view name, T& value);
@@ -96,6 +105,12 @@ template <class T> void visit(FieldVisitor& v, std::string_view name, T& value) 
         v.vector(name, reinterpret_cast<f32*>(&value), static_cast<int>(sizeof(T) / sizeof(f32)));
     } else if constexpr (std::is_same_v<T, Color>) {
         v.color(name, value);
+    } else if constexpr (ph::is_asset_handle<T>::value) {
+        std::string path(value.path());
+        if (v.asset(name, path, type_name<typename T::value_type>())) {
+            if (path.empty()) value = {};
+            else if (AssetManager* assets = v.assets()) value = assets->template load<typename T::value_type>(path);
+        }
     } else if constexpr (Reflected<T>) {
         if (v.begin_group(name)) {
             for_each_field(value, [&](std::string_view field, auto& member) { visit(v, field, member); });

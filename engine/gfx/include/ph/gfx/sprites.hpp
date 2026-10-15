@@ -74,6 +74,11 @@ public:
     void begin(const Camera2D& camera, SpriteSort sort = SpriteSort::Depth, BlendMode blend = BlendMode::Alpha,
                const Material* material = nullptr);
     void draw(const Texture& texture, const SpriteInstance& sprite);
+    // Null texture: a solid quad in sprite.color.
+    void draw(const Texture* texture, const SpriteInstance& sprite) {
+        sprites_.push_back(sprite);
+        textures_.push_back(texture);
+    }
     // Convenience: a texture at its pixel size, centered at position.
     void draw(const Texture& texture, Vec2 position, Color color = Color::white(), f32 depth = 0);
     // A sub-rectangle of a texture (pixel coordinates), e.g. a sprite sheet frame.

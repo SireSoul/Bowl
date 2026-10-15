@@ -16,6 +16,7 @@ add_executable(ph_tests
     test_settings.cpp
     test_schedule.cpp
     test_shaderc.cpp
+    test_sprite.cpp
     test_sprite_sheet.cpp
     test_text.cpp
     test_tilemap.cpp

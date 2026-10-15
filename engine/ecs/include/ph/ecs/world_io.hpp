@@ -34,4 +34,11 @@ std::vector<Entity> load_entities(World& world, const json::Value& doc, serial::
 // A prefab is one saved entity object ({"components": {...}}); spawns a fresh copy.
 Entity spawn_prefab(World& world, const json::Value& entity, serial::Context& ctx);
 
+// A saved world file (".world", what the editor writes) as an asset. It hot-reloads like any file; spawn its contents
+// with load_entities(world, file->document, ctx).
+struct WorldFile {
+    json::Value document;
+};
+void register_world_file_loader(AssetManager& assets);
+
 } // namespace ph::ecs

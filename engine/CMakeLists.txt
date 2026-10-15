@@ -63,6 +63,7 @@ ph_module(gfx
         gfx/src/loaders.cpp
         gfx/src/particles.cpp
         gfx/src/renderer.cpp
+        gfx/src/sprite.cpp
         gfx/src/sprite_sheet.cpp
         gfx/src/sprites.cpp
         gfx/src/text.cpp
@@ -97,6 +98,7 @@ ph_module(app
         app/src/app.cpp
         app/src/dev_tools.cpp
         app/src/hot_reload.cpp
+        app/src/inspector.cpp
         app/src/scene.cpp
     PUBLIC_DEPS ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui)
 target_compile_definitions(ph_app PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}")

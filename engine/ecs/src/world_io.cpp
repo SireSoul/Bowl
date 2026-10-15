@@ -125,4 +125,25 @@ Entity spawn_prefab(World& world, const json::Value& entity, serial::Context& ct
     return e;
 }
 
+void register_world_file_loader(AssetManager& assets) {
+    assets.register_loader<WorldFile>([](AssetLoadContext& ctx) -> std::unique_ptr<WorldFile> {
+        auto text = ctx.read_text(ctx.path());
+        if (!text) {
+            log_asset_error(ctx.path(), "WorldFile", "file not found");
+            return nullptr;
+        }
+        auto parsed = json::parse(*text);
+        if (!parsed) {
+            log_asset_error(ctx.path(), "WorldFile",
+                            std::format("{}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message));
+            return nullptr;
+        }
+        if (parsed.value["format"].as_string() != world_format) {
+            log_asset_error(ctx.path(), "WorldFile", "not a saved world (missing \"format\")");
+            return nullptr;
+        }
+        return std::make_unique<WorldFile>(WorldFile{std::move(parsed.value)});
+    });
+}
+
 } // namespace ph::ecs

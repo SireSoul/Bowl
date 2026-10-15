@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -27,6 +28,8 @@ template <class T> struct AssetSlot {
 // version() with a cached copy to rebuild anything derived from it (pipelines, atlases, ...).
 template <class T> class Asset {
 public:
+    using value_type = T;
+
     Asset() = default;
     explicit Asset(std::shared_ptr<AssetSlot<T>> slot) : slot_(std::move(slot)) {}
 
@@ -41,6 +44,9 @@ public:
 private:
     std::shared_ptr<AssetSlot<T>> slot_;
 };
+
+template <class T> struct is_asset_handle : std::false_type {};
+template <class T> struct is_asset_handle<Asset<T>> : std::true_type {};
 
 // Passed to loaders. Read files through it so hot reload knows what the asset depends on.
 class AssetLoadContext {

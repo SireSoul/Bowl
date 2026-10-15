@@ -4,6 +4,7 @@
 
 #if PH_DEV_TOOLS
 
+#include "ph/app/inspector.hpp"
 #include "ph/core/file.hpp"
 #include "ph/core/profiler.hpp"
 
@@ -197,61 +198,6 @@ void DevTools::draw_systems(const char* label, ecs::Schedule& schedule) {
     ImGui::PopID();
 }
 
-namespace {
-
-// Edits reflected fields with ImGui widgets.
-class ImGuiFieldEditor final : public reflect::FieldVisitor {
-public:
-    explicit ImGuiFieldEditor(ecs::Entity* select) : select_(select) {}
-
-    void boolean(std::string_view name, bool& v) override {
-        ImGui::Checkbox(label(name), &v);
-    }
-    void integer(std::string_view name, i64& v, i64 min, i64 max) override {
-        if (ImGui::DragScalar(label(name), ImGuiDataType_S64, &v, 0.2f, &min, &max)) v = std::clamp(v, min, max);
-    }
-    void real(std::string_view name, f64& v) override {
-        ImGui::DragScalar(label(name), ImGuiDataType_Double, &v, 0.05f);
-    }
-    void text(std::string_view name, std::string& v) override {
-        char buffer[512];
-        std::snprintf(buffer, sizeof buffer, "%s", v.c_str());
-        if (ImGui::InputText(label(name), buffer, sizeof buffer)) v = buffer;
-    }
-    void vector(std::string_view name, f32* values, int count) override {
-        ImGui::DragScalarN(label(name), ImGuiDataType_Float, values, count, 0.25f);
-    }
-    void color(std::string_view name, Color& c) override {
-        ImGui::ColorEdit4(label(name), &c.r, ImGuiColorEditFlags_Float);
-    }
-    void entity(std::string_view name, u64 bits) override {
-        ecs::Entity e = ecs::Entity::from_bits(bits);
-        if (!e) {
-            ImGui::TextDisabled("%.*s: none", static_cast<int>(name.size()), name.data());
-            return;
-        }
-        std::string text = std::format("{}: entity {}:{}##{}", name, e.index, e.generation, name);
-        if (ImGui::SmallButton(text.c_str()) && select_) *select_ = e; // jump to it
-    }
-    bool begin_group(std::string_view name) override {
-        return ImGui::TreeNodeEx(label(name), ImGuiTreeNodeFlags_DefaultOpen);
-    }
-    void end_group() override { ImGui::TreePop(); }
-    void unsupported(std::string_view name, std::string_view type) override {
-        ImGui::TextDisabled("%.*s: %.*s", static_cast<int>(name.size()), name.data(), static_cast<int>(type.size()),
-                            type.data());
-    }
-
-private:
-    const char* label(std::string_view name) {
-        label_.assign(name);
-        return label_.c_str();
-    }
-    std::string label_;
-    ecs::Entity* select_;
-};
-
-} // namespace
 
 void DevTools::draw_entities() {
     auto& world = engine_.world();
@@ -324,25 +270,7 @@ void DevTools::draw_inspector() {
         world.destroy(e);
         selected_ = {};
     }
-    if (world.alive(e)) {
-        std::vector<ecs::ComponentId> comps(world.components_of(e).begin(), world.components_of(e).end());
-        for (ecs::ComponentId c : comps) {
-            const ecs::ComponentInfo& info = ecs::component_info(c);
-            std::string header(info.name);
-            if (!ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) continue;
-            ImGui::PushID(c);
-            if (info.visit) {
-                ImGuiFieldEditor editor(&selected_);
-                info.visit(world.component_ptr(e, c), editor);
-            } else if (info.size == 0) {
-                ImGui::TextDisabled("tag");
-            } else {
-                ImGui::TextDisabled("not reflected: add PH_REFLECT(%.*s, fields...) to edit it here",
-                                    static_cast<int>(info.name.size()), info.name.data());
-            }
-            ImGui::PopID();
-        }
-    }
+    inspector::components(world, e, engine_.assets(), &selected_);
     ImGui::End();
     if (!open) selected_ = {};
 }

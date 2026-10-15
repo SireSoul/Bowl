@@ -85,6 +85,7 @@ struct AppRunner {
         gfx::register_asset_loaders(e.assets_, e.gpu_, e.config_.pixel_art ? gfx::Filter::Nearest : gfx::Filter::Linear);
         audio::register_asset_loaders(e.assets_);
         register_string_table_loader(e.assets_);
+        ecs::register_world_file_loader(e.assets_);
         if (e.assets_.resolve("lang/" + e.config_.fallback_language + ".json")) {
             e.i18n_.set_fallback(e.config_.fallback_language);
             e.i18n_.set_language(e.config_.language);
