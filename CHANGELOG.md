@@ -65,6 +65,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- **Breaking:** game-code hot reload keeps the world instead of saving and reloading it. Entity ids no longer change,
+  and plain-data components survive whether or not they're reflected; savable components that aren't plain data are
+  saved and loaded back as before. The engine registers its own component types at startup.
+- `ecs::World::forget_code` drops hooks, resources and deferred commands but keeps entities. Dormant component types
+  keep their layout, and a type that comes back with a different layout gets a new id.
 - `.phsh` bundles are format version 2 (compute fields); version 1 bundles still load.
 - Lighting is applied in its own pass before bloom (so scene effects see the lit image); bloom still comes from the
   scene's own bright pixels. `Renderer::submit(StaticSprites)` and the new submissions share one sprite path.

@@ -344,23 +344,70 @@ void HotReloadHost::teardown(Engine& engine) {
     game_.reset();
 }
 
-void HotReloadHost::bring_up(Engine& engine, const json::Value& world, serial::Context& ctx) {
+void HotReloadHost::bring_up(Engine& engine, const std::vector<SavedComponent>& saved, serial::Context& ctx) {
     game_.reset(current_->create());
     asset_mark_ = engine.assets().mark();
     game_->init(engine);
     if (const json::Value* bindings = engine.settings().find("input")) engine.input().load_bindings(*bindings);
-    ecs::load_entities(engine.world(), world, ctx);
+    // Components that had to leave while the code changed come back through the new code's loaders.
+    for (const SavedComponent& s : saved) {
+        auto id = ecs::find_component(s.name);
+        if (!id || !ecs::component_info(*id).savable()) {
+            ctx.warn(std::format("'{}' wasn't registered by the new code in time; its data was dropped", s.name));
+            continue;
+        }
+        const ecs::ComponentInfo& info = ecs::component_info(*id);
+        engine.world().add_component(s.entity, *id, [&](void* p) {
+            if (!info.load(s.data, p, ctx)) ctx.warn(std::format("'{}' loaded with errors", s.name));
+        });
+    }
 }
 
 bool HotReloadHost::reload(Engine& engine) {
     Stopwatch watch;
     serial::Context ctx{&engine.assets()};
-    json::Value saved = ecs::save_world(engine.world(), ctx);
-    usize entity_count = saved["entities"].size();
-    teardown(engine);
+    ecs::World& world = engine.world();
+    void* base = const_cast<void*>(current_->base);
+
+    // The world stays, so entities keep their ids and every reference between them holds. Of the components whose
+    // code is in the old library: plain data (trivially copyable) stays where it is, savable ones are saved and come
+    // back through the new code, and anything else has to go.
+    std::vector<SavedComponent> saved;
+    usize kept = 0, dropped = 0;
+    std::vector<std::pair<ecs::Entity, ecs::ComponentId>> removals;
+    for (ecs::ComponentId c = 0; c < ecs::component_type_count(); ++c) {
+        const ecs::ComponentInfo& info = ecs::component_info(c);
+        if (info.dormant || !code_in_library(info, base)) continue;
+        bool plain = info.size == 0 || info.trivially_relocatable;
+        for (const auto& a : world.archetypes()) {
+            if (a->empty() || !a->has(c)) continue;
+            for (ecs::Entity e : a->entities()) {
+                if (plain) {
+                    ++kept;
+                    continue;
+                }
+                if (info.savable()) saved.push_back({e, std::string(info.name), info.save(world.component_ptr(e, c), ctx)});
+                else ++dropped;
+                removals.emplace_back(e, c);
+            }
+        }
+        if (!plain && !info.savable() && dropped)
+            ctx.warn(std::format("'{}' is neither plain data nor savable, so it can't survive a reload", info.name));
+    }
+    for (auto [e, c] : removals) world.remove_component(e, c); // while the old destructors are still loaded
+
+    engine.scenes().shutdown(engine);
+    engine.fixed_schedule().clear();
+    engine.frame_schedule().clear();
+    engine.input().unbind_all(); // init() binds again; otherwise every reload would add a second copy
+    world.forget_code();
+    world.set_resource<Engine*>(&engine);
+    engine.assets().rollback(asset_mark_);
+    game_.reset();
+
     // Component registrations made by the old code go dormant first, so the new library's registrations (which run
     // the moment it loads) refresh them.
-    auto previous = ecs::mark_components_dormant(&code_in_library, const_cast<void*>(current_->base));
+    auto previous = ecs::mark_components_dormant(&code_in_library, base);
     auto next = open_copy();
     if (!next) {
         ecs::restore_components(previous);
@@ -372,8 +419,9 @@ bool HotReloadHost::reload(Engine& engine) {
     bring_up(engine, saved, ctx);
     ++reloads_;
     for (const auto& w : ctx.warnings) warn("hot reload: {}", w);
-    info("hot reload #{}: new code running, {} entities restored in {:.0f} ms", reloads_, entity_count,
-         watch.milliseconds());
+    info("hot reload #{}: new code running; {} entities kept, {} components kept in place, {} reloaded through their "
+         "savers, in {:.0f} ms",
+         reloads_, world.entity_count(), kept, saved.size(), watch.milliseconds());
     return true;
 }
 

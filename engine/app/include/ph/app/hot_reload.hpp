@@ -13,11 +13,14 @@ class AutoBuilder;
 
 // Game-code hot reload (dev builds). The game is built as a loadable library and run by this host: when the library
 // file changes (you rebuilt it), the host
-//   1. loads the new library next to the old one (if that fails, the old code keeps running),
-//   2. saves the world (every savable component) and releases everything made by the old code: systems, scenes,
-//      input bindings, resources, hooks, and the assets and loaders registered since startup,
-//   3. unloads the old library, creates the new Game, runs its init(), and loads the world back.
-// Entity ids change across a reload; references between saved entities are remapped. Use PH_COMPONENT for components
+//   1. keeps the world: entities, their ids, and every component whose code isn't in the game library. Of the game's
+//      own components, plain data (trivially copyable) stays in place, savable ones are saved to come back through
+//      the new code, and any others are dropped,
+//   2. releases everything else made by the old code: systems, scenes, input bindings, resources, hooks, and the
+//      assets and loaders registered since startup,
+//   3. unloads the old library, loads the new one (if that fails, the old code keeps running), creates the new Game,
+//      runs its init(), and puts the saved components back.
+// A plain-data component whose size or alignment changed loses its old data. Use PH_COMPONENT for savable components
 // so they're registered as soon as the library loads. State kept only in the Game object is rebuilt by init().
 //
 // With source_dirs and build_command set (ph_add_game does this), the host also rebuilds the library itself when a
@@ -51,7 +54,12 @@ private:
     bool reload(Engine& engine);
     void check(Engine& engine);
     void teardown(Engine& engine);
-    void bring_up(Engine& engine, const json::Value& world, serial::Context& ctx);
+    struct SavedComponent {
+        ecs::Entity entity;
+        std::string name;
+        json::Value data;
+    };
+    void bring_up(Engine& engine, const std::vector<SavedComponent>& saved, serial::Context& ctx);
 
     Options options_;
     std::unique_ptr<Library> current_;

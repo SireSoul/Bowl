@@ -195,6 +195,13 @@ void World::reset() {
     empty_ = &archetype_for(ComponentMask{});
 }
 
+void World::forget_code() {
+    check_unlocked();
+    deferred_.clear();
+    hooks_.clear();
+    resources_.clear();
+}
+
 void World::flush() {
     // Applying can record more commands (hooks, run() callbacks); keep going until quiet.
     for (int pass = 0; pass < 64 && !deferred_.empty(); ++pass) deferred_.apply();

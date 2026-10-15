@@ -35,7 +35,8 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 
 ## M4: iterate faster than anyone
 - ~~Game-code hot reload: game library reloaded on rebuild, world kept, rebuilt automatically when a source file is
-  saved, on Windows, macOS and Linux~~ (done). Still to do: keeping non-savable state
+  saved, on Windows, macOS and Linux, keeping the world in place (entity ids and plain-data components survive)~~
+  (done)
 - ~~Bowl Editor: a separate app for laying out levels (.world files) with art shelf, outline, inspector, groups, undo,
   autosave and the game's own components~~ (done). Next: a Data workspace (every JSON file, edited in place with its
   comments kept), a Paint studio (pixel art painted where it stands), regions and collision shapes, the game's

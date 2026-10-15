@@ -75,17 +75,26 @@ itself (two builds of the same target at once can trip over each other).
 A few rules make reloads work well. They're good structure anyway.
 
 **Setup goes in `init`, world creation in `start`.** After a reload, the engine runs the new code's `init()` again,
-but not `start()`, because the world is restored from before the reload. So:
+but not `start()`, because the world is still there from before the reload. So:
 
 - `init`: register systems, bind input, load assets, set resources. It must not create entities.
 - `start`: spawn the initial world, push the first scene. It runs once per session.
 
-**Use `PH_COMPONENT` for components.** The world survives a reload by being saved and loaded, so components need to be
-savable. `PH_COMPONENT` also registers the type as soon as the library loads, which the restore relies on.
+**Know which of your components survive.** The world stays across a reload: entities, their ids, and everything the
+engine owns. Of your own component types:
 
-**Rebuild what isn't saved in `init`.** Components that aren't savable, such as an animator holding runtime state,
-don't survive. Recreate them in `init` or in a system that adds them where missing. The sprites sample does this for
-its banner animations:
+- **Plain data** (trivially copyable: numbers, vectors, colors, entity references, fixed arrays) stays exactly where
+  it is, reflected or not. Most components are this.
+- **Savable** ones (`PH_COMPONENT`, or serialization hooks) that hold strings, vectors or assets are saved, and loaded
+  back through the new code. `PH_COMPONENT` registers the type as soon as the library loads, which that relies on.
+- **Anything else** (not plain data and not savable) is dropped, with a warning naming it.
+
+Plain data should hold no pointers into game code (string literals, function pointers): the code they point at is
+unloaded. A plain-data type whose size or alignment changes in the edit loses its old values (the entities keep everything
+else). Reordering or retyping fields without changing the size reads the old bytes in the new layout: restart after
+edits like that.
+
+**Rebuild what didn't survive.** Recreate dropped components in `init` or in a system that adds them where missing:
 
 ```cpp
 // in init(): give every Banner an animator if it doesn't have one
@@ -106,26 +115,30 @@ a score kept in `int score_;` on the `Game` doesn't.
 ### What happens during a reload
 
 1. The host notices the library file changed and waits until the linker has finished writing it.
-2. It saves the world.
-3. It tears down everything the old code created, *while that code is still loaded* (destructors live in the
-   library): scenes, systems, input bindings, the world's entities, hooks and resources, and every asset and loader
-   registered since the game started.
+2. It goes through the components whose code is in the old library: plain data stays put, savable ones are saved
+   and removed, others are removed.
+3. It tears down everything else the old code created, *while that code is still loaded* (destructors live in the
+   library): scenes, systems, input bindings, the world's hooks and resources, and every asset and loader registered
+   since the game started. Entities stay.
 4. It loads a fresh copy of the new library. If that fails, the old code is brought back up with the world and the
    game keeps running; the log says why.
-5. It creates the new `Game`, runs `init()`, applies the player's saved controls again, and loads the world.
+5. It creates the new `Game`, runs `init()`, applies the player's saved controls again, and loads the saved
+   components back onto their entities.
 
-Entity ids change in the process, but references between saved entities are remapped, so a follower still follows
-its leader.
+Entity ids don't change, so every reference between entities, in components or anywhere else, stays right. The log
+says how many entities and components were kept: `hot reload #1: new code running; 1512 entities kept, 5018
+components kept in place, 0 reloaded through their savers, in 211 ms`.
 
 ### What can't change
 
 Some changes need a restart, because the world's saved form or the engine's state can't absorb them:
 
-- Removing or renaming a component type: entities lose that component (with a warning).
+- Removing or renaming a savable component type: entities lose that component (with a warning).
 - Changes to `configure()`: the window and engine are already set up.
 - Changes to the engine itself: the engine is in the host executable. Rebuild and restart `my_game`.
 
-Adding fields to components is fine: new fields get their default values.
+Adding fields to savable components is fine: new fields get their default values. Adding fields to a plain-data
+component changes its size, so entities lose it until something adds it back.
 
 ### Debugging
 

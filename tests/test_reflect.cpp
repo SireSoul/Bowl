@@ -212,6 +212,42 @@ TEST_CASE("components: hot-reload dormancy keeps ids and is undone by restore or
     CHECK(find_component("game::Hero") == id);
 }
 
+namespace game {
+struct Velocity2 { // plain data, not reflected: kept in place across a reload
+    f32 x = 0, y = 0;
+};
+struct Velocity2Grown { // the same type after an edit that added a field
+    f32 x = 0, y = 0, z = 0;
+};
+} // namespace game
+
+TEST_CASE("components: plain data stays in place while dormant, and a changed layout is set aside") {
+    World w;
+    Entity e = w.create(game::Velocity2{3, 4});
+    ComponentId id = component_id<game::Velocity2>();
+    auto mine = [](const ComponentInfo& info, void*) { return info.name == "game::Velocity2"; };
+    mark_components_dormant(mine, nullptr);
+    CHECK(component_info(id).dormant);
+    CHECK(component_info(id).size == sizeof(game::Velocity2)); // the layout survives the code
+    // Moving the entity to another archetype copies the plain data without calling the (unloaded) code.
+    w.add<Asleep>(e);
+    CHECK(w.component_ptr(e, id) != nullptr);
+    // Same layout comes back: same id, data untouched.
+    CHECK(ecs::detail::register_component(ecs::detail::make_component_info<game::Velocity2>()) == id);
+    CHECK(w.get<game::Velocity2>(e).y == 4);
+
+    // A different layout under the same name gets a new id; the old data is parked under a renamed type.
+    mark_components_dormant(mine, nullptr);
+    auto grown = ecs::detail::make_component_info<game::Velocity2Grown>();
+    grown.name = "game::Velocity2";
+    ComponentId fresh = ecs::detail::register_component(grown);
+    CHECK(fresh != id);
+    CHECK(find_component("game::Velocity2") == fresh);
+    CHECK(component_info(id).name == "game::Velocity2 (before reload)");
+    w.destroy(e); // dropping the parked data calls no code
+    CHECK(w.entity_count() == 0);
+}
+
 TEST_CASE("json: binary documents round-trip, are smaller, and refuse damage") {
     auto text = json::parse(R"({ "name": "Ada", "n": [0, 1, -1, 300, -70000, 1.5, 0.1, 1e300, 9007199254740993, -0.0],
         "flags": [true, false, null], "nested": { "name": "Ada", "deep": [[[]], {}] } })");

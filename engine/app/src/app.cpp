@@ -3,6 +3,14 @@
 #include "dev_tools.hpp"
 #include "ph/core/profiler.hpp"
 #include "ph/core/time.hpp"
+#include "ph/ecs/hierarchy.hpp"
+#include "ph/gfx/particles.hpp"
+#include "ph/gfx/sprite.hpp"
+#include "ph/gfx/sprite_sheet.hpp"
+#include "ph/physics/colliders.hpp"
+#if PH_BOX2D
+#include "ph/physics/rigid_bodies.hpp"
+#endif
 
 #include <SDL3/SDL.h>
 
@@ -29,6 +37,13 @@ struct AppRunner {
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
         profiler::set_thread_name("main");
+        // The engine's own components are registered by engine code before any game library loads (a hot-reloadable
+        // game is loaded by configure()), so their code never belongs to a library that gets unloaded.
+        ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
+                                 gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, physics::Collider>();
+#if PH_BOX2D
+        ecs::register_components<physics::RigidBody>();
+#endif
         e.config_ = game->configure();
         for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);
         for (int i = 1; i < argc; ++i) {
@@ -78,6 +93,7 @@ struct AppRunner {
         gfx::GpuDeviceDesc gpu_desc;
         gpu_desc.vsync = e.config_.vsync;
         gpu_desc.driver = e.config_.gpu_driver;
+        gpu_desc.shader_cache = e.user_data_ / "shader-cache";
         if (!e.gpu_.init(e.window_.handle(), gpu_desc)) return false;
         e.audio_.init();
 
