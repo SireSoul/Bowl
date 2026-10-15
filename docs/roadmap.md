@@ -13,8 +13,8 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - ~~Audio: OGG Vorbis and Opus sounds, streamed music with gapless loops and crossfades, per-bus low-pass, high-pass
   and reverb, positional sounds that follow a listener, per-voice filters, ducking music under dialogue~~ (done)
 - ~~Collision: shapes, sweeps, raycasts, spatial hash, `move_and_slide` against grids or boxes, polygons and
-  capsules, colliders and trigger events as ECS components, optional rigid-body physics (Box2D v3)~~ (done). Later:
-  Box2D joints and contact events as components
+  capsules, colliders and trigger events as ECS components, optional rigid-body physics (Box2D v3) with joints
+  and contact events~~ (done)
 
 ## M2: worlds that persist
 - ~~Reflection: `PH_REFLECT(Type, fields...)`~~ (done). Later: switch to C++26 reflection when compilers ship it

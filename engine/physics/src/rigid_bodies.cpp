@@ -22,9 +22,15 @@ struct Body {
     RigidBody settings;   // as last applied
 };
 
+struct JointRecord {
+    b2JointId id;
+    std::string key; // the Joint's JSON when it was made
+};
+
 struct Box2DState {
     b2WorldId world = b2_nullWorldId;
     std::unordered_map<u64, Body> bodies;
+    std::unordered_map<u64, JointRecord> joints;
     bool warned_parent = false;
 
     Box2DState() {
@@ -61,6 +67,8 @@ void make_shapes(b2BodyId body, const Collider& c, const RigidBody& rb, Vec2 sca
     def.filter.categoryBits = c.layer;
     def.filter.maskBits = c.mask;
     def.isSensor = c.trigger;
+    def.enableContactEvents = !c.trigger;
+    def.enableHitEvents = !c.trigger;
     auto m = [&](Vec2 v) { return b2Vec2{v.x / ppm, v.y / ppm}; };
     Vec2 offset = c.offset * scale;
     f32 s = std::max(std::abs(scale.x), std::abs(scale.y));
@@ -97,6 +105,123 @@ void make_shapes(b2BodyId body, const Collider& c, const RigidBody& rb, Vec2 sca
         break;
     }
     }
+}
+
+std::string joint_key(const Joint& j) {
+    serial::Context ctx;
+    std::unordered_map<u64, u64> ids; // entity references written as their own bits, so the key is stable
+    ids[j.a.bits()] = j.a.bits();
+    ids[j.b.bits()] = j.b.bits();
+    ctx.entity_map = &ids;
+    return json::stringify(serial::to_json(j, ctx), -1);
+}
+
+b2JointId make_joint(b2WorldId world, b2BodyId a, b2BodyId b, const Joint& j, f32 ppm) {
+    auto m = [&](Vec2 v) { return b2Vec2{v.x / ppm, v.y / ppm}; };
+    b2Vec2 axis = b2Normalize({j.axis.x, j.axis.y});
+    switch (j.kind) {
+    case Joint::Kind::Distance: {
+        b2DistanceJointDef d = b2DefaultDistanceJointDef();
+        d.bodyIdA = a;
+        d.bodyIdB = b;
+        d.localAnchorA = m(j.anchor_a);
+        d.localAnchorB = m(j.anchor_b);
+        if (j.length > 0) {
+            d.length = j.length / ppm;
+        } else { // the distance between the anchors right now
+            b2Vec2 pa = b2Body_GetWorldPoint(a, d.localAnchorA), pb = b2Body_GetWorldPoint(b, d.localAnchorB);
+            d.length = std::max(b2Distance(pa, pb), 0.01f);
+        }
+        // A rope is a spring with no stiffness held between min and max: it only pulls once taut.
+        d.enableSpring = j.spring_hertz > 0 || j.max_length > 0;
+        d.hertz = j.spring_hertz;
+        d.dampingRatio = j.spring_damping;
+        d.enableLimit = j.max_length > 0;
+        d.minLength = j.min_length / ppm;
+        if (j.max_length > 0) d.maxLength = j.max_length / ppm; // otherwise the default: no limit
+        d.enableMotor = j.motor;
+        d.motorSpeed = j.motor_speed / ppm;
+        d.maxMotorForce = j.max_motor_force;
+        d.collideConnected = j.collide;
+        return b2CreateDistanceJoint(world, &d);
+    }
+    case Joint::Kind::Prismatic: {
+        b2PrismaticJointDef d = b2DefaultPrismaticJointDef();
+        d.bodyIdA = a;
+        d.bodyIdB = b;
+        d.localAnchorA = m(j.anchor_a);
+        d.localAnchorB = m(j.anchor_b);
+        d.localAxisA = axis;
+        d.referenceAngle = b2RelativeAngle(b2Body_GetRotation(b), b2Body_GetRotation(a));
+        d.enableSpring = j.spring_hertz > 0;
+        d.hertz = j.spring_hertz;
+        d.dampingRatio = j.spring_damping;
+        d.enableLimit = j.limit;
+        d.lowerTranslation = j.lower / ppm;
+        d.upperTranslation = j.upper / ppm;
+        d.enableMotor = j.motor;
+        d.motorSpeed = j.motor_speed / ppm;
+        d.maxMotorForce = j.max_motor_force;
+        d.collideConnected = j.collide;
+        return b2CreatePrismaticJoint(world, &d);
+    }
+    case Joint::Kind::Weld: {
+        b2WeldJointDef d = b2DefaultWeldJointDef();
+        d.bodyIdA = a;
+        d.bodyIdB = b;
+        d.localAnchorA = m(j.anchor_a);
+        d.localAnchorB = m(j.anchor_b);
+        d.referenceAngle = b2RelativeAngle(b2Body_GetRotation(b), b2Body_GetRotation(a));
+        d.linearHertz = d.angularHertz = j.spring_hertz;
+        d.linearDampingRatio = d.angularDampingRatio = j.spring_damping;
+        d.collideConnected = j.collide;
+        return b2CreateWeldJoint(world, &d);
+    }
+    case Joint::Kind::Wheel: {
+        b2WheelJointDef d = b2DefaultWheelJointDef();
+        d.bodyIdA = a;
+        d.bodyIdB = b;
+        d.localAnchorA = m(j.anchor_a);
+        d.localAnchorB = m(j.anchor_b);
+        d.localAxisA = axis;
+        d.enableSpring = j.spring_hertz > 0;
+        d.hertz = j.spring_hertz;
+        d.dampingRatio = j.spring_damping;
+        d.enableLimit = j.limit;
+        d.lowerTranslation = j.lower / ppm;
+        d.upperTranslation = j.upper / ppm;
+        d.enableMotor = j.motor;
+        d.motorSpeed = j.motor_speed;
+        d.maxMotorTorque = j.max_motor_force;
+        d.collideConnected = j.collide;
+        return b2CreateWheelJoint(world, &d);
+    }
+    case Joint::Kind::Revolute:
+    default: {
+        b2RevoluteJointDef d = b2DefaultRevoluteJointDef();
+        d.bodyIdA = a;
+        d.bodyIdB = b;
+        d.localAnchorA = m(j.anchor_a);
+        d.localAnchorB = m(j.anchor_b);
+        d.referenceAngle = b2RelativeAngle(b2Body_GetRotation(b), b2Body_GetRotation(a));
+        d.enableSpring = j.spring_hertz > 0;
+        d.hertz = j.spring_hertz;
+        d.dampingRatio = j.spring_damping;
+        d.enableLimit = j.limit;
+        d.lowerAngle = j.lower;
+        d.upperAngle = j.upper;
+        d.enableMotor = j.motor;
+        d.motorSpeed = j.motor_speed;
+        d.maxMotorTorque = j.max_motor_force;
+        d.collideConnected = j.collide;
+        return b2CreateRevoluteJoint(world, &d);
+    }
+    }
+}
+
+ecs::Entity entity_of(b2ShapeId shape) {
+    if (!b2Shape_IsValid(shape)) return ecs::null_entity;
+    return ecs::Entity::from_bits(static_cast<u64>(reinterpret_cast<uintptr_t>(b2Body_GetUserData(b2Shape_GetBody(shape)))));
 }
 
 } // namespace
@@ -167,7 +292,51 @@ void step_physics(ecs::World& world, f32 dt) {
             b.settings = rb;
         });
 
+    // Joints: gone with their entity, their component or either body (Box2D drops a body's joints with it, including
+    // when a changed body is rebuilt above); rebuilt when changed; made once both bodies exist.
+    for (auto it = state->joints.begin(); it != state->joints.end();) {
+        ecs::Entity e = ecs::Entity::from_bits(it->first);
+        const Joint* j = world.alive(e) ? world.try_get<const Joint>(e) : nullptr;
+        bool keep = j && b2Joint_IsValid(it->second.id) && joint_key(*j) == it->second.key;
+        if (!keep) {
+            if (b2Joint_IsValid(it->second.id)) b2DestroyJoint(it->second.id);
+            it = state->joints.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    world.each<const Joint>([&](ecs::Entity e, const Joint& j) {
+        if (state->joints.contains(e.bits())) return;
+        auto a = state->bodies.find(j.a.bits()), b = state->bodies.find(j.b.bits());
+        if (a == state->bodies.end() || b == state->bodies.end() || j.a == j.b) return;
+        state->joints[e.bits()] = {make_joint(state->world, a->second.id, b->second.id, j, ppm), joint_key(j)};
+    });
+
+    b2World_SetHitEventThreshold(state->world, settings->hit_speed / ppm);
     if (dt > 0) b2World_Step(state->world, dt, std::max(1, settings->sub_steps));
+
+    // Contacts, in a stable order.
+    ContactEvents events;
+    b2ContactEvents contacts = b2World_GetContactEvents(state->world);
+    for (int i = 0; i < contacts.beginCount; ++i) {
+        const b2ContactBeginTouchEvent& c = contacts.beginEvents[i];
+        Vec2 point = c.manifold.pointCount > 0 ? Vec2{c.manifold.points[0].point.x, c.manifold.points[0].point.y} * ppm : Vec2{};
+        events.began.push_back({entity_of(c.shapeIdA), entity_of(c.shapeIdB), point, {c.manifold.normal.x, c.manifold.normal.y}});
+    }
+    for (int i = 0; i < contacts.endCount; ++i)
+        events.ended.push_back({entity_of(contacts.endEvents[i].shapeIdA), entity_of(contacts.endEvents[i].shapeIdB), {}, {}});
+    for (int i = 0; i < contacts.hitCount; ++i) {
+        const b2ContactHitEvent& h = contacts.hitEvents[i];
+        events.hits.push_back({entity_of(h.shapeIdA), entity_of(h.shapeIdB), Vec2{h.point.x, h.point.y} * ppm,
+                               {h.normal.x, h.normal.y}, h.approachSpeed * ppm});
+    }
+    auto order = [](const auto& x, const auto& y) {
+        return x.a.bits() != y.a.bits() ? x.a.bits() < y.a.bits() : x.b.bits() < y.b.bits();
+    };
+    std::sort(events.began.begin(), events.began.end(), order);
+    std::sort(events.ended.begin(), events.ended.end(), order);
+    std::sort(events.hits.begin(), events.hits.end(), order);
+    world.set_resource<ContactEvents>(std::move(events));
 
     // Results back into the entities.
     for (auto& [bits, b] : state->bodies) {

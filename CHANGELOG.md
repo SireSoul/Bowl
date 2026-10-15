@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Box2D: `physics::Joint` (distance and rope, revolute, prismatic, weld, wheel; springs, limits, motors) and the
+  `ContactEvents` resource (touches began and ended, impacts with point and speed; `PhysicsSettings::hit_speed`).
 - Audio: per-voice filters (`PlayParams::low_pass`, `high_pass`, `set_filters`) and ducking (`set_ducking`, `Ducking`,
   `duck_level`).
 - Background asset loading: `AssetManager::load_async`, `loading`, `finish_loads` (the App calls it every frame) and

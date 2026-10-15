@@ -42,7 +42,7 @@ struct AppRunner {
         ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
                                  gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, physics::Collider>();
 #if PH_BOX2D
-        ecs::register_components<physics::RigidBody>();
+        ecs::register_components<physics::RigidBody, physics::Joint>();
 #endif
         e.config_ = game->configure();
         for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);

@@ -208,3 +208,45 @@ positions, rotations and velocities back. `physics::apply_impulse(world, e, impu
 The `PhysicsSettings` resource holds `pixels_per_meter` (32: Box2D is tuned for things around a meter in size),
 `gravity` in world units per second squared (y points down) and `sub_steps`. Bodies must be top-level entities. Trigger
 colliders become Box2D sensors, and `update_triggers` keeps working alongside.
+
+### Joints
+
+A `physics::Joint` connects two bodies. It lives on an entity of its own, so it's saved with the level and its two
+body references survive loading:
+
+```cpp
+using physics::Joint;
+// A door on a hinge at its left edge, swinging up to 90 degrees.
+world.create(Joint{.kind = Joint::Kind::Revolute, .a = frame, .b = door, .anchor_a = {-40, 0}, .anchor_b = {-40, 0},
+                   .limit = true, .lower = 0, .upper = pi / 2});
+// A lamp on a rope that only pulls once it's taut.
+world.create(Joint{.kind = Joint::Kind::Distance, .a = ceiling, .b = lamp, .max_length = 120});
+```
+
+| Kind | What it does | Uses |
+| --- | --- | --- |
+| `Distance` | Keeps the anchors `length` apart (0: as far as they are when it's made). With `max_length`, a rope | spring, motor |
+| `Revolute` | A hinge at the anchors: doors, wheels, pendulums | limits (radians), spring, motor |
+| `Prismatic` | A slider along `axis`, in body a's space: pistons, lifts | limits, spring, motor |
+| `Weld` | Glues the two together; a spring lets it bend | spring |
+| `Wheel` | A wheel on a suspension along `axis`: vehicles | suspension spring, limits, motor |
+
+Anchors are in each body's own space, in world units. `spring_hertz` (0 is stiff) and `spring_damping` soften a joint,
+`limit` with `lower`/`upper` bounds it, `motor` with `motor_speed` and `max_motor_force` drives it, and `collide` lets
+the two bodies keep bumping into each other. Changing a field rebuilds the joint; destroying either body removes it.
+
+### Contact events
+
+After each `step_physics`, the `ContactEvents` resource says what touched what:
+
+```cpp
+const auto& contacts = world.resource<physics::ContactEvents>();
+for (const auto& hit : contacts.hits)
+    if (hit.speed > 300) play_at(clank, hit.point, {.gain = std::min(1.0f, hit.speed / 800)});
+for (const auto& t : contacts.began) { /* t.a and t.b started touching at t.point */ }
+for (const auto& t : contacts.ended) { /* stopped touching */ }
+```
+
+`hits` are impacts faster than `PhysicsSettings::hit_speed` (32 world units per second), with the point, the normal
+and the speed: what sounds, sparks and fall damage need. Events come sorted by entity, so the same simulation reports
+them in the same order. Triggers don't produce contacts; they keep using `update_triggers`.
