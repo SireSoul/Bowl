@@ -23,6 +23,7 @@ engine/
   audio/                  mixer, sounds, music
   physics/                collision
   ui/                     game UI
+  net/                    UDP connections, lockstep, rollback
   app/                    Engine, Game, scenes, the main loop, dev tools, hot reload host
 tools/
   shaderc/                ph-shaderc: library and command-line tool

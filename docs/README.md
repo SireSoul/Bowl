@@ -30,6 +30,7 @@ One page per system.
 | [Scenes](guides/scenes.md) | The scene stack, transparency, fades |
 | [Collision](guides/collision.md) | Shapes, contacts, sweeps, raycasts, `move_and_slide`, the spatial hash |
 | [Saving and loading](guides/saving.md) | Reflection, serialization, world files, prefabs, player settings |
+| [Networking](guides/networking.md) | Connections over UDP, reliable and unreliable messages, lockstep, rollback |
 | [Localization](guides/localization.md) | String tables, fallbacks, placeholders, plurals |
 | [Jobs, logging and profiling](guides/jobs-and-profiling.md) | `JobSystem`, `parallel_for`, logging, profiler zones |
 | [Dev tools](guides/dev-tools.md) | The F1 overlay, the inspector, your own tool windows |

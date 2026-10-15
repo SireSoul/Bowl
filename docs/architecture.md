@@ -26,6 +26,7 @@ engine/
   audio/     AudioEngine, Sound, Music (streamed OGG)                                   (core, SDL3, stb)
   physics/   collision shapes, sweeps, raycasts, SpatialHash, move_and_slide            (core)
   ui/        immediate-mode game UI, Typewriter                                          (gfx, platform)
+  net/       Socket, Host (reliable UDP), Lockstep, Rollback                          (core)
   app/       Engine, Game, Scene stack, main loop, DevTools, HotReloadHost              (everything)
   assets/    engine assets (shaders, the Roboto font), mounted as "engine/"
 tools/shaderc  GLSL -> .phsh compiler (library + CLI)

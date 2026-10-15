@@ -7,6 +7,7 @@
 #   ph_audio     mixer, sounds, streamed music                                   (core, SDL3, stb)
 #   ph_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide, colliders and triggers (core, ecs)
 #   ph_ui        immediate-mode game UI: panels, widgets, focus navigation, dialogue (gfx, platform)
+#   ph_net       UDP sockets, connections with reliable messages, lockstep and rollback   (core)
 #   ph_app       Engine/Game, main loop, dev tools                               (everything)
 
 set(PH_ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
@@ -109,6 +110,15 @@ ph_module(ui
     SOURCES ui/src/ui.cpp
     PUBLIC_DEPS ph_gfx ph_platform)
 
+ph_module(net
+    SOURCES
+        net/src/host.cpp
+        net/src/socket.cpp
+    PUBLIC_DEPS ph_core)
+if(WIN32)
+    target_link_libraries(ph_net PRIVATE ws2_32)
+endif()
+
 ph_module(app
     SOURCES
         app/src/app.cpp
@@ -124,7 +134,7 @@ endif()
 
 add_library(ph_engine INTERFACE)
 add_library(ph::engine ALIAS ph_engine)
-target_link_libraries(ph_engine INTERFACE ph_app)
+target_link_libraries(ph_engine INTERFACE ph_app ph_net)
 # Dev builds expose Dear ImGui to games so they can draw their own tool windows in Game::dev_ui.
 if(PH_DEV_TOOLS)
     target_link_libraries(ph_engine INTERFACE ph_imgui)

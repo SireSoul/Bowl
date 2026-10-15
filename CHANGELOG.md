@@ -6,6 +6,9 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Networking (`ph_net`, guide in docs/guides/networking.md): `net::Host`, connections over UDP with reliable ordered
+  messages (resent until acknowledged, up to 64 KB) and unreliable ones, timeouts, stats and a simulated bad network;
+  `net::Lockstep` and `net::Rollback` (guessed inputs, saved states, re-running ticks when a guess was wrong).
 - Tilemaps: Tiled object templates (`.tj`, `.tx`) are filled in when maps load, tile templates mapped onto the
   map's tilesets; terrain sets as data (`WangSet`, `Tileset::wang_sets`, `corner_tile`, `fill_from_corners`).
 - Box2D: `physics::Joint` (distance and rope, revolute, prismatic, weld, wheel; springs, limits, motors) and the

@@ -10,6 +10,7 @@ add_executable(ph_tests
     test_localization.cpp
     test_json.cpp
     test_math.cpp
+    test_net.cpp
     test_particles.cpp
     test_reflect.cpp
     test_scene.cpp
