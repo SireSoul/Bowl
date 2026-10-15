@@ -15,6 +15,9 @@ namespace ph::ui {
 // press, left/right on sliders) through the input actions ui_up, ui_down, ui_left, ui_right, ui_confirm, ui_back
 // (bound to arrows/WASD, Enter/Space, Escape and the gamepad's d-pad, South and East unless the game binds them).
 //
+// Widgets draw into a batch you begin yourself with a screen camera, so your own HUD can share it:
+//
+//     batch.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None);
 //     ui.begin(batch, engine.input(), screen, dt, density);
 //     if (ui.begin_panel("pause", {40, 40, 300, 0})) {
 //         ui.label("Paused");
@@ -23,6 +26,7 @@ namespace ph::ui {
 //         ui.end_panel();
 //     }
 //     ui.end();
+//     engine.renderer().submit_ui(batch);
 
 struct Style {
     Asset<gfx::Font> font;

@@ -2,6 +2,8 @@
 
 # ph_configure_target(<target>): warnings, defines and platform flags for code we own.
 function(ph_configure_target target)
+    # PUBLIC, so a game that adds the engine with add_subdirectory compiles engine headers as C++20 too.
+    target_compile_features(${target} PUBLIC cxx_std_20)
     if(MSVC)
         target_compile_options(${target} PRIVATE /W4 /permissive- /Zc:__cplusplus /Zc:preprocessor /utf-8 /MP)
         target_compile_definitions(${target} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN _CRT_SECURE_NO_WARNINGS)

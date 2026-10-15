@@ -1,0 +1,151 @@
+# CMake reference
+
+- [Options](#options)
+- [Presets](#presets)
+- [Targets](#targets)
+- [ph_add_game](#ph_add_game)
+- [ph_compile_shaders](#ph_compile_shaders)
+- [Other helpers](#other-helpers)
+- [Using the engine in your own project](#using-the-engine-in-your-own-project)
+- [Dependencies](#dependencies)
+
+## Options
+
+Set them on the configure line (`-DPH_DEV_TOOLS=OFF`) or in your own presets.
+
+| Option | Default | |
+| --- | --- | --- |
+| `PH_DEV_TOOLS` | `ON` | The F1 overlay, the runtime shader compiler, asset hot reload, game-code hot reload, assertions. Turn off for shipping |
+| `PH_BUILD_TESTS` | `ON` when the engine is the top-level project | Unit tests and the ECS benchmark |
+| `PH_BUILD_SAMPLES` | `ON` when the engine is the top-level project | `tutorial`, `isometric`, `sprites` |
+| `PH_FETCH_SDL` | `OFF` | Build SDL3 from source (statically) even if an installed SDL3 is found |
+| `PH_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in engine, tool, test and game code as errors (CI turns this on for Linux and macOS) |
+| `PH_MACOS_BUNDLES` | `OFF` | Build macOS games as `.app` bundles |
+| `PH_SHADERC_EXECUTABLE` | empty | A prebuilt host `ph-shaderc` for cross-compiling; when set, the shader compiler isn't built |
+| `PH_ECS_MAX_COMPONENTS` | 256 | (A preprocessor define, not a CMake option.) Maximum component types; a multiple of 64 |
+
+## Presets
+
+From `CMakePresets.json`. Each configure preset has a matching build preset; `dev` and `release` have test presets.
+
+| Preset | `CMAKE_BUILD_TYPE` | Sets |
+| --- | --- | --- |
+| `dev` | `RelWithDebInfo` | `PH_DEV_TOOLS=ON` |
+| `debug` | `Debug` | `PH_DEV_TOOLS=ON` |
+| `release` | `Release` | `PH_DEV_TOOLS=OFF`, `PH_FETCH_SDL=ON`, `PH_MACOS_BUNDLES=ON` |
+
+All presets build into `build/<preset>` and export `compile_commands.json`.
+
+## Targets
+
+| Target | |
+| --- | --- |
+| `ph::engine` | Everything; what games link |
+| `ph::core`, `ph::ecs`, `ph::platform`, `ph::gfx`, `ph::audio`, `ph::physics`, `ph::ui`, `ph::app` | The individual modules, for tools that need only part of the engine |
+| `ph-shaderc` | The shader compiler executable |
+| `ph_shaderc` | The shader compiler as a library |
+| `ph_engine_assets` | Compiles the engine's shaders |
+| `ph_tests`, `ph_bench_ecs` | Tests and benchmark |
+| `<game>_assets` | Created by `ph_add_game`: copies and compiles a game's assets |
+| `<game>_code` | Created by `ph_add_game(... HOT_RELOAD)`: the game's code as a loadable library |
+
+## ph_add_game
+
+```cmake
+ph_add_game(<target> [ASSETS <dir>] [BUNDLE_ID <id>] [HOT_RELOAD])
+```
+
+Turns an executable target into a game:
+
+- links `ph::engine` and applies the engine's compiler settings (C++20, warnings);
+- compiles every `*.vert.glsl` and `*.frag.glsl` under `ASSETS` into `.phsh` bundles;
+- copies the engine's assets and the game's assets next to the executable, as `engine/` and `assets/`;
+- in dev builds, tells the game where its source asset folder is, so it reads (and hot-reloads) assets from there;
+- adds install rules (see [packaging](../guides/packaging.md)).
+
+| Argument | |
+| --- | --- |
+| `ASSETS <dir>` | The game's asset folder, relative to the current `CMakeLists.txt`. Optional for games with no files |
+| `BUNDLE_ID <id>` | macOS bundle identifier, used when `PH_MACOS_BUNDLES` is on. Default `com.placeholderenginename.<target>` |
+| `HOT_RELOAD` | Build the game's sources as `<target>_code`, a library the `<target>` host reloads when it's rebuilt. Dev builds on macOS and Linux with CMake 3.27+; ignored elsewhere. See [hot-reload.md](../guides/hot-reload.md#game-code) |
+
+Add sources to the target before calling `ph_add_game` when using `HOT_RELOAD`: the sources are moved into the library
+at that point.
+
+## ph_compile_shaders
+
+```cmake
+ph_compile_shaders(<outputs_var> <source_dir> <output_dir>)
+```
+
+Adds a build rule for every shader under `source_dir` that writes `output_dir/<relative path>.phsh`, with dependency
+tracking for `#include`s, and stores the list of outputs in `outputs_var`. `ph_add_game` uses it; call it directly for
+shaders that live outside a game's asset folder, then depend on the outputs:
+
+```cmake
+ph_compile_shaders(tool_shaders ${CMAKE_CURRENT_SOURCE_DIR}/shaders ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+add_custom_target(tool_shaders ALL DEPENDS ${tool_shaders})
+```
+
+## Other helpers
+
+| Function | |
+| --- | --- |
+| `ph_configure_target(<target>)` | The engine's compiler settings: C++20, warnings (`/W4`, or `-Wall -Wextra -Wpedantic -Wshadow ...`), `PH_DEV_TOOLS`, Windows defines. `ph_add_game` calls it |
+| `ph_optimize_debug(<target>)` | Light optimization in Debug builds (`-Og`, `/Ob1`), for code that's too slow unoptimized |
+
+## Using the engine in your own project
+
+Games don't have to live in this repository. Two ways to bring the engine in:
+
+**As a subdirectory** (a Git submodule, or a checkout next to your game):
+
+```cmake
+cmake_minimum_required(VERSION 3.25)
+project(my_game VERSION 0.1.0 LANGUAGES C CXX)
+
+add_subdirectory(external/PLACEHOLDERENGINENAME)
+
+add_executable(my_game src/main.cpp)
+ph_add_game(my_game ASSETS assets)
+```
+
+If the engine's folder isn't inside your project's folder, pass a build directory name as the second argument:
+`add_subdirectory(../PLACEHOLDERENGINENAME engine)`.
+
+**With FetchContent**, pinned to a commit or tag:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(placeholderenginename
+    GIT_REPOSITORY https://github.com/SireSoul/PLACEHOLDERENGINENAME.git
+    GIT_TAG <commit or tag>)
+FetchContent_MakeAvailable(placeholderenginename)
+
+add_executable(my_game src/main.cpp)
+ph_add_game(my_game ASSETS assets)
+```
+
+While the repository is private, FetchContent needs Git credentials that can read it.
+
+In both cases, the engine's tests and samples are off (they default on only when the engine is the top-level
+project), and `PH_*` options can be set before `add_subdirectory` / `FetchContent_MakeAvailable` or on the command
+line. Copy the engine's `CMakePresets.json` into your project for the same `dev`, `debug` and `release` setups.
+
+## Dependencies
+
+Fetched by `cmake/PhDependencies.cmake`, each pinned to a release archive and its SHA-256:
+
+| Library | Version | Used for | License |
+| --- | --- | --- | --- |
+| [SDL3](https://github.com/libsdl-org/SDL) | 3.4.16 | Windows, input, audio, GPU, filesystem | zlib |
+| [stb](https://github.com/nothings/stb) | pinned commit | Image decoding, PNG writing, TrueType, Vorbis | MIT or public domain |
+| [glslang](https://github.com/KhronosGroup/glslang) | 16.5.0 | GLSL to SPIR-V (shader compiler only) | BSD-3-Clause and others |
+| [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross) | vulkan-sdk-1.4.341.0 | SPIR-V to MSL and HLSL (shader compiler only) | Apache-2.0 |
+| [Dear ImGui](https://github.com/ocornut/imgui) | 1.92.8 | The dev overlay (dev builds only) | MIT |
+| [doctest](https://github.com/doctest/doctest) | 2.5.2 | Unit tests (tests only) | MIT |
+
+An installed SDL3 (3.2 or newer) is used instead of building it when `PH_FETCH_SDL` is off.
+
+To update a dependency, change its URL and hash together. CMake prints the actual hash when it doesn't match, which is
+a convenient way to get the new one.

@@ -11,7 +11,7 @@ function(ph_fetch name url sha256)
     FetchContent_Declare(${name} URL ${url} URL_HASH SHA256=${sha256} DOWNLOAD_EXTRACT_TIMESTAMP TRUE SYSTEM ${ARGN})
 endfunction()
 
-# --- SDL3: window, input, audio, GPU (Vulkan / Metal / D3D12), filesystem, threads ----------------------------------
+# SDL3: window, input, audio, GPU (Vulkan / Metal / D3D12), filesystem, threads
 if(NOT PH_FETCH_SDL)
     find_package(SDL3 3.2 CONFIG QUIET)
 endif()
@@ -28,14 +28,14 @@ else()
     FetchContent_MakeAvailable(SDL3)
 endif()
 
-# --- stb_image: PNG/JPG/TGA/BMP decoding --------------------------------------------------------------------------
+# stb: image decoding (PNG/JPG/TGA/BMP), PNG writing, TrueType, Vorbis
 ph_fetch(stb https://github.com/nothings/stb/archive/2c980bb59875b0d32144a71867fbdebb2f77cd20.tar.gz
          9a955b1b49a4410088a2e0ee2a9c057c3c907d0c1d75454144cb980aca0ba515)
 FetchContent_MakeAvailable(stb)
 add_library(ph_stb INTERFACE)
 target_include_directories(ph_stb SYSTEM INTERFACE ${stb_SOURCE_DIR})
 
-# --- Shader compiler: glslang (GLSL -> SPIR-V) + SPIRV-Cross (SPIR-V -> MSL / HLSL) --------------------------------
+# Shader compiler: glslang (GLSL -> SPIR-V) and SPIRV-Cross (SPIR-V -> MSL, HLSL)
 # Needed for the build-time ph-shaderc tool, and linked into dev builds for live shader reload.
 set(PH_NEED_SHADER_COMPILER OFF)
 if(PH_DEV_TOOLS OR NOT PH_SHADERC_EXECUTABLE)
@@ -70,7 +70,7 @@ if(PH_NEED_SHADER_COMPILER)
     FetchContent_MakeAvailable(glslang spirv_cross)
 endif()
 
-# --- Dear ImGui: the in-game dev tools ------------------------------------------------------------------------------
+# Dear ImGui: the in-game dev tools
 if(PH_DEV_TOOLS)
     ph_fetch(imgui https://github.com/ocornut/imgui/archive/refs/tags/v1.92.8.tar.gz
              fecb33d33930e12ff53a34064e9d3a06c8f7c3e04408f14cd36c80e3faac863b)
@@ -88,7 +88,7 @@ if(PH_DEV_TOOLS)
     set_target_properties(ph_imgui PROPERTIES FOLDER third_party)
 endif()
 
-# --- doctest: unit tests --------------------------------------------------------------------------------------------
+# doctest: unit tests
 if(PH_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)
     ph_fetch(doctest https://github.com/doctest/doctest/archive/refs/tags/v2.5.2.tar.gz

@@ -1,6 +1,6 @@
 # Shaders are written once in Vulkan-flavoured GLSL (`name.vert.glsl`, `name.frag.glsl`) and compiled by ph-shaderc into
-# a `.phsh` bundle holding SPIR-V (Vulkan) and MSL (Metal) plus the resource counts SDL_GPU needs. Dev builds also compile
-# them at runtime, so editing a .glsl file updates the running game.
+# a `.phsh` bundle holding SPIR-V (Vulkan), MSL (Metal) and HLSL (Direct3D 12) plus the resource counts SDL_GPU needs.
+# Dev builds also compile them at runtime, so editing a .glsl file updates the running game.
 
 function(ph_shaderc_command out_var)
     if(PH_SHADERC_EXECUTABLE)

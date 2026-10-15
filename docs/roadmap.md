@@ -50,7 +50,14 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 - Networking: reliable UDP transport, lockstep and rollback helpers built on the deterministic ECS
 - Deterministic entity ids for entities spawned in parallel systems
 
+## Docs and tooling
+- ~~Full documentation: getting started, tutorial (backed by the `tutorial` sample), a guide per system, reference,
+  troubleshooting, FAQ, contributing guide~~ (done). Later: generated API reference from the headers
+- Inspector: edit `std::vector` and `std::array` fields, add and remove components, filter entities by component
+
 ## Known limitations
 - Max 256 component types (`PH_ECS_MAX_COMPONENTS` raises it)
 - Archetypes are never freed. Fine for games, but worth compacting eventually
 - Compute shaders aren't supported by `ph-shaderc` yet
+- Game shaders can't `#include` the engine's shader files by path
+- Assets load synchronously on the main thread; there's no background loading yet

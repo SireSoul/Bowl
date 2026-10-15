@@ -97,9 +97,11 @@ public:
 
     // Actions
 
+    // Adds bindings to an action (creating it if needed); an action can have any number.
     void bind(std::string_view action, InputBinding binding);
     void bind(std::string_view action, std::initializer_list<InputBinding> bindings);
     void unbind(std::string_view action);
+    void unbind_all() { actions_.clear(); }
     bool has_action(std::string_view action) const { return find(action) != nullptr; }
     const std::vector<InputBinding>* bindings(std::string_view action) const;
 

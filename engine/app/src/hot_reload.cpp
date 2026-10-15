@@ -129,6 +129,7 @@ void HotReloadHost::teardown(Engine& engine) {
     engine.scenes().shutdown(engine);
     engine.fixed_schedule().clear();
     engine.frame_schedule().clear();
+    engine.input().unbind_all(); // init() binds again; otherwise every reload would add a second copy
     engine.world().reset();
     engine.world().set_resource<Engine*>(&engine);
     engine.assets().rollback(asset_mark_);
