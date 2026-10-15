@@ -54,7 +54,7 @@ window has more physical pixels than points: `window().size()` is in points, `wi
 ## Platform notes
 
 **Windows.** The default generator is Visual Studio, a multi-config generator: executables are in a
-`RelWithDebInfo` or `Release` subfolder. Game-code hot reload isn't supported yet.
+`RelWithDebInfo` or `Release` subfolder. The editor can't load a game's code library there yet (`--game`).
 
 **macOS.** Release builds produce `.app` bundles; dev builds produce plain executables for faster iteration. Apps
 aren't signed or notarized yet, so other Macs show a Gatekeeper warning.

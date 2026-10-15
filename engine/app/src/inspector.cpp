@@ -113,6 +113,14 @@ bool component(ecs::World& world, ecs::Entity e, ecs::ComponentId c, AssetManage
     return changed;
 }
 
+bool fields(ecs::World& world, ecs::Entity e, ecs::ComponentId c, AssetManager& assets, ecs::Entity* select) {
+    const ecs::ComponentInfo& info = ecs::component_info(c);
+    if (!info.visit || !world.alive(e)) return false;
+    FieldEditor editor(assets, select);
+    info.visit(world.component_ptr(e, c), editor);
+    return editor.changed();
+}
+
 bool components(ecs::World& world, ecs::Entity e, AssetManager& assets, ecs::Entity* select) {
     if (!world.alive(e)) return false;
     // Copied: editing may not change the set, but a hook could.

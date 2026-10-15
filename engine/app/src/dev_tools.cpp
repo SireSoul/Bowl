@@ -60,12 +60,14 @@ DevTools::~DevTools() {
 }
 
 void DevTools::handle_event(const SDL_Event& event) {
-    if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F1 && !event.key.repeat) visible_ = !visible_;
+    // Tools built on the engine (dev_ui_always) keep F1 for themselves; their overlay key is F12.
+    SDL_Scancode toggle = engine_.config().dev_ui_always ? SDL_SCANCODE_F12 : SDL_SCANCODE_F1;
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == toggle && !event.key.repeat) visible_ = !visible_;
     ImGui_ImplSDL3_ProcessEvent(&event);
 }
 
 void DevTools::begin_frame() {
-    frame_open_ = visible_;
+    frame_open_ = visible_ || engine_.config().dev_ui_always;
     if (!frame_open_) {
         engine_.input().set_blocked(false, false);
         return;
@@ -79,8 +81,10 @@ void DevTools::begin_frame() {
 
 void DevTools::end_frame(Game& game) {
     if (!frame_open_) return;
-    draw_main();
-    draw_inspector();
+    if (visible_) {
+        draw_main();
+        draw_inspector();
+    }
     game.dev_ui(engine_);
     engine_.scenes().dev_ui(engine_);
     ImGui::Render();

@@ -97,7 +97,16 @@ function(ph_make_hot_reloadable target)
         # the library) builds both.
         return()
     endif()
-    foreach(lib IN LISTS engine_libs ITEMS ph_shaderc)
+    ph_export_engine(${target})
+    add_dependencies(${target} ${code})
+endfunction()
+
+# ph_export_engine(<target>): macOS and Linux. Links every engine object into an executable and exports them, so
+# libraries it loads at runtime (a game's code library) can call into the engine. The editor uses this to load a
+# game's components.
+function(ph_export_engine target)
+    set_target_properties(${target} PROPERTIES ENABLE_EXPORTS ON)
+    foreach(lib ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app ph_imgui ph_shaderc)
         if(TARGET ${lib})
             if(APPLE)
                 target_link_options(${target} PRIVATE "LINKER:-force_load,$<TARGET_FILE:${lib}>")
@@ -107,7 +116,6 @@ function(ph_make_hot_reloadable target)
             endif()
         endif()
     endforeach()
-    add_dependencies(${target} ${code})
 endfunction()
 
 # ph_add_game(<target> [ASSETS <dir>] [BUNDLE_ID <id>] [HOT_RELOAD])

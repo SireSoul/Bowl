@@ -5,6 +5,7 @@
 #include "ph/ecs/schedule.hpp"
 #include "ph/ecs/world.hpp"
 
+#include <string>
 #include <vector>
 
 namespace ph::ecs {
@@ -45,6 +46,12 @@ struct Children {
     std::vector<Entity> list;
 };
 PH_COMPONENT(Children, list)
+
+// A readable name, shown by the editor and the overlay instead of the entity's id.
+struct Name {
+    std::string value;
+};
+PH_COMPONENT(Name, value)
 
 // Attaches child under parent (null parent: detach). Refuses (returns false) if that would make a cycle.
 // Not while iterating; from systems use ctx.commands.run([=](World& w) { set_parent(w, child, parent); }).

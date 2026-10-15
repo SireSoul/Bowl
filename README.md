@@ -55,7 +55,10 @@ load their worlds without a pile of boilerplate.
 **Workflow**
 - F1 dev overlay: frame graph, profiler, systems (timing, parallel batches, on/off), entity browser and inspector,
   assets with reload buttons, log, pause, single-step, slow motion
-- Game-code hot reload on macOS and Linux: rebuild, and the new code takes over with the world kept
+- Game-code hot reload on Windows, macOS and Linux: save a source file, and the new code takes over with the world
+  kept
+- Bowl Editor: lay out levels with the game's own renderer, art shelf, groups, undo, and the game's own components
+- Tracy support for timeline profiling
 - Release builds with static SDL, precompiled shaders, `.app` bundles on macOS and `cmake --install` layouts
 
 ## Quick start

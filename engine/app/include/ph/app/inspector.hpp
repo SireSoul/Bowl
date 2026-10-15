@@ -17,4 +17,8 @@ bool component(ecs::World& world, ecs::Entity e, ecs::ComponentId c, AssetManage
 // Every component of the entity, in order.
 bool components(ecs::World& world, ecs::Entity e, AssetManager& assets, ecs::Entity* select);
 
+// Just the editable fields of one component, without a header (for tools that draw their own). Returns true if a
+// value changed; false (and nothing drawn) for components that aren't reflected.
+bool fields(ecs::World& world, ecs::Entity e, ecs::ComponentId c, AssetManager& assets, ecs::Entity* select);
+
 } // namespace ph::inspector

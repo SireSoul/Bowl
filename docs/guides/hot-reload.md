@@ -7,7 +7,7 @@ game's own C++ code. The goal is that you rarely need to restart the game to see
 | --- | --- | --- |
 | Textures, sprite sheets, maps, sounds, music, fonts, string tables | Save the file | All |
 | Shaders | Save the `.glsl` file | All |
-| Game code | Rebuild the game's code library | macOS, Linux |
+| Game code | Save a source file | All (dev builds) |
 
 ## Assets and shaders
 
@@ -34,13 +34,14 @@ add_executable(my_game main.cpp)
 ph_add_game(my_game ASSETS assets HOT_RELOAD)
 ```
 
-It needs CMake 3.27 or newer and takes effect only in dev builds on macOS and Linux. Elsewhere (release builds,
-Windows, older CMake) the game builds as an ordinary executable, so the same `CMakeLists.txt` works everywhere.
+It needs CMake 3.27 or newer and takes effect only in dev builds. Elsewhere (release builds, older CMake) the game
+builds as an ordinary executable, so the same `CMakeLists.txt` works everywhere.
 
 With hot reload on, the build produces two things:
 
 - `my_game`: the engine plus a small host that loads your code;
-- `my_game_code`: your game, as a loadable library (`libmy_game_code.so` on Linux and macOS).
+- `my_game_code`: your game, as a loadable library (`libmy_game_code.so` on Linux and macOS, `my_game_code.dll` on
+  Windows).
 
 ### Using it
 
@@ -134,5 +135,10 @@ original while the game runs.
 
 ### Windows
 
-Not supported yet. It needs the engine's functions exported from the executable, which on Windows means annotating
-the engine's API for `dllexport`. It's on the [roadmap](../roadmap.md). Asset and shader hot reload work on Windows.
+Works the same way. Two differences: the code library links against the game executable's import library, so building
+only `my_game` doesn't build `my_game_code` (build everything, or the library itself, which saving a file does for
+you); and the executable must not be rebuilt while it runs, since Windows locks a running program's file. Changes to
+game code only rebuild the library, so this only matters when the engine changes.
+
+CI runs a real reload on Windows on every push: it starts the sprites sample, saves its source, and waits for the new
+code.

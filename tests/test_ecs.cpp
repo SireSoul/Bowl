@@ -17,9 +17,6 @@ struct Position {
 struct Velocity {
     f32 x = 0, y = 0;
 };
-struct Name {
-    std::string value;
-};
 struct Frozen {}; // tag
 
 // Counts live instances, to prove every constructed component is destroyed exactly once.

@@ -6,6 +6,15 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Bowl Editor (`bowl-editor`): lays out levels in `.world` files. Art shelf with thumbnails, place and select tools,
+  box select, groups, align, copy and paste, undo and redo, autosave, an inspector with cards, and the game's own
+  components through `--game`. Unknown components are kept as JSON so saving never loses data.
+- `gfx::Sprite`, `gfx::draw_sprites` and `gfx::sprite_bounds`: art on an entity, drawn at its `GlobalTransform2D`.
+- `ecs::WorldFile`: `.world` files as hot-reloading assets. `ecs::Name`: a readable name for an entity.
+- `World::remove_component` by id. Asset fields are editable through reflection (`FieldVisitor::asset`).
+- `ph/app/inspector.hpp`: the overlay's component editor, shared with tools. `AppConfig::dev_ui_always` for tools
+  built on the engine (their overlay key moves to F12).
+- Game-code hot reload on Windows; CI runs a real reload there on every push.
 - Game-code hot reload rebuilds the code by itself when a source file is saved; compile errors go to the log and the
   previous code keeps running. `--no-auto-build` turns it off. `AutoBuilder` does the watching and building.
 - Tracy support (`-DPH_TRACY=ON`): profiler zones with source locations, frame marks, worker thread names, log

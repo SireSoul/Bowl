@@ -83,6 +83,8 @@ public:
     // then `init` fills it in (init gets nullptr for tags). Replaces an existing one. Returns false if the type isn't
     // savable (see SavableComponent), since only those can be default-constructed this way.
     bool add_component(Entity e, ComponentId c, FunctionRef<void(void*)> init);
+    // Removes a component by id. Returns false if the entity is dead or doesn't have it.
+    bool remove_component(Entity e, ComponentId c);
 
     // Queries
 

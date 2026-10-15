@@ -112,6 +112,14 @@ bool World::add_component(Entity e, ComponentId c, FunctionRef<void(void*)> init
     return true;
 }
 
+bool World::remove_component(Entity e, ComponentId c) {
+    check_unlocked();
+    if (!alive(e) || !records_[e.index].archetype->has(c)) return false;
+    run_remove_hooks(c, e);
+    move_entity(e, archetype_without(*records_[e.index].archetype, c));
+    return true;
+}
+
 Archetype& World::archetype_for(const ComponentMask& mask) {
     if (auto it = by_mask_.find(mask); it != by_mask_.end()) return *it->second;
     std::vector<ComponentId> comps;

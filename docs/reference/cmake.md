@@ -21,6 +21,7 @@ Set them on the configure line (`-DPH_DEV_TOOLS=OFF`) or in your own presets.
 | `PH_FETCH_SDL` | `OFF` | Build SDL3 from source (statically) even if an installed SDL3 is found |
 | `PH_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in engine, tool, test and game code as errors (CI turns this on for Linux and macOS) |
 | `PH_MACOS_BUNDLES` | `OFF` | Build macOS games as `.app` bundles |
+| `PH_BUILD_EDITOR` | `ON` when the engine is the top-level project | [Bowl Editor](../guides/editor.md) (needs `PH_DEV_TOOLS`) |
 | `PH_TRACY` | `OFF` | Send profiler zones, frames, plots and log lines to the [Tracy](../guides/jobs-and-profiling.md#tracy) profiler |
 | `PH_SHADERC_EXECUTABLE` | empty | A prebuilt host `ph-shaderc` for cross-compiling; when set, the shader compiler isn't built |
 | `PH_ECS_MAX_COMPONENTS` | 256 | (A preprocessor define, not a CMake option.) Maximum component types; a multiple of 64 |
@@ -49,6 +50,7 @@ All presets build into `build/<preset>` and export `compile_commands.json`.
 | `ph_tests`, `ph_bench_ecs` | Tests and benchmark |
 | `<game>_assets` | Created by `ph_add_game`: copies and compiles a game's assets |
 | `<game>_code` | Created by `ph_add_game(... HOT_RELOAD)`: the game's code as a loadable library |
+| `bowl-editor` | The [editor](../guides/editor.md) |
 
 ## ph_add_game
 
@@ -68,7 +70,7 @@ Turns an executable target into a game:
 | --- | --- |
 | `ASSETS <dir>` | The game's asset folder, relative to the current `CMakeLists.txt`. Optional for games with no files |
 | `BUNDLE_ID <id>` | macOS bundle identifier, used when `PH_MACOS_BUNDLES` is on. Default `com.bowl.<target>` |
-| `HOT_RELOAD` | Build the game's sources as `<target>_code`, a library the `<target>` host reloads when it's rebuilt. Dev builds on macOS and Linux with CMake 3.27+; ignored elsewhere. See [hot-reload.md](../guides/hot-reload.md#game-code) |
+| `HOT_RELOAD` | Build the game's sources as `<target>_code`, a library the `<target>` host reloads when it's rebuilt (and rebuilds it when a source file is saved). Dev builds with CMake 3.27+; ignored elsewhere. See [hot-reload.md](../guides/hot-reload.md#game-code) |
 
 Add sources to the target before calling `ph_add_game` when using `HOT_RELOAD`: the sources are moved into the library
 at that point.

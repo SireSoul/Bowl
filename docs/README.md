@@ -34,6 +34,7 @@ One page per system.
 | [Jobs, logging and profiling](guides/jobs-and-profiling.md) | `JobSystem`, `parallel_for`, logging, profiler zones |
 | [Dev tools](guides/dev-tools.md) | The F1 overlay, the inspector, your own tool windows |
 | [Hot reload](guides/hot-reload.md) | Assets, shaders and game code while the game runs |
+| [Bowl Editor](guides/editor.md) | Laying out levels: placing art, groups, the inspector, the game's own components |
 | [Packaging and shipping](guides/packaging.md) | Release builds, install layouts, macOS bundles |
 | [Platforms](guides/platforms.md) | Backends, OS support, what's planned |
 | [Performance](guides/performance.md) | Where time goes and how to keep it low |

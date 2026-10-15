@@ -34,6 +34,9 @@ struct AppConfig {
     std::string organization = "Bowl";
     std::string application;         // empty: the window title
     std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
+    // For tools built on the engine, like the editor: Game::dev_ui is always shown, not only while the F1 overlay
+    // is open, and the engine's own windows move from F1 to F12. Dev builds only.
+    bool dev_ui_always = false;
 };
 
 class Engine;

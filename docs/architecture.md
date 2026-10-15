@@ -135,10 +135,11 @@ the full story.
 
 ## Game-code hot reload
 
-With `ph_add_game(target ... HOT_RELOAD)` (dev builds on macOS and Linux, CMake 3.27+), the game's sources are built
-into `target_code`, a loadable library. `target` becomes a host executable that contains the whole engine
-(force-linked) and exports its symbols, so the library links against nothing and finds engine functions in the host
-when it's loaded. `PH_MAIN` turns into the library's `ph_create_game` export.
+With `ph_add_game(target ... HOT_RELOAD)` (dev builds, CMake 3.27+), the game's sources are built into `target_code`,
+a loadable library. `target` becomes a host executable that contains the whole engine and exports its symbols. On
+macOS and Linux the library links against nothing and finds engine functions in the host when it's loaded; on Windows
+it links against the host's import library. `PH_MAIN` turns into the library's `ph_create_game` export. The host also
+watches the game's source folders and rebuilds the library when a file is saved.
 
 When the library file changes and the linker has finished writing it, the host (`ph::HotReloadHost`):
 
