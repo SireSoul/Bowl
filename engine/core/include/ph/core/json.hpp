@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -58,11 +59,13 @@ public:
     const Array& array() const;
     const Object& object() const;
 
-    // Building documents.
+    // Building and changing documents. make_array/make_object keep the contents when the value already is one.
     Array& make_array();
     Object& make_object();
     Value& set(std::string_view key, Value value); // adds or replaces
     void push(Value value) { make_array().push_back(std::move(value)); }
+    Value* find(std::string_view key);
+    bool erase(std::string_view key); // false if there was no such key
 
     bool operator==(const Value&) const = default;
 
@@ -86,5 +89,13 @@ ParseResult parse(std::string_view text);
 
 // indent < 0: compact one line; otherwise pretty-printed with that many spaces.
 std::string stringify(const Value& value, int indent = 2);
+
+// A compact binary form of a document, for big saves: the same values, with every key and string stored once and
+// numbers in as few bytes as they need. Several times smaller than text, and quicker to read. Starts "PHJB".
+std::vector<u8> encode_binary(const Value& value);
+ParseResult decode_binary(std::span<const u8> data); // errors give the byte offset as the column
+bool is_binary(std::span<const u8> data);
+// Reads either form.
+ParseResult parse_any(std::span<const u8> data);
 
 } // namespace ph::json

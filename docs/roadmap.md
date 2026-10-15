@@ -20,7 +20,7 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 ## M2: worlds that persist
 - ~~Reflection: `PH_REFLECT(Type, fields...)`~~ (done). Later: switch to C++26 reflection when compilers ship it
 - ~~Serialization: JSON for reflected types, world save/load, prefabs, entity references remapped on load~~ (done).
-  Still to do: prefab and scene *assets* (hot-reloaded files), binary format for big worlds, save-file migrations
+  Prefab and world files as hot-reloading assets, a binary form for big worlds, save-file migrations (done)
 - ~~Entity inspector: select, edit fields live, duplicate, destroy, copy as JSON, save/load the world~~ (done)
 - ~~Relationships: parent/child `Transform2D` hierarchy, cycle-safe reparenting, recursive destroy~~ (done)
 

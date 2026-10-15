@@ -70,6 +70,7 @@ private:
 
     Engine& engine_;
     std::filesystem::path file_;
+    bool binary_ = false; // the file was binary, so it's saved that way again
     std::vector<ecs::Entity> order_;
     std::vector<Entry> history_;
     usize cursor_ = 0;

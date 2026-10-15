@@ -1,6 +1,9 @@
+#include "ph/core/file.hpp"
 #include "ph/ecs/ecs.hpp"
 
 #include <doctest/doctest.h>
+
+#include <filesystem>
 
 using namespace ph;
 using namespace ph::ecs;
@@ -207,4 +210,117 @@ TEST_CASE("components: hot-reload dormancy keeps ids and is undone by restore or
     CHECK(ecs::detail::register_component(ecs::detail::make_component_info<Hero>()) == id); // same id, refreshed
     CHECK(component_info(id).savable());
     CHECK(find_component("game::Hero") == id);
+}
+
+TEST_CASE("json: binary documents round-trip, are smaller, and refuse damage") {
+    auto text = json::parse(R"({ "name": "Ada", "n": [0, 1, -1, 300, -70000, 1.5, 0.1, 1e300, 9007199254740993, -0.0],
+        "flags": [true, false, null], "nested": { "name": "Ada", "deep": [[[]], {}] } })");
+    REQUIRE(text);
+    std::vector<u8> bin = json::encode_binary(text.value);
+    CHECK(json::is_binary(bin));
+    auto back = json::decode_binary(bin);
+    REQUIRE(back);
+    CHECK(back.value == text.value);
+    CHECK(json::parse_any(bin).value == text.value);
+    std::string plain = json::stringify(text.value, -1);
+    CHECK(json::parse_any(std::span(reinterpret_cast<const u8*>(plain.data()), plain.size())).value == text.value);
+
+    // A big world: keys and component names repeat, so binary is much smaller.
+    register_components<Hero, Asleep>();
+    World w;
+    for (int i = 0; i < 2000; ++i) w.create(Hero{.name = "Guard", .level = i, .position = {f32(i), 2}});
+    serial::Context ctx;
+    json::Value world_doc = save_world(w, ctx);
+    std::vector<u8> world_bin = json::encode_binary(world_doc);
+    CHECK(world_bin.size() * 3 < json::stringify(world_doc, -1).size());
+    CHECK(json::decode_binary(world_bin).value == world_doc);
+
+    // Every truncation fails cleanly.
+    for (usize n = 0; n < bin.size(); ++n) CHECK_FALSE(json::decode_binary(std::span(bin.data(), n)));
+    std::vector<u8> bad = bin;
+    bad.back() = 0x7F; // an unknown tag
+    CHECK_FALSE(json::decode_binary(bad));
+}
+
+TEST_CASE("world io: migrations upgrade old saves step by step") {
+    auto parsed = json::parse(R"({ "format": "Bowl.world", "version": 1, "entities": [
+        { "id": 0, "components": { "game::OldHero": { "title": "Ada", "lvl": 4 }, "game::Removed": {} } } ] })");
+    REQUIRE(parsed);
+    json::Value doc = parsed.value;
+    CHECK(game_version_of(doc) == 0);
+
+    Migrations m;
+    m.add(0, [](json::Value& d) { rename_component(d, "game::OldHero", "game::Hero"); });
+    m.add(1, [](json::Value& d) {
+        rename_field(d, "game::Hero", "title", "name");
+        rename_field(d, "game::Hero", "lvl", "level");
+        remove_component(d, "game::Removed");
+    });
+    m.add(2, [](json::Value& d) {
+        for_each_saved(d, "game::Hero", [](json::Value& hero) { hero.set("level", hero["level"].as_int() * 10); });
+    });
+    CHECK(m.latest() == 3);
+    serial::Context ctx;
+    REQUIRE(m.upgrade(doc, ctx));
+    CHECK(game_version_of(doc) == 3);
+    CHECK(m.upgrade(doc, ctx)); // already current: nothing to do
+
+    World w;
+    auto loaded = load_entities(w, doc, ctx);
+    REQUIRE(loaded.size() == 1);
+    CHECK(w.get<Hero>(loaded[0]).name == "Ada");
+    CHECK(w.get<Hero>(loaded[0]).level == 40);
+    CHECK(ctx.warnings.empty());
+
+    json::Value newer = doc;
+    newer.set("game_version", 9);
+    serial::Context c2;
+    CHECK_FALSE(m.upgrade(newer, c2));
+    CHECK(c2.warnings.size() == 1);
+
+    Migrations gap;
+    gap.add(0, [](json::Value&) {});
+    gap.add(2, [](json::Value&) {});
+    json::Value old = parsed.value;
+    serial::Context c3;
+    CHECK_FALSE(gap.upgrade(old, c3));
+    CHECK(game_version_of(old) == 1); // got as far as it could
+
+    serial::Context save_ctx{.game_version = 3};
+    CHECK(game_version_of(save_world(w, save_ctx)) == 3);
+}
+
+TEST_CASE("world io: prefab files, one entity or several, text or binary") {
+    register_components<Hero, Asleep>();
+    auto dir = std::filesystem::temp_directory_path() / "ph_prefab_test";
+    std::filesystem::create_directories(dir);
+    std::string guard = R"({ "components": { "game::Hero": { "name": "Guard", "level": 5 }, "game::Asleep": {} } })";
+    REQUIRE(write_file_bytes(dir / "guard.prefab", guard.data(), guard.size()));
+    // Two entities that point at each other, saved as binary.
+    World src;
+    Entity a = src.create(Hero{.name = "Rider"});
+    Entity b = src.create(Hero{.name = "Horse"});
+    src.get<Hero>(a).companion = b;
+    serial::Context ctx;
+    std::vector<u8> pair = json::encode_binary(save_entities(src, std::vector{a, b}, ctx));
+    REQUIRE(write_file_bytes(dir / "pair.prefab", pair.data(), pair.size()));
+
+    AssetManager assets;
+    assets.mount("", dir);
+    register_world_file_loader(assets);
+    auto one = assets.load<Prefab>("guard.prefab");
+    auto two = assets.load<Prefab>("pair.prefab");
+    REQUIRE(one);
+    REQUIRE(two);
+    World w;
+    auto g1 = instantiate(w, *one, ctx), g2 = instantiate(w, *one, ctx);
+    REQUIRE(g1.size() == 1);
+    CHECK(g1[0] != g2[0]);
+    CHECK(w.get<Hero>(g2[0]).level == 5);
+    CHECK(w.has<Asleep>(g1[0]));
+    auto riders = instantiate(w, *two, ctx);
+    REQUIRE(riders.size() == 2);
+    CHECK(w.get<Hero>(riders[0]).companion == riders[1]);
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
 }

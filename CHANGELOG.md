@@ -6,6 +6,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Saving: `ecs::Prefab` assets (`.prefab`, one entity or several) and `ecs::instantiate`; a binary document form
+  (`json::encode_binary`, `decode_binary`, `parse_any`) read by every world loader and Bowl Editor; save-file
+  migrations (`ecs::Migrations`, `serial::Context::game_version`, `rename_component`, `rename_field`,
+  `remove_component`, `for_each_saved`). `json::Value::find` (mutable) and `erase`.
 - Audio: bus effects (`set_bus_effects`: low-pass, high-pass, reverb, all smoothed), positional sounds (`play_at`,
   `set_position`, `set_listener`, `Attenuation`, `spatialize`), and Ogg Opus sounds and music with `-DPH_OPUS=ON`.
 - Tilemaps: Tiled XML maps and tilesets (`.tmx`, `.tsx`, `Tilemap::parse_tmx`), staggered and hexagonal maps

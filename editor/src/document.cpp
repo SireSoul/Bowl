@@ -94,18 +94,19 @@ void Document::reset_history() {
 void Document::clear() {
     destroy_all();
     file_.clear();
+    binary_ = false;
     reset_history();
 }
 
 std::string Document::title() const { return file_.empty() ? "untitled" : file_.filename().string(); }
 
 bool Document::open(const fs::path& file) {
-    auto text = read_file_text(file);
-    if (!text) {
+    auto bytes = read_file_bytes(file);
+    if (!bytes) {
         error("editor: can't read {}", file.string());
         return false;
     }
-    auto parsed = json::parse(*text);
+    auto parsed = json::parse_any(*bytes);
     if (!parsed) {
         error("editor: {}:{}:{}: {}", file.string(), parsed.error->line, parsed.error->column, parsed.error->message);
         return false;
@@ -113,6 +114,7 @@ bool Document::open(const fs::path& file) {
     destroy_all();
     from_json(parsed.value);
     file_ = file;
+    binary_ = json::is_binary(*bytes);
     reset_history();
     info("editor: opened {} ({} entities)", file.string(), order_.size());
     return true;
@@ -121,8 +123,16 @@ bool Document::open(const fs::path& file) {
 bool Document::save() { return file_.empty() ? false : save_as(file_); }
 
 bool Document::save_as(const fs::path& file) {
-    std::string text = json::stringify(to_json());
-    if (!write_file_bytes(file, text.data(), text.size())) {
+    bool written = false;
+    if (binary_ && file == file_) {
+        std::vector<u8> bytes = json::encode_binary(to_json());
+        written = write_file_bytes(file, bytes.data(), bytes.size());
+    } else {
+        std::string text = json::stringify(to_json());
+        written = write_file_bytes(file, text.data(), text.size());
+        binary_ = false;
+    }
+    if (!written) {
         error("editor: can't write {}", file.string());
         return false;
     }
