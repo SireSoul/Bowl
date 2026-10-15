@@ -84,7 +84,7 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   keep their layout, and a type that comes back with a different layout gets a new id.
 - `.phsh` bundles are format version 2 (compute fields); version 1 bundles still load.
 - Lighting is applied in its own pass before bloom (so scene effects see the lit image); bloom still comes from the
-  scene's own bright pixels. `Renderer::submit(StaticSprites)` and the new submissions share one sprite path.
+  scene's own bright pixels.
 - **Breaking:** `audio::Music`'s constructor takes the codec (`Music::Codec`). Loading through assets is unchanged.
 - The mixer sums each bus separately before applying its gain, so bus effects can work on it.
 - Font atlases upload only the rectangle holding newly added glyphs, instead of the whole 4 MB page.
@@ -95,6 +95,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 - Comments throughout the code were rewritten to say plainly what the code does, and outdated ones corrected.
 
 ### Fixed
+- Game-code hot reload on Windows: each loaded copy of the game library gets its own `.pdb`, so a profiler or
+  debugger holding the previous one no longer stops the next build from linking (LNK1201).
+- Engine components (sprites, animators, colliders) registered first by a game library no longer count as the
+  library's, so they survive game-code hot reload.
 - Game-code hot reload no longer duplicates input bindings each time `init` runs again; a changed default binding
   now replaces the old one.
 - The `ph_tests` executable no longer links every module twice (a macOS linker warning).
