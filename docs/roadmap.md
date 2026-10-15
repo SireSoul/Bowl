@@ -60,7 +60,7 @@ would otherwise be for.
 ## Docs and tooling
 - ~~Full documentation: getting started, tutorial (backed by the `tutorial` sample), a guide per system, reference,
   troubleshooting, FAQ, contributing guide~~ (done). Later: generated API reference from the headers
-- Inspector: edit `std::vector` and `std::array` fields, add and remove components, filter entities by component
+- ~~Inspector: edit `std::vector` and `std::array` fields, add and remove components, filter entities~~ (done)
 
 ## Known limitations
 - Max 256 component types (`PH_ECS_MAX_COMPONENTS` raises it)

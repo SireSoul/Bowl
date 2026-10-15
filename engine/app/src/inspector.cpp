@@ -1,5 +1,10 @@
 #include "ph/app/inspector.hpp"
 
+#include "ph/ecs/hierarchy.hpp"
+
+#include <algorithm>
+#include <string>
+
 #if PH_DEV_TOOLS
 
 #include "ph/core/reflect.hpp"
@@ -79,6 +84,29 @@ public:
         return commit;
     }
     AssetManager* assets() override { return &assets_; }
+    // A list: its items in a tree, with + and - to grow or shrink vectors at the end.
+    bool begin_list(std::string_view name, usize& size, bool resizable) override {
+        std::string text = std::format("{} ({})###{}", name, size, name);
+        bool open = ImGui::TreeNodeEx(text.c_str(), size <= 8 ? ImGuiTreeNodeFlags_DefaultOpen : 0);
+        if (resizable) {
+            ImGui::SameLine();
+            ImGui::PushID(label(name));
+            if (ImGui::SmallButton("+")) {
+                ++size;
+                changed_ = true;
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(size == 0);
+            if (ImGui::SmallButton("-") && size > 0) {
+                --size;
+                changed_ = true;
+            }
+            ImGui::EndDisabled();
+            ImGui::PopID();
+        }
+        return open;
+    }
+    void end_list() override { ImGui::TreePop(); }
 
 private:
     const char* label(std::string_view name) {
@@ -96,7 +124,13 @@ private:
 bool component(ecs::World& world, ecs::Entity e, ecs::ComponentId c, AssetManager& assets, ecs::Entity* select) {
     const ecs::ComponentInfo& info = ecs::component_info(c);
     std::string header(info.name);
-    if (!ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) return false;
+    bool keep = true;
+    bool open = ImGui::CollapsingHeader(header.c_str(), &keep, ImGuiTreeNodeFlags_DefaultOpen);
+    if (!keep) { // its close button: remove the component
+        world.remove_component(e, c);
+        return true;
+    }
+    if (!open) return false;
     ImGui::PushID(c);
     bool changed = false;
     if (info.visit) {
@@ -126,10 +160,75 @@ bool components(ecs::World& world, ecs::Entity e, AssetManager& assets, ecs::Ent
     // Copied: editing may not change the set, but a hook could.
     std::vector<ecs::ComponentId> ids(world.components_of(e).begin(), world.components_of(e).end());
     bool changed = false;
-    for (ecs::ComponentId c : ids) changed |= component(world, e, c, assets, select);
+    for (ecs::ComponentId c : ids) {
+        if (!world.alive(e)) break;
+        changed |= component(world, e, c, assets, select);
+    }
+    if (world.alive(e)) changed |= add_component_menu(world, e);
     return changed;
+}
+
+bool add_component_menu(ecs::World& world, ecs::Entity e) {
+    bool added = false;
+    if (ImGui::Button("Add component")) ImGui::OpenPopup("add component");
+    if (ImGui::BeginPopup("add component")) {
+        static char search[64] = "";
+        if (ImGui::IsWindowAppearing()) {
+            search[0] = 0;
+            ImGui::SetKeyboardFocusHere();
+        }
+        ImGui::InputTextWithHint("##search", "search", search, sizeof search);
+        // Savable types can be made from nothing (default-constructed); others need code to create them.
+        std::vector<std::pair<std::string_view, ecs::ComponentId>> choices;
+        for (ecs::ComponentId c = 0; c < ecs::component_type_count(); ++c) {
+            const ecs::ComponentInfo& info = ecs::component_info(c);
+            if (!info.savable() || world.component_ptr(e, c) || !text_matches(info.name, search)) continue;
+            choices.emplace_back(info.name, c);
+        }
+        std::sort(choices.begin(), choices.end());
+        for (const auto& [name, c] : choices) {
+            std::string item(name);
+            if (ImGui::Selectable(item.c_str())) {
+                added = world.add_component(e, c, [](void*) {});
+                ImGui::CloseCurrentPopup();
+            }
+        }
+        if (choices.empty()) ImGui::TextDisabled("nothing to add");
+        ImGui::EndPopup();
+    }
+    return added;
 }
 
 } // namespace ph::inspector
 
 #endif
+
+namespace ph::inspector {
+
+bool text_matches(std::string_view text, std::string_view filter) {
+    auto lower = [](char c) { return static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c); };
+    if (filter.empty()) return true;
+    auto it = std::search(text.begin(), text.end(), filter.begin(), filter.end(),
+                          [&](char a, char b) { return lower(a) == lower(b); });
+    return it != text.end();
+}
+
+bool matches(const ecs::World& world, ecs::Entity e, std::string_view filter) {
+    // Every word must match something: a component's name, the entity's Name, or "#index".
+    usize at = 0;
+    while (at < filter.size()) {
+        usize end = filter.find(' ', at);
+        std::string_view word = filter.substr(at, end == std::string_view::npos ? std::string_view::npos : end - at);
+        at = end == std::string_view::npos ? filter.size() : end + 1;
+        if (word.empty()) continue;
+        bool found = false;
+        if (word.starts_with('#')) found = std::to_string(e.index) == word.substr(1);
+        if (const auto* name = world.try_get<ecs::Name>(e); !found && name) found = text_matches(name->value, word);
+        for (ecs::ComponentId c : world.components_of(e))
+            found = found || text_matches(ecs::component_info(c).name, word);
+        if (!found) return false;
+    }
+    return true;
+}
+
+} // namespace ph::inspector

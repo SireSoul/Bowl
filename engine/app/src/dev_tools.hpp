@@ -38,6 +38,7 @@ private:
     void draw_log();
     bool frame_open_ = false;
     ecs::Entity selected_;
+    char filter_[128] = ""; // entity list filter
 #endif
     [[maybe_unused]] Engine& engine_;
     bool visible_ = false;

@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Inspector: `std::vector` and `std::array` fields are editable (`FieldVisitor::begin_list`), components can be removed
+  and added (`inspector::add_component_menu`), and the overlay's entity list has a filter (`inspector::matches`).
 - Compute shaders: `ph-shaderc` compiles `.comp.glsl` for every backend in SDL_GPU's compute layout;
   `gfx::ComputeShader` assets, `gfx::GpuBuffer`, `Renderer::dispatch` (`ComputeDispatch`), and
   `Renderer::submit` for sprites a compute shader wrote. `gfx::GpuParticles`: particles simulated and drawn on the GPU

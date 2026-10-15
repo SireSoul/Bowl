@@ -1,3 +1,4 @@
+#include "ph/app/inspector.hpp"
 #include "ph/core/file.hpp"
 #include "ph/ecs/ecs.hpp"
 
@@ -193,6 +194,69 @@ TEST_CASE("inspector visitor walks reflected components and writes edits back") 
                                              "color tint", "group stats", "int strength", "real speed", "end",
                                              "? inventory", "? buff", "entity companion"});
     CHECK(w.get<Hero>(e).level == 99);
+}
+
+namespace game {
+struct Loadout {
+    std::vector<i32> items;
+    std::array<f32, 3> weights{};
+    std::vector<bool> flags;
+};
+PH_REFLECT(Loadout, items, weights, flags)
+} // namespace game
+
+TEST_CASE("inspector visitor walks lists and can resize vectors") {
+    struct Lists final : reflect::FieldVisitor {
+        std::vector<std::string> seen;
+        void boolean(std::string_view n, bool& v) override {
+            seen.push_back(std::format("bool {}", n));
+            v = true;
+        }
+        void integer(std::string_view n, i64& v, i64, i64) override {
+            seen.push_back(std::format("int {}", n));
+            v = 7;
+        }
+        void real(std::string_view n, f64& v) override {
+            seen.push_back(std::format("real {}", n));
+            v = 0.5;
+        }
+        void text(std::string_view, std::string&) override {}
+        void vector(std::string_view, f32*, int) override {}
+        void color(std::string_view, Color&) override {}
+        void entity(std::string_view, u64) override {}
+        bool begin_group(std::string_view) override { return true; }
+        void end_group() override {}
+        void unsupported(std::string_view n, std::string_view) override { seen.push_back(std::format("? {}", n)); }
+        bool begin_list(std::string_view n, usize& size, bool resizable) override {
+            seen.push_back(std::format("list {} {} {}", n, size, resizable ? "resizable" : "fixed"));
+            if (resizable) ++size; // the + button
+            return true;
+        }
+        void end_list() override { seen.push_back("end list"); }
+    };
+    game::Loadout l{.items = {1}, .flags = {false}};
+    Lists v;
+    reflect::visit(v, "loadout", l);
+    CHECK(l.items == std::vector<i32>{7, 7});
+    CHECK(l.weights == std::array<f32, 3>{0.5f, 0.5f, 0.5f});
+    CHECK(l.flags == std::vector<bool>{true, true});
+    CHECK(v.seen.front() == "list items 1 resizable");
+    CHECK(std::find(v.seen.begin(), v.seen.end(), "list weights 3 fixed") != v.seen.end());
+    CHECK(std::find(v.seen.begin(), v.seen.end(), "int [1]") != v.seen.end());
+}
+
+TEST_CASE("inspector filter matches component names, Name and #index") {
+    register_components<Hero, Asleep>();
+    World w;
+    Entity a = w.create(Hero{}, ecs::Name{"Ada the Brave"});
+    Entity b = w.create(Hero{}, Asleep{});
+    CHECK(inspector::matches(w, a, "hero"));
+    CHECK(inspector::matches(w, a, "HERO brave"));
+    CHECK_FALSE(inspector::matches(w, a, "asleep"));
+    CHECK(inspector::matches(w, b, "asleep hero"));
+    CHECK(inspector::matches(w, b, std::format("#{}", b.index)));
+    CHECK_FALSE(inspector::matches(w, a, std::format("#{}", b.index)));
+    CHECK(inspector::matches(w, a, ""));
 }
 
 TEST_CASE("components: hot-reload dormancy keeps ids and is undone by restore or re-registration") {

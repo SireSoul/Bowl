@@ -45,8 +45,12 @@ system has a checkbox to switch it off, which is a quick way to see what a syste
 
 ### Entities
 
-Every archetype (the set of components its entities share) with its entities, the first 64 of each. Click one to
-inspect it.
+Every archetype (the set of components its entities share) with its entities, the first 64 of each, with their
+`ecs::Name` if they have one. Click one to inspect it.
+
+The filter box narrows the list: every word must appear in one of an entity's component names or its name, ignoring
+case, and `#42` finds entity 42. `player health` shows entities with both; `slime` finds every entity named or
+componented "slime".
 **Save world** writes every savable entity to `devtools_world.json` in the working directory; **Load (adds to
 world)** loads that file back into the current world.
 
@@ -63,11 +67,13 @@ Recent log lines, colored by level.
 Selecting an entity opens its inspector window:
 
 - Every component, by type name. Reflected components (`PH_COMPONENT`, `PH_REFLECT`) show their fields as editable
-  controls: numbers, checkboxes, text, math vectors, colors with a color picker, and nested reflected structs.
-  Changes apply immediately. Fields of other types (`std::vector`, for example) are listed with their type but not
-  editable yet.
+  controls: numbers, checkboxes, text, math vectors, colors with a color picker, nested reflected structs, and
+  lists (`std::vector` and `std::array`, item by item; vectors get **+** and **-** to add or remove items at the end).
+  Changes apply immediately. Fields of other types are listed with their type.
 - Entity fields show the referenced entity as a button that jumps to it.
 - Components that aren't reflected are listed by name.
+- The **x** on a component's header removes it; **Add component** adds any savable component type the entity doesn't
+  have, with its default values.
 - **Duplicate** copies the entity with all its savable components; **Copy JSON** puts a
   [world document](saving.md#world-files) holding just this entity on the clipboard (its one entry under
   `"entities"` is a ready-made [prefab](saving.md#prefabs)); **Destroy** removes it.

@@ -5,11 +5,13 @@
 #include "ph/core/type_id.hpp"
 #include "ph/core/types.hpp"
 
+#include <array>
 #include <limits>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <vector>
 
 // Reflection without code generation. After a struct, at namespace scope (in the struct's own namespace):
 //
@@ -55,7 +57,30 @@ public:
         return false;
     }
     virtual AssetManager* assets() { return nullptr; }
+    // std::vector and std::array fields. `size` is how many items there are; a visitor may change it for resizable
+    // lists (vectors) to add or remove items at the end. Return false to skip the items.
+    virtual bool begin_list(std::string_view name, usize& size, bool resizable) {
+        (void)size;
+        (void)resizable;
+        unsupported(name, "list");
+        return false;
+    }
+    virtual void end_list() {}
 };
+
+namespace detail {
+template <class T> struct list_traits {
+    static constexpr bool is_list = false;
+};
+template <class T, class A> struct list_traits<std::vector<T, A>> {
+    static constexpr bool is_list = true;
+    static constexpr bool resizable = std::is_default_constructible_v<T>;
+};
+template <class T, usize N> struct list_traits<std::array<T, N>> {
+    static constexpr bool is_list = true;
+    static constexpr bool resizable = false;
+};
+} // namespace detail
 
 template <class T> void visit(FieldVisitor& v, std::string_view name, T& value);
 
@@ -110,6 +135,22 @@ template <class T> void visit(FieldVisitor& v, std::string_view name, T& value) 
         if (v.asset(name, path, type_name<typename T::value_type>())) {
             if (path.empty()) value = {};
             else if (AssetManager* assets = v.assets()) value = assets->template load<typename T::value_type>(path);
+        }
+    } else if constexpr (detail::list_traits<T>::is_list) {
+        usize size = value.size();
+        if (v.begin_list(name, size, detail::list_traits<T>::resizable)) {
+            if constexpr (detail::list_traits<T>::resizable)
+                if (size != value.size()) value.resize(size);
+            for (usize i = 0; i < value.size(); ++i) {
+                if constexpr (std::is_same_v<T, std::vector<bool>>) { // its items are proxies, not bools
+                    bool item = value[i];
+                    visit(v, "[" + std::to_string(i) + "]", item);
+                    value[i] = item;
+                } else {
+                    visit(v, "[" + std::to_string(i) + "]", value[i]);
+                }
+            }
+            v.end_list();
         }
     } else if constexpr (Reflected<T>) {
         if (v.begin_group(name)) {

@@ -7,6 +7,7 @@
 #include "ph/app/inspector.hpp"
 #include "ph/core/file.hpp"
 #include "ph/core/profiler.hpp"
+#include "ph/ecs/hierarchy.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -222,23 +223,34 @@ void DevTools::draw_entities() {
             for (const auto& w : ctx.warnings) warn("  {}", w);
         }
     }
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##filter", "filter: component or name words, #index", filter_, sizeof filter_);
+    std::string_view filter = filter_;
+    std::vector<ecs::Entity> shown;
     for (const auto& a : world.archetypes()) {
         if (a->empty()) continue;
+        shown.clear();
+        for (ecs::Entity e : a->entities())
+            if (filter.empty() || inspector::matches(world, e, filter)) shown.push_back(e);
+        if (shown.empty()) continue;
         std::string name;
         for (ecs::ComponentId c : a->components()) {
             if (!name.empty()) name += ", ";
             name += ecs::component_info(c).name;
         }
         if (name.empty()) name = "(no components)";
-        std::string label = std::format("{} x{}##{}", name, a->size(), a->id());
+        std::string label = std::format("{} x{}##{}", name, shown.size(), a->id());
+        if (!filter.empty()) ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
         if (ImGui::TreeNode(label.c_str())) {
-            usize shown = std::min<usize>(a->size(), 64);
-            for (usize i = 0; i < shown; ++i) {
-                ecs::Entity e = a->entities()[i];
+            usize count = std::min<usize>(shown.size(), 64);
+            for (usize i = 0; i < count; ++i) {
+                ecs::Entity e = shown[i];
                 std::string item = std::format("entity {} (gen {})", e.index, e.generation);
+                if (const auto* n = world.try_get<ecs::Name>(e)) item += "  " + n->value;
+                item += std::format("##{}", e.bits());
                 if (ImGui::Selectable(item.c_str(), selected_ == e)) selected_ = e;
             }
-            if (a->size() > shown) ImGui::TextDisabled("... %zu more", a->size() - shown);
+            if (shown.size() > count) ImGui::TextDisabled("... %zu more", shown.size() - count);
             ImGui::TreePop();
         }
     }
