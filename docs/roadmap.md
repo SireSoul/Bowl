@@ -9,7 +9,7 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   font fallback chains, SDF text~~ (done). Later: color emoji, right-to-left and complex scripts (shaping)
 - ~~Tilemaps: Tiled `.tmj`/`.tsj` and `.tmx`/`.tsx`, orthogonal, isometric, staggered and hexagonal, infinite
   maps, compressed layers, flips, animated tiles, objects, properties, y-sorting, GPU-cached chunks for very large
-  maps~~ (done). Later: Tiled object templates (`.tx`), Wang sets as data
+  maps, object templates, Wang sets as data~~ (done)
 - ~~Audio: OGG Vorbis and Opus sounds, streamed music with gapless loops and crossfades, per-bus low-pass, high-pass
   and reverb, positional sounds that follow a listener, per-voice filters, ducking music under dialogue~~ (done)
 - ~~Collision: shapes, sweeps, raycasts, spatial hash, `move_and_slide` against grids or boxes, polygons and

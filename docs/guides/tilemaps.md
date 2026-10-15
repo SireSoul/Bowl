@@ -181,6 +181,36 @@ Each object has `id`, `name`, `type` (Tiled's "class"), `shape`, `bounds` (posit
 
 Tile objects are drawn by `draw_tilemap`; other shapes are data for your game to use.
 
+### Object templates
+
+Objects made from a Tiled template (`.tj` or `.tx`) are filled in from it when the map loads: the template gives the
+shape, size, name, type and properties, and anything set on the object itself wins, property by property. A tile
+template's tile is matched to the map's own copy of its tileset, so it draws the right tile whatever the tileset's
+`firstgid` is in this map. Editing a template reloads every map that uses it.
+
+## Terrain sets (Wang sets)
+
+A tileset's terrain sets (what Tiled calls Wang sets) are kept as data, so code can draw terrain the way Tiled's
+terrain brush does: for procedural maps, digging, tilled soil, flooding.
+
+```cpp
+const gfx::Tileset& ground = map.tilesets[0];
+const gfx::WangSet* shore = ground.wang_set("shore");
+u8 grass = shore->terrain("grass"), water = shore->terrain("water");
+
+// One tile for four corners (top-left, top-right, bottom-right, bottom-left).
+std::optional<u32> tile = shore->corner_tile(water, grass, grass, grass);
+
+// A whole layer from terrain at the corners of its cells: (width + 1) x (height + 1) values, row by row.
+std::vector<u8> corners = make_island(width + 1, height + 1);
+gfx::fill_from_corners(layer, ground, *shore, corners, width, height);
+```
+
+Each `WangSet` has its `terrains` (name, color, probability, properties) and its `tiles` with their eight Wang ids.
+`matching` finds every tile that fits a pattern, 0 meaning "any". When several tiles fit, `fill_from_corners`
+chooses by position, so the same corners always give the same map. Cells with no terrain at any corner stay empty.
+Corner sets are what `corner_tile` is for; edge and mixed sets are there as data.
+
 ## Collision with tiles
 
 `physics::GridSolids` turns a predicate over cells into solid boxes for `move_and_slide`:
@@ -212,4 +242,5 @@ with `assets.add`, which is how the isometric sample generates its island. `Tile
 | Tilesets | Image tilesets (margin, spacing, tile offset), image-collection tilesets, external and embedded |
 | Tiles | Flips (horizontal, vertical, diagonal), animation, properties, class |
 | Layers | Tile, object, image, group (flattened); visibility, opacity, tint, offset |
-| Objects | All shapes; tile objects are drawn |
+| Objects | All shapes; tile objects are drawn; templates (`.tj`, `.tx`) |
+| Terrain sets | Corner, edge and mixed Wang sets as data; `fill_from_corners` for corner sets |

@@ -5,8 +5,10 @@
 #include "ph/gfx/renderer.hpp"
 #include "ph/gfx/sprites.hpp"
 
+#include <array>
 #include <functional>
 #include <optional>
+#include <span>
 #include <string>
 #include <memory>
 #include <string_view>
@@ -39,6 +41,37 @@ struct TileInfo {
     Vec2 image_size;
 };
 
+// A Tiled terrain set ("Wang set"): which tile fits which terrains at its corners and edges. Kept as data, for drawing
+// terrain from code (procedural maps, digging, farm plots): see corner_tile and fill_from_corners.
+struct WangSet {
+    enum class Type : u8 { Corner, Edge, Mixed };
+    struct Terrain {
+        std::string name;
+        Color color;
+        f32 probability = 1;
+        json::Value properties;
+    };
+    struct Tile {
+        u32 tile; // local id in the tileset
+        // Terrain at each spot, 1-based into `terrains` (0: none), going round from the top:
+        // top, top-right, right, bottom-right, bottom, bottom-left, left, top-left. Corners are 1, 3, 5, 7.
+        std::array<u8, 8> wang{};
+    };
+    std::string name;
+    Type type = Type::Corner;
+    std::vector<Terrain> terrains;
+    std::vector<Tile> tiles;
+    json::Value properties;
+
+    // Terrain number by name (1-based), or 0.
+    u8 terrain(std::string_view terrain_name) const;
+    // Local ids of tiles whose terrains match `want` (a 0 in `want` matches anything).
+    std::vector<u32> matching(const std::array<u8, 8>& want) const;
+    // A tile with these terrains at its corners (top-left, top-right, bottom-right, bottom-left), choosing among
+    // variants by `pick` (any number: a hash of the cell keeps choices stable). Nothing if no tile fits.
+    std::optional<u32> corner_tile(u8 top_left, u8 top_right, u8 bottom_right, u8 bottom_left, u32 pick = 0) const;
+};
+
 struct Tileset {
     std::string name;
     u32 first_gid = 1;
@@ -48,10 +81,13 @@ struct Tileset {
     std::string image_path; // empty for image collections
     Asset<Texture> image;
     std::vector<TileInfo> tiles; // only tiles with extra data (properties, animation, own image)
+    std::vector<WangSet> wang_sets;
     json::Value properties;
+    std::string source; // the external tileset file it came from (normalized virtual path), if any
 
     const TileInfo* tile(u32 local_id) const;
     Rect source_rect(u32 local_id) const; // pixels in `image`
+    const WangSet* wang_set(std::string_view set_name) const;
 };
 
 struct MapObject {
@@ -155,6 +191,13 @@ struct TilemapDrawOptions {
 
 // Draws the visible part of the map (culled against the batch camera's view).
 void draw_tilemap(SpriteBatch& batch, const Tilemap& map, const TilemapDrawOptions& options = {});
+
+// Fills a tile layer from terrain at the corners of its cells: `corners` is (width + 1) x (height + 1) terrain numbers
+// of `set` (row by row), and every cell gets a tile that fits its four corners, chosen among variants by position so
+// the same corners always give the same map. The layer becomes width x height at its origin. Returns how many cells
+// had no fitting tile (left empty).
+usize fill_from_corners(MapLayer& layer, const Tileset& tileset, const WangSet& set, std::span<const u8> corners,
+                        u32 width, u32 height);
 
 // Draws large maps cheaply: the flat layers are cut into chunks of chunk_cells x chunk_cells tiles, each built once into
 // StaticSprites in GPU memory, so a frame only submits the chunks on screen. Animated tiles are still drawn every

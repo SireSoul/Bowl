@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Tilemaps: Tiled object templates (`.tj`, `.tx`) are filled in when maps load, tile templates mapped onto the
+  map's tilesets; terrain sets as data (`WangSet`, `Tileset::wang_sets`, `corner_tile`, `fill_from_corners`).
 - Box2D: `physics::Joint` (distance and rope, revolute, prismatic, weld, wheel; springs, limits, motors) and the
   `ContactEvents` resource (touches began and ended, impacts with point and speed; `PhysicsSettings::hit_speed`).
 - Audio: per-voice filters (`PlayParams::low_pass`, `high_pass`, `set_filters`) and ducking (`set_ducking`, `Ducking`,

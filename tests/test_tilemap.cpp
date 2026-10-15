@@ -352,3 +352,88 @@ TEST_CASE("paths normalize") {
     CHECK(normalize_path("a/./b//c.png") == "a/b/c.png");
     CHECK(normalize_path("../x.png") == "../x.png");
 }
+
+TEST_CASE("tilemap: object templates fill in objects, the instance's own fields winning") {
+    std::map<std::string, std::string> files{
+        {"tilesets/terrain.tsj", terrain_tsj},
+        {"templates/chest.tj", R"({ "type": "template", "tileset": { "firstgid": 1, "source": "../tilesets/terrain.tsj" },
+            "object": { "gid": 3, "width": 16, "height": 16, "name": "chest", "type": "loot",
+                        "properties": [ { "name": "gold", "type": "int", "value": 5 },
+                                        { "name": "locked", "type": "bool", "value": true } ] } })"},
+        {"templates/zone.tx", R"(<?xml version="1.0" encoding="UTF-8"?>
+<template>
+ <object name="zone" type="spawn" width="32" height="16">
+  <properties><property name="kind" value="slime"/></properties>
+ </object>
+</template>)"}};
+    auto read = [&](const std::string& path) -> std::optional<std::string> {
+        auto it = files.find(path);
+        if (it == files.end()) return std::nullopt;
+        return it->second;
+    };
+    auto doc = json::parse(R"({ "orientation": "orthogonal", "width": 4, "height": 4, "tilewidth": 16, "tileheight": 16,
+      "tilesets": [ { "firstgid": 1, "name": "props", "tilewidth": 16, "tileheight": 16, "columns": 2, "tilecount": 8,
+                      "image": "props.png" },
+                    { "firstgid": 9, "source": "../tilesets/terrain.tsj" } ],
+      "layers": [ { "type": "objectgroup", "name": "things", "objects": [
+        { "id": 1, "template": "../templates/chest.tj", "x": 10, "y": 20,
+          "properties": [ { "name": "gold", "type": "int", "value": 50 } ] },
+        { "id": 2, "template": "../templates/zone.tx", "x": 64, "y": 0, "name": "north zone" } ] } ] })");
+    REQUIRE(doc);
+    Tilemap map;
+    std::string error;
+    REQUIRE_MESSAGE(Tilemap::parse(doc.value, "maps/", read, map, error), error);
+    const MapLayer* things = map.layer("things");
+    REQUIRE(things);
+    REQUIRE(things->objects.size() == 2);
+    const MapObject& chest = things->objects[0];
+    CHECK(chest.name == "chest");
+    CHECK(chest.type == "loot");
+    CHECK(chest.bounds == Rect{10, 20, 16, 16});
+    CHECK(chest.shape == MapObject::Shape::Tile);
+    CHECK(chest.gid == 9 + 2); // the template's tile 3 in its own numbering is local tile 2 of terrain, at 9 here
+    CHECK(chest.properties["gold"].as_int() == 50);
+    CHECK(chest.properties["locked"].as_bool());
+    const MapObject& zone = things->objects[1];
+    CHECK(zone.name == "north zone");
+    CHECK(zone.type == "spawn");
+    CHECK(zone.bounds == Rect{64, 0, 32, 16});
+    CHECK(zone.properties["kind"].as_string() == "slime");
+}
+
+TEST_CASE("tilemap: Wang sets as data, and terrain drawn from corners") {
+    Tilemap map = load(R"({ "orientation": "orthogonal", "width": 2, "height": 1, "tilewidth": 16, "tileheight": 16,
+      "tilesets": [ { "firstgid": 1, "name": "ground", "tilewidth": 16, "tileheight": 16, "columns": 4, "tilecount": 4,
+        "image": "ground.png",
+        "wangsets": [ { "name": "shore", "type": "corner", "tile": -1,
+          "colors": [ { "name": "grass", "color": "#40a040", "tile": 0, "probability": 1 },
+                      { "name": "water", "color": "#3060c0", "tile": 1, "probability": 1 } ],
+          "wangtiles": [ { "tileid": 0, "wangid": [0, 1, 0, 1, 0, 1, 0, 1] },
+                         { "tileid": 1, "wangid": [0, 2, 0, 2, 0, 2, 0, 2] },
+                         { "tileid": 2, "wangid": [0, 1, 0, 1, 0, 1, 0, 2] },
+                         { "tileid": 3, "wangid": [0, 1, 0, 1, 0, 1, 0, 1] } ] } ] } ],
+      "layers": [] })");
+    REQUIRE(map.tilesets.size() == 1);
+    const WangSet* shore = map.tilesets[0].wang_set("shore");
+    REQUIRE(shore);
+    CHECK(shore->type == WangSet::Type::Corner);
+    u8 grass = shore->terrain("grass"), water = shore->terrain("water");
+    CHECK(grass == 1);
+    CHECK(water == 2);
+    CHECK(shore->terrains[1].color == Color::hex(0x3060c0));
+    CHECK(shore->corner_tile(water, grass, grass, grass) == 2u);
+    CHECK(shore->corner_tile(water, water, water, water) == 1u);
+    CHECK_FALSE(shore->corner_tile(grass, water, grass, water)); // no tile drawn for that
+    CHECK(shore->matching({0, 1, 0, 1, 0, 1, 0, 1}).size() == 2); // two plain-grass variants
+
+    // Corners of a 2 x 1 strip: water at the top-left corner only.
+    const u8 corners[] = {water, grass, grass, grass, grass, grass};
+    MapLayer layer;
+    CHECK(fill_from_corners(layer, map.tilesets[0], *shore, corners, 2, 1) == 0);
+    CHECK(layer.at(0, 0) == 1 + 2u); // the shore corner tile
+    u32 plain = layer.at(1, 0);
+    CHECK((plain == 1 + 0u || plain == 1 + 3u));
+    MapLayer again;
+    fill_from_corners(again, map.tilesets[0], *shore, corners, 2, 1);
+    CHECK(again.at(1, 0) == plain); // same corners, same choice
+}

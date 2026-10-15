@@ -179,6 +179,22 @@ bool parse_tileset(const json::Value& ts, std::string_view dir, Tileset& out, st
         out.tiles.push_back(std::move(info));
     }
     std::sort(out.tiles.begin(), out.tiles.end(), [](const TileInfo& a, const TileInfo& b) { return a.id < b.id; });
+    for (const json::Value& ws : ts["wangsets"].array()) {
+        WangSet set;
+        set.name = std::string(ws["name"].as_string());
+        std::string_view type = ws["type"].as_string("corner");
+        set.type = type == "edge" ? WangSet::Type::Edge : type == "mixed" ? WangSet::Type::Mixed : WangSet::Type::Corner;
+        set.properties = properties_of(ws);
+        for (const json::Value& c : ws["colors"].array())
+            set.terrains.push_back({std::string(c["name"].as_string()), color_of(c["color"].as_string(), Color::white()),
+                                    c["probability"].as_float(1), properties_of(c)});
+        for (const json::Value& wt : ws["wangtiles"].array()) {
+            WangSet::Tile tile{static_cast<u32>(wt["tileid"].as_int()), {}};
+            for (usize i = 0; i < 8 && i < wt["wangid"].size(); ++i) tile.wang[i] = static_cast<u8>(wt["wangid"][i].as_int());
+            set.tiles.push_back(tile);
+        }
+        out.wang_sets.push_back(std::move(set));
+    }
     if (out.tile_width == 0 || out.tile_height == 0) {
         error = std::format("tileset '{}' has no tile size", out.name);
         return false;
@@ -224,8 +240,9 @@ struct LayerContext {
     bool visible = true;
 };
 
+// `expand` fills in object templates.
 bool parse_layers(const json::Value& list, const LayerContext& parent, std::string_view dir, Tilemap& map,
-                  std::string& error) {
+                  const std::function<json::Value(const json::Value&)>& expand, std::string& error) {
     for (const json::Value& l : list.array()) {
         std::string_view type = l["type"].as_string();
         LayerContext ctx;
@@ -236,7 +253,7 @@ bool parse_layers(const json::Value& list, const LayerContext& parent, std::stri
         if (type == "group") {
             LayerContext group = ctx;
             group.prefix += "/";
-            if (!parse_layers(l["layers"], group, dir, map, error)) return false;
+            if (!parse_layers(l["layers"], group, dir, map, expand, error)) return false;
             continue;
         }
         MapLayer layer;
@@ -285,7 +302,7 @@ bool parse_layers(const json::Value& list, const LayerContext& parent, std::stri
             }
         } else if (type == "objectgroup") {
             layer.kind = MapLayer::Kind::Objects;
-            for (const json::Value& o : l["objects"].array()) layer.objects.push_back(parse_object(o));
+            for (const json::Value& o : l["objects"].array()) layer.objects.push_back(parse_object(expand(o)));
         } else if (type == "imagelayer") {
             layer.kind = MapLayer::Kind::Image;
             layer.image_path = normalize_path(std::string(dir) + std::string(l["image"].as_string()));
@@ -388,6 +405,46 @@ json::Value xml_tileset(const xml::Element& e) {
         tiles.push(std::move(tile));
     }
     ts.set("tiles", std::move(tiles));
+    if (const xml::Element* sets = e.child("wangsets")) {
+        json::Value list;
+        list.make_array();
+        for (const xml::Element& w : sets->children) {
+            if (w.name != "wangset") continue;
+            json::Value set;
+            copy_common(w, set);
+            set.set("type", w.attribute("type", "corner"));
+            json::Value colors, wangtiles;
+            colors.make_array();
+            wangtiles.make_array();
+            for (const xml::Element& c : w.children) {
+                if (c.name == "wangcolor") {
+                    json::Value color;
+                    copy_common(c, color);
+                    color.set("color", c.attribute("color"));
+                    color.set("probability", number_of(c.attribute("probability"), 1));
+                    colors.push(std::move(color));
+                } else if (c.name == "wangtile") {
+                    json::Value tile, ids;
+                    tile.set("tileid", number_of(c.attribute("tileid")));
+                    ids.make_array();
+                    std::string_view list_text = c.attribute("wangid");
+                    usize start = 0;
+                    while (start <= list_text.size()) {
+                        usize comma = list_text.find(',', start);
+                        ids.push(number_of(list_text.substr(start, comma == std::string_view::npos ? std::string_view::npos : comma - start)));
+                        if (comma == std::string_view::npos) break;
+                        start = comma + 1;
+                    }
+                    tile.set("wangid", std::move(ids));
+                    wangtiles.push(std::move(tile));
+                }
+            }
+            set.set("colors", std::move(colors));
+            set.set("wangtiles", std::move(wangtiles));
+            list.push(std::move(set));
+        }
+        ts.set("wangsets", std::move(list));
+    }
     return ts;
 }
 
@@ -451,7 +508,28 @@ json::Value xml_object(const xml::Element& e) {
             o.set("text", std::move(text));
         }
     }
+    if (e.has("template")) {
+        // A template instance: only what it sets itself, so the template fills in the rest.
+        o.set("template", e.attribute("template"));
+        if (!e.has("name")) o.erase("name");
+        if (!e.has("visible")) o.erase("visible");
+        if (!e.child("properties")) o.erase("properties");
+    }
     return o;
+}
+
+// A .tx object template, as Tiled's JSON template (.tj).
+json::Value xml_template(const xml::Element& e) {
+    json::Value t;
+    t.set("type", "template");
+    if (const xml::Element* o = e.child("object")) t.set("object", xml_object(*o));
+    if (const xml::Element* ts = e.child("tileset")) {
+        json::Value tileset;
+        tileset.set("firstgid", number_of(ts->attribute("firstgid"), 1));
+        tileset.set("source", ts->attribute("source"));
+        t.set("tileset", std::move(tileset));
+    }
+    return t;
 }
 
 json::Value xml_layers(const xml::Element& parent) {
@@ -543,6 +621,55 @@ Rect Tileset::source_rect(u32 local_id) const {
             static_cast<f32>(tile_width), static_cast<f32>(tile_height)};
 }
 
+const WangSet* Tileset::wang_set(std::string_view set_name) const {
+    for (const WangSet& s : wang_sets)
+        if (s.name == set_name) return &s;
+    return nullptr;
+}
+
+u8 WangSet::terrain(std::string_view terrain_name) const {
+    for (usize i = 0; i < terrains.size(); ++i)
+        if (terrains[i].name == terrain_name) return static_cast<u8>(i + 1);
+    return 0;
+}
+
+std::vector<u32> WangSet::matching(const std::array<u8, 8>& want) const {
+    std::vector<u32> out;
+    for (const Tile& t : tiles) {
+        bool fits = true;
+        for (usize i = 0; i < 8 && fits; ++i) fits = want[i] == 0 || t.wang[i] == want[i];
+        if (fits) out.push_back(t.tile);
+    }
+    return out;
+}
+
+std::optional<u32> WangSet::corner_tile(u8 top_left, u8 top_right, u8 bottom_right, u8 bottom_left, u32 pick) const {
+    std::vector<u32> fits = matching({0, top_right, 0, bottom_right, 0, bottom_left, 0, top_left});
+    if (fits.empty()) return std::nullopt;
+    return fits[pick % fits.size()];
+}
+
+usize fill_from_corners(MapLayer& layer, const Tileset& tileset, const WangSet& set, std::span<const u8> corners,
+                        u32 width, u32 height) {
+    layer.kind = MapLayer::Kind::Tiles;
+    layer.width = width;
+    layer.height = height;
+    layer.cells.assign(static_cast<usize>(width) * height, 0);
+    if (corners.size() < static_cast<usize>(width + 1) * (height + 1)) return layer.cells.size();
+    usize missing = 0;
+    auto corner = [&](u32 x, u32 y) { return corners[static_cast<usize>(y) * (width + 1) + x]; };
+    for (u32 y = 0; y < height; ++y)
+        for (u32 x = 0; x < width; ++x) {
+            u8 tl = corner(x, y), tr = corner(x + 1, y), br = corner(x + 1, y + 1), bl = corner(x, y + 1);
+            if ((tl | tr | br | bl) == 0) continue; // no terrain at all: left empty
+            u32 pick = (x * 73856093u) ^ (y * 19349663u); // same corners, same place: same variant
+            auto tile = set.corner_tile(tl, tr, br, bl, pick);
+            if (tile) layer.cells[static_cast<usize>(y) * width + x] = tileset.first_gid + *tile;
+            else ++missing;
+        }
+    return missing;
+}
+
 u32 MapLayer::at(i32 x, i32 y) const {
     i32 lx = x - origin_x, ly = y - origin_y;
     if (lx < 0 || ly < 0 || lx >= static_cast<i32>(width) || ly >= static_cast<i32>(height)) return 0;
@@ -608,6 +735,7 @@ bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
                 tileset_doc = std::move(parsed.value);
             }
             if (!parse_tileset(tileset_doc, dir_of(path), ts, error)) return false;
+            ts.source = path;
         } else if (!parse_tileset(ref, base_dir, ts, error)) {
             return false;
         }
@@ -615,7 +743,59 @@ bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
         out.tilesets.push_back(std::move(ts));
     }
     std::sort(out.tilesets.begin(), out.tilesets.end(), [](const Tileset& a, const Tileset& b) { return a.first_gid < b.first_gid; });
-    return parse_layers(doc["layers"], {}, base_dir, out, error);
+
+    // Object templates (.tj, .tx): an object that names one gets the template's fields, with its own winning.
+    std::unordered_map<std::string, json::Value> templates;
+    auto expand = [&](const json::Value& o) -> json::Value {
+        if (!o.contains("template")) return o;
+        std::string path = normalize_path(std::string(base_dir) + std::string(o["template"].as_string()));
+        auto found = templates.find(path);
+        if (found == templates.end()) {
+            json::Value t;
+            if (auto text = read_file(path)) {
+                if (path.ends_with(".tx")) {
+                    if (auto parsed = xml::parse(*text); parsed && parsed.root.name == "template") t = xml_template(parsed.root);
+                } else if (auto parsed = json::parse(*text)) {
+                    t = std::move(parsed.value);
+                }
+            }
+            if (t.is_null()) warn("tilemap: can't read object template '{}'", path);
+            found = templates.emplace(path, std::move(t)).first;
+        }
+        const json::Value& t = found->second;
+        json::Value merged = t["object"];
+        merged.make_object();
+        // A tile template's gid is in its own tileset's numbering: move it onto the map's copy of that tileset.
+        if (merged.contains("gid") && t["tileset"].contains("source")) {
+            std::string source = normalize_path(dir_of(path) + std::string(t["tileset"]["source"].as_string()));
+            u32 gid = static_cast<u32>(merged["gid"].as_number());
+            u32 local = (gid & tile_gid_mask) - static_cast<u32>(t["tileset"]["firstgid"].as_int(1));
+            for (const Tileset& ts : out.tilesets)
+                if (ts.source == source) merged.set("gid", static_cast<f64>((ts.first_gid + local) | (gid & ~tile_gid_mask)));
+        }
+        for (const auto& [key, value] : o.object()) {
+            if (key == "template") continue;
+            if (key != "properties") {
+                merged.set(key, value);
+                continue;
+            }
+            // Properties one by one: the instance's replace the template's of the same name.
+            json::Value props = merged["properties"];
+            props.make_array();
+            for (const json::Value& p : value.array()) {
+                bool replaced = false;
+                for (json::Value& q : props.make_array())
+                    if (q["name"].as_string() == p["name"].as_string()) {
+                        q = p;
+                        replaced = true;
+                    }
+                if (!replaced) props.push(p);
+            }
+            merged.set("properties", std::move(props));
+        }
+        return merged;
+    };
+    return parse_layers(doc["layers"], {}, base_dir, out, expand, error);
 }
 
 bool Tilemap::parse_tmx(std::string_view text, std::string_view base_dir,
