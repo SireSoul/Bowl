@@ -10,7 +10,7 @@ After that, use the guides as you need them.
 
 ## Guides
 
-Each guide covers one system: what it's for, how to use it, and the details that matter in practice.
+One page per system.
 
 | Guide | What's in it |
 | --- | --- |

@@ -2,8 +2,8 @@
 
 `ph/physics/collision.hpp` has the collision tools most 2D games need: overlap tests that say how to separate,
 swept boxes that never pass through walls, raycasts, a broadphase for many moving things, and `move_and_slide` for
-characters. It isn't a rigid-body physics engine: no forces, joints or stacking. That's deliberate, since most 2D
-games want precise, predictable movement more than simulated physics.
+characters. There are no forces, joints or stacking; most 2D games want tight, predictable movement more than a
+physics simulation.
 
 Everything works in any consistent unit: pixels, tiles, or the cell space of an isometric map.
 

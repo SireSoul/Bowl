@@ -8,32 +8,15 @@ archetype ECS, hot reload for assets, shaders and game code, and dev tools that 
   <img src="docs/images/dev-overlay.png" width="49%" alt="The dev overlay: profiler, entity inspector and a custom tool window over the sprites sample">
 </p>
 
-> **About the name:** PLACEHOLDERENGINENAME is temporary. It appears in `CMakeLists.txt`, the docs and a few log and
-> window strings. Code uses the namespace `ph`, so renaming later touches very little.
+You write the game in C++: a `Game` class with a few callbacks, components that are plain structs, systems that are
+lambdas, assets loaded by path. The engine handles the loop, the GPU, audio, input and saving. In a dev build you can
+change a texture, a shader, a Tiled map or the game's own code while it runs, and poke at any entity from the overlay.
 
-## Contents
+It's built for 2D games with a lot going on, top-down and isometric included, that want to look good and save and
+load their worlds without a pile of boilerplate.
 
-- [What it is](#what-it-is)
-- [Features](#features)
-- [Quick start](#quick-start)
-- [A game in one file](#a-game-in-one-file)
-- [Samples](#samples)
-- [Documentation](#documentation)
-- [Platforms](#platforms)
-- [Repository layout](#repository-layout)
-- [Status](#status)
-- [Contributing](#contributing)
-- [License](#license)
-
-## What it is
-
-You write the game in C++, against a small set of plain types: a `Game` with a handful of callbacks, components that
-are ordinary structs, systems that are lambdas, and assets loaded by path. The engine runs the loop, the GPU, audio,
-input and saving. In a dev build you can change a texture, a shader, a Tiled map or the game's own code while the
-game runs, and inspect or edit any entity from the overlay.
-
-It's aimed at one kind of game first: 2D games with a lot on screen, top-down and isometric included, that want to
-look good (HDR, bloom, 2D lights, custom shaders) and save and load their worlds without boilerplate.
+(The name is a placeholder. It only shows up in `CMakeLists.txt`, the docs and a couple of log and window strings;
+the code uses the namespace `ph`.)
 
 ## Features
 

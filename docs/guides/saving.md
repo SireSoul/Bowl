@@ -28,7 +28,7 @@ PH_COMPONENT(Health, current, max)   // PH_REFLECT + registration as a component
 Put the macro after the struct, at namespace scope, in the struct's namespace. Up to 32 fields. Use `PH_COMPONENT`
 for components and `PH_REFLECT` for everything else (structs used as fields, settings, save headers).
 
-Reflection gives you, for free:
+With reflection you get:
 
 - JSON conversion (`serial::to_json`, `serial::from_json`);
 - world saving and loading for components;

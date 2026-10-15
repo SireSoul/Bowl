@@ -56,35 +56,30 @@ Formatting is `.clang-format` (LLVM-based, 4-space indent, 120 columns). Run `cl
 
 Beyond formatting:
 
-- **C++20**, no compiler extensions. No exceptions, no RTTI-dependent code.
-- **Names:** `snake_case` for functions, variables and files; `PascalCase` for types; `PH_UPPER_CASE` for macros;
-  members end in `_`; short integer aliases (`u32`, `f32`, `usize`).
-- **Headers** include what they use. Forward-declare SDL types in public headers when possible.
-- **Errors:** assert on programming errors; log and carry on for runtime failures (missing files, bad data). Never crash
-  on bad content. See [conventions](docs/reference/conventions.md#errors).
-- **Allocation:** nothing in per-entity or per-sprite loops. Reuse buffers across frames.
-- **Determinism:** no unseeded randomness, no iteration over unordered containers where the order affects results.
-- **Platform code** stays behind SDL. If something truly needs an `#ifdef`, keep it in one `.cpp` file.
-- **Warnings** are errors on CI for Linux and macOS (`-Wall -Wextra -Wpedantic -Wshadow`, `/W4` on Windows). Don't
-  silence a warning without a comment saying why it's wrong.
+- C++20 without compiler extensions. No exceptions, and nothing that needs RTTI.
+- `snake_case` for functions, variables and files, `PascalCase` for types, `PH_UPPER_CASE` for macros. Members end
+  in `_`. Use the short integer aliases (`u32`, `f32`, `usize`).
+- Headers include what they use. Forward-declare SDL types in public headers where you can.
+- Assert on programming errors. For runtime failures (missing files, bad data), log and carry on; bad content should
+  never crash the game. See [conventions](docs/reference/conventions.md#errors).
+- Don't allocate in per-entity or per-sprite loops. Reuse buffers across frames.
+- Keep things deterministic: no unseeded randomness, and don't let the order of an unordered container change results.
+- Platform-specific code stays behind SDL. If you really need an `#ifdef`, keep it inside one `.cpp` file.
+- CI treats warnings as errors on Linux and macOS. If you silence one, leave a comment saying why it's wrong.
 
 ## Comments
 
-Comments are for the reader who knows C++ but not this code. They should sound like a person explaining their code to
-a colleague.
+Write comments for someone who knows C++ but hasn't seen this code. Explain what the code is for and why it's done
+this way, not what each line does: `// Swap-remove: order doesn't matter for particles.` helps, `// Increment i`
+doesn't.
 
-- **Say what the code is for and why it's this way**, not what each line does. `// Swap-remove: order doesn't matter
-  for particles.` is useful; `// Increment i` isn't.
-- **Every public type and function gets a comment** unless its name says everything. Lead with what it does; add
-  when to use it, what it costs, or what can go wrong if that matters.
-- **Plain words, short sentences.** Prefer "so", "because", "but" over semicolon chains. Avoid filler and sales words
-  ("simply", "seamlessly", "robust", "powerful", "leverage", "ensure").
-- **No decoration:** no banner lines (`// ----- Section -----`), no ASCII boxes, no emoji. A section label is a
-  one-line comment followed by a blank line.
-- **No em dashes.** Use a colon, a comma, parentheses or a new sentence.
-- **Keep comments true.** When you change code, fix the comments around it. A wrong comment is worse than none.
-- **Examples in headers** are welcome when they show typical use in a few lines; indent them four spaces after `//`.
-- **TODOs** name what's missing and, if known, why it isn't done: `// Not yet: kerning across font fallbacks.`
+Public types and functions get a comment unless the name already says it all. Start with what it does, then add when
+to use it, what it costs or what can go wrong, if that's worth knowing. A short usage example in a header is fine;
+indent it four spaces after the `//`.
+
+Keep it plain. No banner lines or ASCII boxes; a section label is just a one-line comment followed by a blank line.
+When you change code, fix the comments around it too, because a wrong comment is worse than none. TODOs should say
+what's missing and, if you know, why: `// Not yet: kerning across font fallbacks.`
 
 ## Tests
 

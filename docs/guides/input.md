@@ -1,8 +1,8 @@
 # Input
 
 `engine.input()` reads the keyboard, the mouse and up to four gamepads. Games normally don't ask about keys directly:
-they bind named *actions* to keys and buttons, and ask about the actions. That gives you rebinding, gamepad support and
-multiple bindings per action for free.
+they bind named *actions* to keys and buttons, and ask about the actions. That way rebinding and gamepads work without
+extra code, and an action can have several bindings.
 
 ## Actions
 
