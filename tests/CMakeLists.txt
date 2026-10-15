@@ -24,6 +24,9 @@ add_executable(ph_tests
 target_link_libraries(ph_tests PRIVATE ph::engine doctest::doctest)
 target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"
     PH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+if(PH_BOX2D)
+    target_sources(ph_tests PRIVATE test_rigid_bodies.cpp)
+endif()
 if(TARGET ph_shaderc)
     target_link_libraries(ph_tests PRIVATE ph_shaderc)
     target_compile_definitions(ph_tests PRIVATE PH_TEST_SHADERC=1)

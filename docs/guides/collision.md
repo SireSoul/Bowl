@@ -2,8 +2,9 @@
 
 `ph/physics/collision.hpp` has the collision tools most 2D games need: overlap tests that say how to separate,
 swept boxes that never pass through walls, raycasts, a broadphase for many moving things, and `move_and_slide` for
-characters. There are no forces, joints or stacking; most 2D games want tight, predictable movement more than a
-physics simulation.
+characters. `ph/physics/colliders.hpp` puts shapes on entities and reports trigger events. For forces, stacking and
+bouncing there's optional [rigid-body physics](#rigid-body-physics) through Box2D, but most 2D games want tight,
+predictable movement more than a physics simulation.
 
 Everything works in any consistent unit: pixels, tiles, or the cell space of an isometric map.
 
@@ -16,19 +17,26 @@ Everything works in any consistent unit: pixels, tiles, or the cell space of an 
 - `Rect` (from `ph/core/math.hpp`): `{x, y, w, h}`, top-left corner and size. `Rect::from_center(center, size)` makes
   one around a point.
 - `physics::Circle`: `{center, radius}`.
+- `physics::Capsule`: `{a, b, radius}`, a segment with thickness. Good for characters: it slides over small steps and
+  corners instead of catching on them.
+- `physics::Polygon`: `{points}`, any convex outline, in world coordinates. `Polygon::box(center, size, rotation)` makes
+  a turned rectangle. Split concave outlines into convex pieces.
+- `physics::Shape` is a `std::variant` of all four, for the generic functions below.
 
 ## Overlap and separation
 
 ```cpp
-bool hit = physics::overlaps(a, b);                 // Rect/Rect, Circle/Circle, Circle/Rect
-bool inside = physics::contains(circle, point);
+bool hit = physics::overlaps(a, b);                 // any two shapes
+bool inside = physics::contains(shape, point);
+Rect box = physics::bounds(shape);
 
 physics::Contact c = physics::collide(player_box, wall);
 if (c.hit) player_box.x += c.normal.x * c.depth, player_box.y += c.normal.y * c.depth;
 ```
 
 `collide` returns the *minimum translation*: moving the first shape by `normal * depth` separates them. `normal`
-points from the second shape toward the first.
+points from the second shape toward the first. It works for every pair of shapes; rectangles and circles against each
+other also have dedicated, slightly faster overloads.
 
 ## Sweeps: moving without tunneling
 
@@ -52,7 +60,7 @@ if (r.hit) { /* r.point, r.normal, r.distance */ }
 ```
 
 The ray is `origin + dir * t` for `t` from 0 to `max_t`; `distance` is that `t`. Pass a normalized direction and
-`distance` is in world units. Rays that start inside the box don't hit it.
+`distance` is in world units. Rays that start inside the shape don't hit it. `raycast` takes any `Shape`.
 
 To cast against many boxes, test each candidate (from a spatial hash, below) and keep the nearest hit.
 
@@ -125,8 +133,78 @@ hash.query(explosion_area, [&](ecs::Entity e, const Rect& bounds) {
 Rebuilding every tick is simpler than updating and fast enough for thousands of objects. `query` reports each item
 once, even when it spans several cells. Store it as a world resource to share it between systems.
 
-## Physics for games that want it
+## Colliders and triggers
 
-Rigid bodies (stacking boxes, ragdolls, vehicles) are better served by a dedicated library. Optional Box2D
-integration is on the [roadmap](../roadmap.md); until then, nothing stops a game from linking Box2D itself and
-syncing its bodies with components.
+`physics::Collider` puts a shape on an entity. It follows the entity's `GlobalTransform2D`, so position, rotation and
+scale all apply, and it saves with the world and shows in the inspector like any component.
+
+```cpp
+#include "ph/physics/colliders.hpp"
+
+using physics::Collider;
+world.create(ecs::Transform2D{{40, 80}}, Collider{.kind = Collider::Kind::Circle, .radius = 12, .layer = 0b01});
+world.create(ecs::Transform2D{{200, 80}}, Collider{.size = {64, 32}, .trigger = true, .mask = 0b01}); // a doorway
+```
+
+| Field | |
+| --- | --- |
+| `kind` | `Box`, `Circle`, `Capsule` or `Polygon` |
+| `size` | Box width and height |
+| `radius`, `length` | Circle and capsule radius; capsule length between its end centers (it stands upright) |
+| `points` | Polygon outline, convex, around the entity's position |
+| `offset` | From the entity's position |
+| `trigger` | Reports what touches it, without blocking anything |
+| `layer`, `mask` | Bits: a trigger notices a collider when `collider.layer & trigger.mask` isn't zero |
+
+**Trigger events.** Run `update_triggers` each fixed tick, after movement and the transform systems. It fills the
+world's `TriggerEvents` resource:
+
+```cpp
+fixed.add("triggers", [](ecs::SystemContext& ctx) { physics::update_triggers(ctx.world); });
+
+const auto& events = world.resource<physics::TriggerEvents>();
+for (const physics::TriggerPair& p : events.entered) { /* p.other walked into p.trigger */ }
+for (const physics::TriggerPair& p : events.exited) { /* ... left it, or was destroyed */ }
+bool in_shop = events.touching(shop_door, player);
+```
+
+`entered`, `inside` and `exited` are sorted, so the order is the same on every run.
+
+**Queries.** `physics::overlapping(world, shape, mask)` returns every entity whose collider overlaps a shape: what an
+explosion hits, what's under the cursor, whether a spot is free to build on. `physics::world_shape(collider,
+transform)` gives a collider's shape in the world, for raycasts and your own tests.
+
+## Rigid-body physics
+
+For stacking, tipping over, bouncing and joints of all kinds, Bowl can drive [Box2D v3](https://box2d.org). It's
+optional: configure with `-DPH_BOX2D=ON` (and `#if PH_BOX2D` in code that should build without it).
+
+An entity with a `Transform2D`, a `Collider` (its shape) and a `RigidBody` is a body:
+
+```cpp
+#include "ph/physics/rigid_bodies.hpp"
+
+using physics::RigidBody;
+world.create(ecs::Transform2D{{0, 400}}, Collider{.size = {800, 20}}, RigidBody{.type = RigidBody::Type::Static});
+world.create(ecs::Transform2D{{0, 0}}, Collider{.size = {24, 24}}, RigidBody{.restitution = 0.3f});
+
+fixed.add("physics", [](ecs::SystemContext& ctx) { physics::step_physics(ctx.world, ctx.dt); });
+```
+
+`step_physics` creates and removes Box2D bodies as the components come and go, pushes in changes the game made
+(setting `Transform2D::position` teleports a body, setting `RigidBody::velocity` sets it moving), steps, and writes
+positions, rotations and velocities back. `physics::apply_impulse(world, e, impulse)` gives a body a push.
+
+| `RigidBody` | Default | |
+| --- | --- | --- |
+| `type` | `Dynamic` | `Static` never moves, `Kinematic` moves only as told, `Dynamic` is simulated |
+| `density`, `friction`, `restitution` | 1, 0.6, 0 | Mass per area, grip, bounciness |
+| `linear_damping`, `angular_damping` | 0 | Slowing down by itself |
+| `gravity_scale` | 1 | |
+| `fixed_rotation` | `false` | Never turns: characters usually want this |
+| `bullet` | `false` | Extra care for fast, small things |
+| `velocity`, `angular_velocity` | 0 | Read them, or set them to push |
+
+The `PhysicsSettings` resource holds `pixels_per_meter` (32: Box2D is tuned for things around a meter in size),
+`gravity` in world units per second squared (y points down) and `sub_steps`. Bodies must be top-level entities. Trigger
+colliders become Box2D sensors, and `update_triggers` keeps working alongside.

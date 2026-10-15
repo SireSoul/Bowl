@@ -5,7 +5,7 @@
 #   ph_platform  window and input                                               (core, SDL3)
 #   ph_gfx       GPU device, textures, shaders, sprite batching, renderer        (core, ecs, SDL3, stb)
 #   ph_audio     mixer, sounds, streamed music                                   (core, SDL3, stb)
-#   ph_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide (core)
+#   ph_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide, colliders and triggers (core, ecs)
 #   ph_ui        immediate-mode game UI: panels, widgets, focus navigation, dialogue (gfx, platform)
 #   ph_app       Engine/Game, main loop, dev tools                               (everything)
 
@@ -86,8 +86,16 @@ ph_module(audio
     PRIVATE_DEPS ph_stb)
 
 ph_module(physics
-    SOURCES physics/src/collision.cpp
-    PUBLIC_DEPS ph_core)
+    SOURCES
+        physics/src/colliders.cpp
+        physics/src/collision.cpp
+        physics/src/shapes.cpp
+    PUBLIC_DEPS ph_core ph_ecs)
+if(PH_BOX2D)
+    target_sources(ph_physics PRIVATE physics/src/rigid_bodies.cpp)
+    target_link_libraries(ph_physics PRIVATE box2d)
+    target_compile_definitions(ph_physics PUBLIC PH_BOX2D=1)
+endif()
 
 ph_module(ui
     SOURCES ui/src/ui.cpp

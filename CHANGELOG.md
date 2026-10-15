@@ -6,6 +6,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Collision: `Capsule` and convex `Polygon` shapes, and `Shape` (any of the four) with `collide`, `overlaps`,
+  `contains`, `raycast` and `bounds` for every pair.
+- `physics::Collider` component, `update_triggers` and the `TriggerEvents` resource (entered, inside, exited, with
+  layers), and `overlapping` queries. `ph_physics` now depends on `ph_ecs`.
+- Optional Box2D v3 rigid bodies (`-DPH_BOX2D=ON`): `RigidBody`, `PhysicsSettings`, `step_physics`, `apply_impulse`.
 - Bowl Editor (`bowl-editor`): lays out levels in `.world` files. Art shelf with thumbnails, place and select tools,
   box select, groups, align, copy and paste, undo and redo, autosave, an inspector with cards, and the game's own
   components through `--game`. Unknown components are kept as JSON so saving never loses data.

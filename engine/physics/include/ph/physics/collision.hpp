@@ -5,13 +5,15 @@
 
 #include <cmath>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace ph::physics {
 
 // Collision for games that move things around a world: overlap tests that say how to separate, swept boxes that
-// never tunnel, raycasts, a spatial hash broadphase, and move_and_slide for characters. Any consistent unit works:
-// pixels, tiles, or the cell space of an isometric map.
+// never tunnel, raycasts, a spatial hash broadphase, and move_and_slide for characters. Shapes are rectangles,
+// circles, capsules and convex polygons. Any consistent unit works: pixels, tiles, or the cell space of an isometric
+// map. For colliders on entities and trigger events, see colliders.hpp.
 
 struct Circle {
     Vec2 center;
@@ -50,6 +52,35 @@ struct RayHit {
 // Finds where origin + dir * t first enters the box, for t in [0, max_t]. `distance` is that t (in units of dir's
 // length; pass a normalized dir to get world distance). Rays starting inside the box don't hit it.
 RayHit raycast(Vec2 origin, Vec2 dir, f32 max_t, const Rect& box);
+
+// A convex polygon, in world coordinates. Points go around the outline in either direction; a concave outline needs
+// splitting into convex pieces.
+struct Polygon {
+    std::vector<Vec2> points;
+
+    // A rectangle, optionally turned about its center.
+    static Polygon box(Vec2 center, Vec2 size, f32 rotation = 0);
+    static Polygon box(const Rect& r) { return box(r.center(), r.size()); }
+    Rect bounds() const;
+};
+
+// A line segment with thickness: two circles joined by a rectangle. Good for characters (smooth over steps and
+// corners) and long thin things.
+struct Capsule {
+    Vec2 a, b;
+    f32 radius = 0;
+    Rect bounds() const;
+};
+
+// Any of the shapes, for the generic tests below.
+using Shape = std::variant<Rect, Circle, Capsule, Polygon>;
+
+Rect bounds(const Shape& shape);
+bool overlaps(const Shape& a, const Shape& b);
+bool contains(const Shape& shape, Vec2 p);
+// The minimum translation that separates a from b, for any pair of shapes.
+Contact collide(const Shape& a, const Shape& b);
+RayHit raycast(Vec2 origin, Vec2 dir, f32 max_t, const Shape& shape);
 
 // Supplies the solid boxes near an area: call `emit` for each.
 using SolidQuery = FunctionRef<void(const Rect& area, FunctionRef<void(const Rect&)> emit)>;

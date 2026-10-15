@@ -12,8 +12,9 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   very large maps
 - ~~Audio formats: OGG Vorbis sounds, streamed music with gapless loops and crossfades~~ (done). Still to do: Opus,
   per-bus effects (low-pass, reverb), positional audio helpers
-- ~~Collision: shapes, sweeps, raycasts, spatial hash, `move_and_slide` against grids or boxes~~ (done). Still to do:
-  polygons/capsules, trigger events as ECS components, optional rigid-body physics (Box2D v3) for games that want it
+- ~~Collision: shapes, sweeps, raycasts, spatial hash, `move_and_slide` against grids or boxes, polygons and
+  capsules, colliders and trigger events as ECS components, optional rigid-body physics (Box2D v3)~~ (done). Later:
+  Box2D joints and contact events as components
 
 ## M2: worlds that persist
 - ~~Reflection: `PH_REFLECT(Type, fields...)`~~ (done). Later: switch to C++26 reflection when compilers ship it

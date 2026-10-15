@@ -10,6 +10,7 @@ option(PH_FETCH_SDL     "Build SDL3 from source even if an installed SDL3 is fou
 option(PH_WARNINGS_AS_ERRORS "Treat engine warnings as errors"                     OFF)
 option(PH_MACOS_BUNDLES "Build macOS games as .app bundles"                          OFF)
 option(PH_TRACY         "Send profiler zones to the Tracy profiler"                  OFF)
+option(PH_BOX2D         "Rigid-body physics through Box2D (physics/rigid_bodies.hpp)" OFF)
 option(PH_BUILD_EDITOR  "Build Bowl Editor (needs PH_DEV_TOOLS)"                   ${PROJECT_IS_TOP_LEVEL})
 set(PH_SHADERC_EXECUTABLE "" CACHE FILEPATH
     "Prebuilt host ph-shaderc to use when cross-compiling (iOS, Android, consoles)")

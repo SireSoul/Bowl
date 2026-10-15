@@ -100,6 +100,20 @@ if(PH_TRACY)
     target_compile_options(TracyClient PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>) # its own warnings aren't ours to fix
 endif()
 
+# Box2D v3: optional rigid-body physics (ph/physics/rigid_bodies.hpp).
+if(PH_BOX2D)
+    set(BOX2D_SAMPLES OFF CACHE BOOL "" FORCE)
+    set(BOX2D_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_BENCHMARKS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_DOCS OFF CACHE BOOL "" FORCE)
+    set(BOX2D_VALIDATE OFF CACHE BOOL "" FORCE)
+    ph_fetch(box2d https://github.com/erincatto/box2d/archive/refs/tags/v3.1.1.tar.gz
+             fb6ef914b50f4312d7d921a600eabc12318bb3c55a0b8c0b90608fa4488ef2e4)
+    FetchContent_MakeAvailable(box2d)
+    set_target_properties(box2d PROPERTIES FOLDER third_party)
+    target_compile_options(box2d PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/w,-w>)
+endif()
+
 # doctest: unit tests
 if(PH_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

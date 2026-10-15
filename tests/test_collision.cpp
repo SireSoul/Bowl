@@ -1,3 +1,4 @@
+#include "ph/physics/colliders.hpp"
 #include "ph/physics/collision.hpp"
 
 #include <doctest/doctest.h>
@@ -95,4 +96,84 @@ TEST_CASE("collision: spatial hash reports each overlapping item once") {
     hash.clear();
     hash.query({0, 0, 200, 200}, [&](int id, const Rect&) { found.insert(id); });
     CHECK(found.empty());
+}
+
+TEST_CASE("shapes: polygons separate along the shortest axis, even turned") {
+    Polygon a = Polygon::box({0, 0}, {10, 10});
+    Polygon b = Polygon::box({8, 0}, {10, 10});
+    Contact c = collide(a, b);
+    REQUIRE(c.hit);
+    CHECK(c.normal.x == doctest::Approx(-1)); // a is left of b: push a further left
+    CHECK(c.depth == doctest::Approx(2));
+
+    Polygon diamond = Polygon::box({0, 0}, {10, 10}, pi / 4); // reaches 7.07 to each side
+    CHECK(overlaps(diamond, Rect{6.5f, -1, 4, 2}));
+    CHECK_FALSE(overlaps(diamond, Rect{7.5f, -1, 4, 2}));
+    CHECK_FALSE(overlaps(diamond, Rect{4.5f, 4.5f, 3, 3})); // the cut-off corner of the bounding box
+}
+
+TEST_CASE("shapes: circles and capsules against everything") {
+    Polygon square = Polygon::box({0, 0}, {10, 10});
+    Contact c = collide(Circle{{7, 0}, 3}, square); // 1 unit into the right side
+    REQUIRE(c.hit);
+    CHECK(c.normal.x == doctest::Approx(1));
+    CHECK(c.depth == doctest::Approx(1));
+    CHECK_FALSE(overlaps(Circle{{7.5f, 7.5f}, 3}, square)); // near the corner, but outside its rounding
+
+    Capsule body{{0, -10}, {0, 10}, 2};
+    CHECK(overlaps(body, Circle{{3, 9}, 1.5f}));
+    CHECK_FALSE(overlaps(body, Circle{{0, 14}, 1.5f}));
+    Contact side = collide(Circle{{3, 0}, 2}, body);
+    REQUIRE(side.hit);
+    CHECK(side.normal.x == doctest::Approx(1));
+    CHECK(side.depth == doctest::Approx(1));
+
+    CHECK(overlaps(body, Capsule{{-5, 0}, {5, 0}, 0.5f}));         // crossing
+    CHECK_FALSE(overlaps(body, Capsule{{3, -20}, {3, 20}, 0.5f})); // side by side, apart
+    CHECK(overlaps(body, Rect{1.5f, 9.5f, 4, 4}));                 // the rounded end into a box
+    CHECK(contains(Shape{body}, Vec2{1, 11}));
+    CHECK_FALSE(contains(Shape{body}, Vec2{1.9f, 11.9f}));
+}
+
+TEST_CASE("shapes: raycasts hit circles, polygons and capsules at the right place") {
+    RayHit h = raycast({-10, 0}, {1, 0}, 100, Shape{Circle{{0, 0}, 2}});
+    REQUIRE(h.hit);
+    CHECK(h.distance == doctest::Approx(8));
+    CHECK(h.normal.x == doctest::Approx(-1));
+
+    h = raycast({-10, 0}, {1, 0}, 100, Shape{Polygon::box({0, 0}, {4, 4}, pi / 4)});
+    REQUIRE(h.hit);
+    CHECK(h.distance == doctest::Approx(10 - 2 * std::sqrt(2.0f)).epsilon(1e-3));
+
+    h = raycast({-10, 5}, {1, 0}, 100, Shape{Capsule{{0, -10}, {0, 10}, 2}});
+    REQUIRE(h.hit);
+    CHECK(h.distance == doctest::Approx(8));
+    CHECK_FALSE(raycast({-10, 15}, {1, 0}, 100, Shape{Capsule{{0, -10}, {0, 10}, 2}}).hit);
+}
+
+TEST_CASE("triggers: entered, inside and exited, with layers") {
+    ecs::World world;
+    ecs::Entity door = world.create(ecs::Transform2D{{0, 0}}, Collider{.size = {20, 20}, .trigger = true, .mask = 0b01});
+    ecs::Entity hero = world.create(ecs::Transform2D{{100, 0}}, Collider{.kind = Collider::Kind::Circle, .radius = 4, .layer = 0b01});
+    ecs::Entity ghost = world.create(ecs::Transform2D{{0, 0}}, Collider{.kind = Collider::Kind::Circle, .radius = 4, .layer = 0b10});
+    auto step = [&] {
+        ecs::propagate_transforms(world);
+        update_triggers(world);
+        return world.resource<TriggerEvents>();
+    };
+    TriggerEvents e = step();
+    CHECK(e.entered.empty()); // the ghost is on a layer the door ignores
+    world.get<ecs::Transform2D>(hero).position = {8, 0};
+    e = step();
+    REQUIRE(e.entered.size() == 1);
+    CHECK(e.entered[0] == TriggerPair{door, hero});
+    CHECK(e.touching(door, hero));
+    e = step();
+    CHECK(e.entered.empty());
+    CHECK(e.inside.size() == 1);
+    world.get<ecs::Transform2D>(hero).position = {40, 0};
+    e = step();
+    REQUIRE(e.exited.size() == 1);
+    CHECK(e.exited[0].other == hero);
+    CHECK(overlapping(world, Circle{{0, 0}, 1}, 0b10) == std::vector<ecs::Entity>{ghost});
 }
