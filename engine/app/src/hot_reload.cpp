@@ -1,5 +1,6 @@
 #include "ph/app/hot_reload.hpp"
 
+#include "ph/core/file.hpp"
 #include "ph/core/time.hpp"
 #include "ph/ecs/world_io.hpp"
 
@@ -159,6 +160,55 @@ const void* module_of(const void* address) {
         return nullptr;
     return module;
 }
+
+// Profilers and debuggers keep a loaded library's .pdb open, and the linker then can't write the next build's
+// (LNK1201). So each copy gets its own: the .pdb is copied beside it, and the copy's CodeView record is changed to
+// name that file. Returns the .pdb copy, or an empty path when there's nothing to do.
+fs::path give_own_pdb(const fs::path& library, const fs::path& copy) {
+    std::error_code ec;
+    fs::path pdb = fs::path(library).replace_extension(".pdb");
+    if (!fs::exists(pdb, ec)) return {};
+    fs::path own = fs::path(copy).replace_extension(".pdb");
+    fs::copy_file(pdb, own, fs::copy_options::overwrite_existing, ec);
+    if (ec) return {};
+
+    auto bytes = read_file_bytes(copy);
+    if (!bytes) return own;
+    std::vector<u8>& b = *bytes;
+    auto u16_at = [&](usize at) -> u32 { return at + 2 <= b.size() ? u32(b[at]) | u32(b[at + 1]) << 8 : 0; };
+    auto u32_at = [&](usize at) -> u32 { return at + 4 <= b.size() ? u16_at(at) | u16_at(at + 2) << 16 : 0; };
+    usize pe = u32_at(0x3C);
+    if (u32_at(pe) != 0x00004550) return own; // "PE\0\0"
+    u32 sections = u16_at(pe + 6), optional_size = u16_at(pe + 20);
+    usize optional = pe + 24;
+    usize directories = optional + (u16_at(optional) == 0x20B ? 112 : 96); // PE32+ or PE32
+    u32 debug_rva = u32_at(directories + 6 * 8), debug_size = u32_at(directories + 6 * 8 + 4);
+    auto file_offset = [&](u32 rva) -> usize {
+        for (u32 i = 0; i < sections; ++i) {
+            usize s = optional + optional_size + i * 40;
+            u32 va = u32_at(s + 12), size = (std::max)(u32_at(s + 8), u32_at(s + 16)), raw = u32_at(s + 20);
+            if (rva >= va && rva < va + size) return raw + (rva - va);
+        }
+        return 0;
+    };
+    usize debug = file_offset(debug_rva);
+    if (!debug) return own;
+    std::string name = own.filename().string();
+    for (usize e = debug; e + 28 <= debug + debug_size; e += 28) {
+        if (u32_at(e + 12) != 2) continue; // IMAGE_DEBUG_TYPE_CODEVIEW
+        usize record = u32_at(e + 24), size = u32_at(e + 16);
+        if (u32_at(record) != 0x53445352 || size < 25 || record + size > b.size()) continue; // "RSDS"
+        // The GUID and age stay, so debuggers still match the file; only its name changes. A bare name is looked
+        // for next to the library.
+        usize path = record + 24, room = size - 24;
+        if (name.size() + 1 > room) continue;
+        std::fill(b.begin() + static_cast<std::ptrdiff_t>(path), b.begin() + static_cast<std::ptrdiff_t>(path + room), u8(0));
+        std::copy(name.begin(), name.end(), b.begin() + static_cast<std::ptrdiff_t>(path));
+        write_file_bytes(copy, b.data(), b.size());
+        break;
+    }
+    return own;
+}
 #else
 void* load_library(const fs::path& path) { return dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL); }
 void* find_symbol(void* library, const char* name) { return dlsym(library, name); }
@@ -181,12 +231,14 @@ struct HotReloadHost::Library {
     void* handle = nullptr;
     CreateGame create = nullptr;
     fs::path copy; // the file actually loaded (a fresh copy each time, so the loader never reuses a cached image)
+    fs::path pdb;  // Windows: the copy's own debug symbols
     const void* base = nullptr;
 
     ~Library() {
         if (handle) unload_library(handle);
         std::error_code ec;
         if (!copy.empty()) fs::remove(copy, ec);
+        if (!pdb.empty()) fs::remove(pdb, ec);
     }
 };
 
@@ -210,6 +262,9 @@ std::unique_ptr<HotReloadHost::Library> HotReloadHost::open_copy() {
         lib->copy.clear();
         return nullptr;
     }
+#if defined(_WIN32)
+    lib->pdb = give_own_pdb(library, lib->copy);
+#endif
     lib->handle = load_library(lib->copy);
     if (!lib->handle) {
         error("hot reload: can't load {}: {}", library.string(), last_error());
