@@ -209,6 +209,19 @@ void draw_icon(ImDrawList* l, Icon icon, ImVec2 c, float size, ImU32 col) {
         l->AddTriangleFilled(P(-0.55f, 0.45f), P(-0.1f, -0.1f), P(0.3f, 0.45f), col);
         l->AddCircleFilled(P(0.4f, -0.2f), h * 0.14f, col);
         break;
+    case Icon::Brush: // a brush: a handle and its tip
+        line(0.75f, -0.75f, -0.1f, 0.1f);
+        l->AddQuadFilled(P(-0.1f, 0.1f), P(0.1f, 0.3f), P(-0.4f, 0.8f), P(-0.6f, 0.6f), col);
+        break;
+    case Icon::Region: // a dashed area
+        for (float s = -0.75f; s < 0.7f; s += 0.5f) {
+            line(s, -0.75f, s + 0.25f, -0.75f);
+            line(s, 0.75f, s + 0.25f, 0.75f);
+            line(-0.75f, s, -0.75f, s + 0.25f);
+            line(0.75f, s, 0.75f, s + 0.25f);
+        }
+        l->AddRectFilled(P(-0.35f, -0.35f), P(0.35f, 0.35f), (col & 0x00FFFFFF) | 0x50000000, 1);
+        break;
     }
 }
 

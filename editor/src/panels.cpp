@@ -61,7 +61,11 @@ bool segment(const char* label, bool on, const char* tip_text, float width = 0) 
     ImGui::PushStyleColor(ImGuiCol_Text, on ? ui::color::accent : ui::color::text);
     bool pressed = ImGui::Button(label, {width, 0});
     ImGui::PopStyleColor(2);
-    if (tip_text) ui::tip(tip_text);
+    if (tip_text) { // "what it does|its key"
+        std::string_view t = tip_text;
+        usize bar = t.find('|');
+        ui::tip(t.substr(0, bar), bar == std::string_view::npos ? std::string_view{} : t.substr(bar + 1));
+    }
     return pressed;
 }
 
@@ -72,10 +76,16 @@ void Editor::dev_ui(Engine& engine) {
     free_area_ = {left_w, top_h, std::max(1.0f, io.DisplaySize.x - left_w - right_w),
                   std::max(1.0f, io.DisplaySize.y - top_h - status_h)};
     top_bar(engine);
-    left_panel(engine);
-    right_panel(engine);
+    if (workspace_ == Workspace::Level) {
+        left_panel(engine);
+        right_panel(engine);
+        art_drop(engine);
+    } else if (workspace_ == Workspace::Data) {
+        data_workspace(engine);
+    } else {
+        paint_workspace(engine);
+    }
     status_bar(engine);
-    art_drop(engine);
     modals(engine);
 }
 
@@ -92,7 +102,21 @@ void Editor::top_bar(Engine& engine) {
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ui::color::accent), "Bowl");
-    ImGui::SameLine();
+    ImGui::SameLine(0, 12);
+    // The three workspaces.
+    if (segment("Level", workspace_ == Workspace::Level, "Lay out the level|Ctrl+1")) workspace_ = Workspace::Level;
+    ImGui::SameLine(0, 2);
+    if (segment("Data", workspace_ == Workspace::Data, "The game's data files, edited in place|Ctrl+2")) workspace_ = Workspace::Data;
+    ImGui::SameLine(0, 2);
+    if (segment("Paint", workspace_ == Workspace::Paint, "Paint pixel art|Ctrl+3")) workspace_ = Workspace::Paint;
+    if (workspace_ != Workspace::Level) {
+        ImGui::SameLine(io.DisplaySize.x - 44);
+        if (ui::tool_button("help", ui::Icon::Help, show_help_, "Every key and mouse action|F1")) show_help_ = !show_help_;
+        ImGui::End();
+        ImGui::PopStyleColor();
+        return;
+    }
+    separator_v();
     ImGui::TextUnformatted(doc_->title().c_str());
     if (doc_->modified()) {
         ImGui::SameLine(0, 4);
@@ -119,6 +143,14 @@ void Editor::top_bar(Engine& engine) {
     if (ui::tool_button("pan", ui::Icon::Pan, tool_ == Tool::Pan,
                         "Move the view: drag to look around (the right or middle button always does)|H, or hold Space"))
         tool_ = Tool::Pan;
+    ImGui::SameLine(0, 4);
+    if (ui::tool_button("brush", ui::Icon::Brush, tool_ == Tool::Brush,
+                        "Brush: paint on a picture where it stands in the level (Paint workspace for tools and colors)|B"))
+        tool_ = Tool::Brush;
+    ImGui::SameLine(0, 4);
+    if (ui::tool_button("region", ui::Icon::Region, tool_ == Tool::Region,
+                        "Region: drag out an area the game can find by name (a trigger collider)|R"))
+        tool_ = Tool::Region;
 
     separator_v();
     if (ui::tool_button("undo", ui::Icon::Undo, false, "Undo|Ctrl+Z", 30, doc_->can_undo())) undo(engine);
@@ -136,6 +168,9 @@ void Editor::top_bar(Engine& engine) {
     ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2);
     if (ImGui::DragFloat("##gridsize", &grid_, 0.5f, 1, 512, "%.0f px")) grid_ = std::max(grid_, 1.0f);
     ui::tip("Grid size in world units. Drag or double-click to type.");
+    ImGui::SameLine(0, 6);
+    if (ui::tool_button("colliders", ui::Icon::Eye, show_colliders_, "Show collision shapes and regions|C"))
+        show_colliders_ = !show_colliders_;
 
     // Right end: help.
     ImGui::SameLine(io.DisplaySize.x - 44);
@@ -661,7 +696,13 @@ void Editor::status_bar(Engine& engine) {
     // What a click would do right now.
     ecs::World& world = engine.world();
     std::string what;
-    if (tool_ == Tool::Place)
+    if (workspace_ == Workspace::Data)
+        what = "Change values on the left or the text on the right; comments and layout stay. Ctrl+S saves, Ctrl+Z undoes.";
+    else if (workspace_ == Workspace::Paint)
+        what = "Click and drag to paint. B pencil, E eraser, F fill, I or Alt pick. Wheel zooms, right-drag moves. Ctrl+S saves.";
+    else if (tool_ == Tool::Brush) what = "Paint on a picture where it stands. Colors and tools are in the Paint workspace.";
+    else if (tool_ == Tool::Region) what = "Drag out a region (a click makes a square one). Esc: back to selecting.";
+    else if (tool_ == Tool::Place)
         what = place_art_.empty() ? "Click to put down an empty thing. Alt: off the grid. Esc: done."
                                   : std::format("Click to place {}. Alt: off the grid. Esc: done.", fs::path(place_art_).stem().string());
     else if (tool_ == Tool::Pan) what = "Drag to look around. Esc: back to selecting.";
@@ -674,7 +715,9 @@ void Editor::status_bar(Engine& engine) {
     ImGui::TextDisabled("%s", what.c_str());
 
     Vec2 cursor = mouse_world(engine);
-    std::string right = std::format("{:.0f}%   {:.0f}, {:.0f}", engine.camera().zoom * 100, cursor.x, cursor.y);
+    std::string right = workspace_ == Workspace::Level
+                            ? std::format("{:.0f}%   {:.0f}, {:.0f}", engine.camera().zoom * 100, cursor.x, cursor.y)
+                            : std::string();
     f64 age = now_seconds() - message_time_;
     float right_w_text = ImGui::CalcTextSize(right.c_str()).x;
     if (age < 4 && !message_.empty()) {
@@ -772,6 +815,9 @@ void Editor::help_window() {
         {"Wheel", "Zoom toward the mouse"},
         {"Hold Alt", "Ignore the grid for now"},
         {"V / P / H", "Select, Place, Move the view"},
+        {"B / R", "Brush (paint on art in the level), Region (drag out an area)"},
+        {"C", "Show or hide collision shapes and regions"},
+        {"Ctrl+1 / 2 / 3", "Level, Data and Paint workspaces"},
         {"G / Shift+G", "Show the grid / snap to it"},
         {"Arrows (Shift)", "Nudge one unit (a grid step)"},
         {"Q / E (Shift)", "Turn 15 degrees (1 degree)"},

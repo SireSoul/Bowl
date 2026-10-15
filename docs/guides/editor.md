@@ -17,7 +17,8 @@ The editor is built with the engine in dev builds (`build/dev/editor/bowl-editor
 | --- | --- |
 | `level.world` | The level to open. Without one, it starts with an empty, untitled level |
 | `--assets <folder>` | Where the art is. By default, the `assets` folder the level is in, or `./assets` |
-| `--game <library>` | The game's hot-reload code library, so the game's own components can be added and edited (macOS and Linux) |
+| `--game <library>` | The game's hot-reload code library, so the game's own components can be added and edited. On Windows, `<game>_editor_code.dll` |
+| `--data`, `--paint` | Start in the Data or Paint workspace with its first file open |
 | `--select <name>` | Select the thing with this name at startup |
 | `--resave` | Open the level, save it in the current format and quit |
 
@@ -26,8 +27,11 @@ key; **F1** lists every key.
 
 ## The screen
 
-- **Top bar:** new, open and save; the tools (Select, Place, Move the view); undo and redo; the grid, snapping and
-  the grid size; help.
+The editor has three workspaces, switched at the top left: **Level** (Ctrl+1) lays out levels, **Data** (Ctrl+2) edits
+the game's data files, **Paint** (Ctrl+3) paints its art. The rest of this section is the Level workspace.
+
+- **Top bar:** new, open and save; the tools (Select, Place, Move the view, Brush, Region); undo and redo; the grid,
+  snapping and the grid size; showing collision shapes; help.
 - **Left: Art and Outline.** Art shows every picture in the assets folder as a thumbnail, grouped by folder, with a
   search box. Outline lists everything in the level, with what's inside what.
 - **Right: the inspector.** What's selected: its name, where it is, its art, and any other components.
@@ -91,8 +95,60 @@ registers its `PH_COMPONENT` types.
 Without `--game`, those components are kept as JSON: shown as text you can edit, and written back exactly when
 saving. Opening and saving a level never loses anything.
 
-On Windows, `--game` isn't supported yet; game components stay as JSON there.
+On Windows a game's code library is tied to the game's own executable (it imports the engine from it), so the build
+makes a second copy for the editor: `<game>_editor_code.dll`, next to the editor. Pass that to `--game`.
 
+## Regions and collision shapes
+
+<p align="center"><img src="../images/editor-regions.png" width="80%" alt="A region and a round collider on the level, with the region's handles"></p>
+
+Every `physics::Collider` in the level is drawn on it: triggers (regions) tinted teal, solid shapes outlined in orange.
+**C** or the eye button hides them.
+
+- **The Region tool (R):** drag out an area, or click for a square one. It becomes a thing named "Region 1" (and so on)
+  with a trigger collider: rename it, and the game finds it by name, or add the game's own components to it (a door's
+  destination, a spawn area's kind).
+- **Resizing:** select a box or circle collider and drag its handles; the opposite corner stays put, and the grid
+  applies.
+- Everything else about a collider (its kind, a polygon's points, triggers, layers) is in its card on the right.
+
+## Painting where it stands
+
+The **Brush tool (B)** paints on a picture right in the level: click and drag on placed art, and the pixel under the
+mouse changes, through the thing's position, rotation, scale and art region. Every placed copy of that picture
+changes with it, and a running game sees it too. The colors and tools are the Paint workspace's.
+
+## The Data workspace
+
+<p align="center"><img src="../images/editor-data.png" width="80%" alt="The Data workspace: a JSON file as a tree and as text"></p>
+
+Every `.json` and `.prefab` file in the assets folder, on the left. The open file shows twice: as a tree of values
+you can change, and as its text.
+
+- Numbers drag or take typing, text is a text field, on/off is a checkbox. Lists have **+** to add an item (a copy of
+  the last) and every value has **x** to remove it; objects have a **+ new key** box. An empty value offers a type.
+- **Changes keep the file as it was written:** comments, spacing, key order and trailing commas stay, because only
+  the value that changed is rewritten (`json::TextDocument` does this, and is there for your own tools too).
+- The text can be edited directly as well. While it doesn't parse, the tree shows where the mistake is.
+- **Ctrl+S** saves, **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo, **Revert** goes back to the file on disk. A
+  running game reloads the file when it's saved.
+
+## The Paint workspace
+
+<p align="center"><img src="../images/editor-paint.png" width="80%" alt="The Paint workspace with a picture, tools and its palette"></p>
+
+Pick a picture on the left to paint it on a big canvas with a pixel grid.
+
+| Tool | Key | |
+| --- | --- | --- |
+| Pencil | B | Paints pixels; fast strokes have no gaps |
+| Eraser | E | Makes pixels transparent |
+| Fill | F | Fills the area of one color |
+| Pick | I, or hold Alt | Takes a color from the picture |
+
+The palette starts with the colors already in the picture, most used first. The wheel zooms toward the mouse,
+right-drag moves. **Ctrl+Z** / **Ctrl+Shift+Z** undo and redo strokes, **Ctrl+S** writes the PNG. Every stroke shows in
+the level (and a running game) at once; switching pictures saves the one you were painting.
 ## Saving and safety
 
 - **Ctrl+S** saves, **Ctrl+Shift+S** saves under a new name. A running game picks the level up by itself (it's an
@@ -120,8 +176,3 @@ Draw what the level placed with `gfx::draw_sprites(world, batch)` after the tran
 ## The engine overlay
 
 The engine's own overlay (profiler, systems, log) is on **F12** in the editor, since F1 is the editor's help.
-
-## Coming next
-
-A **Data** workspace for editing the game's JSON files in place, keeping their comments, and a **Paint** studio for
-pixel art drawn right where it stands in the level. See the [roadmap](../roadmap.md).

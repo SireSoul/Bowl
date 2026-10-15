@@ -95,17 +95,31 @@ function(ph_make_hot_reloadable target)
     if(WIN32)
         # The library links against the host, so the host can't also depend on the library. Building everything (or
         # the library) builds both.
+        # Bowl Editor builds a second copy linked against itself (see editor/CMakeLists.txt), since a Windows DLL is
+        # tied to the executable it imports the engine from.
+        set_property(GLOBAL APPEND PROPERTY PH_EDITOR_GAMES ${target})
+        set_property(TARGET ${code} PROPERTY PH_GAME_SOURCES "${abs_sources}")
         return()
     endif()
     ph_export_engine(${target})
     add_dependencies(${target} ${code})
 endfunction()
 
-# ph_export_engine(<target>): macOS and Linux. Links every engine object into an executable and exports them, so
-# libraries it loads at runtime (a game's code library) can call into the engine. The editor uses this to load a
-# game's components.
+# ph_export_engine(<target>): links every engine object into an executable and exports them, so libraries it loads at
+# runtime (a game's code library) can call into the engine. The editor uses this to load a game's components.
 function(ph_export_engine target)
     set_target_properties(${target} PROPERTIES ENABLE_EXPORTS ON)
+    if(WIN32)
+        # WINDOWS_EXPORT_ALL_SYMBOLS only exports a target's own object files, so the engine's objects are built in
+        # (the same set the hot-reload host builds in).
+        foreach(lib ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app ph_imgui)
+            if(TARGET ${lib})
+                target_sources(${target} PRIVATE $<TARGET_OBJECTS:${lib}>)
+            endif()
+        endforeach()
+        set_target_properties(${target} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+        return()
+    endif()
     foreach(lib ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app ph_imgui ph_shaderc)
         if(TARGET ${lib})
             if(APPLE)

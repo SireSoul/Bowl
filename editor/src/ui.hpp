@@ -26,7 +26,7 @@ inline constexpr ImU32 danger = IM_COL32(224, 108, 100, 255);
 
 enum class Icon {
     Select, Place, Pan, Grid, Snap, Undo, Redo, Save, Open, New, Help, Plus, Trash, Copy, Group, Reload, Eye, Cross,
-    AlignLeft, AlignCenterX, AlignRight, AlignTop, AlignCenterY, AlignBottom, Folder, Entity, Image
+    AlignLeft, AlignCenterX, AlignRight, AlignTop, AlignCenterY, AlignBottom, Folder, Entity, Image, Brush, Region
 };
 
 void apply_theme();

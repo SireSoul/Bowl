@@ -8,7 +8,9 @@
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_dialog.h>
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <dlfcn.h>
 #endif
 
@@ -123,10 +125,13 @@ void Editor::init(Engine& engine) {
     engine.assets().mount("", assets_dir_);
 
     if (!game.empty()) {
-#if defined(_WIN32)
-        warn("editor: --game isn't supported on Windows yet; the game's components stay as raw JSON");
-#else
         // Loading the library runs its PH_COMPONENT registrations. It stays loaded: component code lives in it.
+        // On Windows this is <game>_editor_code.dll, the copy built against the editor.
+#if defined(_WIN32)
+        game_library_ = LoadLibraryW(fs::absolute(game).c_str());
+        if (game_library_) info("editor: loaded the game's components from {}", game);
+        else error("editor: can't load {} (Windows error {}); use <game>_editor_code.dll", game, GetLastError());
+#else
         game_library_ = dlopen(fs::absolute(game).c_str(), RTLD_NOW | RTLD_GLOBAL);
         if (game_library_) info("editor: loaded the game's components from {}", game);
         else error("editor: can't load {}: {}", game, dlerror());
@@ -148,6 +153,16 @@ void Editor::init(Engine& engine) {
     recovery_ = doc_->pending_autosave();
     engine.renderer().set_clear_color(Color::hex(0x1d1f24));
     scan_art();
+    scan_data();
+    // --data / --paint: start in that workspace with its first file open.
+    if (engine.has_arg("--data")) {
+        workspace_ = Workspace::Data;
+        if (!data_files_.empty()) data_open(0);
+    }
+    if (engine.has_arg("--paint")) {
+        workspace_ = Workspace::Paint;
+        if (!art_.empty()) paint_open(engine, art_[0].path);
+    }
 }
 
 void Editor::shutdown(Engine& engine) {
@@ -191,8 +206,18 @@ void Editor::update(Engine& engine, f32) {
             select_name_.clear();
         }
     }
-    scene_mouse(engine);
-    shortcuts(engine);
+    // Ctrl+1/2/3 switch workspaces from anywhere.
+    {
+        Input& in = engine.input();
+        bool cmd = in.down(Key::LeftCtrl) || in.down(Key::RightCtrl) || in.down(Key::LeftSuper) || in.down(Key::RightSuper);
+        if (cmd && in.pressed(Key::Num1)) workspace_ = Workspace::Level;
+        if (cmd && in.pressed(Key::Num2)) workspace_ = Workspace::Data;
+        if (cmd && in.pressed(Key::Num3)) workspace_ = Workspace::Paint;
+    }
+    if (workspace_ == Workspace::Level) {
+        scene_mouse(engine);
+        shortcuts(engine);
+    }
     ecs::propagate_transforms(world);
 
     // Record an undo step once an edit has settled: nothing being dragged or typed into.
@@ -310,7 +335,12 @@ void Editor::scene_mouse(Engine& engine) {
         if (!over_ui && in.pressed(MouseButton::Left)) create(engine, snapped(m, alt), place_art_);
         return;
     }
-    if (tool_ != Tool::Select) return;
+    if (tool_ == Tool::Brush) {
+        brush_mouse(engine);
+        return;
+    }
+    // Region shapes: drawing new ones, and the handles on a selected one (which come before selecting).
+    if (region_mouse(engine) || tool_ != Tool::Select) return;
 
     ecs::World& world = engine.world();
     if (!over_ui && in.pressed(MouseButton::Left)) {
@@ -396,6 +426,9 @@ void Editor::shortcuts(Engine& engine) {
     if (key(Key::V)) tool_ = Tool::Select;
     if (key(Key::P)) tool_ = Tool::Place;
     if (key(Key::H)) tool_ = Tool::Pan;
+    if (key(Key::B)) tool_ = Tool::Brush;
+    if (key(Key::R)) tool_ = Tool::Region;
+    if (key(Key::C)) show_colliders_ = !show_colliders_;
     if (key(Key::G)) {
         if (shift) snap_ = !snap_;
         else show_grid_ = !show_grid_;
@@ -423,6 +456,11 @@ void Editor::shortcuts(Engine& engine) {
 // Render
 
 void Editor::render(Engine& engine) {
+    if (workspace_ == Workspace::Paint) {
+        paint_render(engine);
+        return;
+    }
+    if (workspace_ == Workspace::Data) return;
     ecs::World& world = engine.world();
     const gfx::Camera2D& cam = engine.camera();
     f32 px = 1.0f / cam.zoom;
@@ -483,6 +521,7 @@ void Editor::render(Engine& engine) {
     });
     if (tool_ == Tool::Place && place_art_.empty() && !ImGui::GetIO().WantCaptureMouse)
         gizmos_.draw_outline(Rect::from_center(snapped(mouse_world(engine), alt), Vec2{14 * px}), accent.with_alpha(0.6f), 2 * px);
+    draw_colliders(engine, px);
     if (drag_ == Drag::Box) {
         Vec2 a = drag_start_world_, b = mouse_world(engine);
         Rect r{std::min(a.x, b.x), std::min(a.y, b.y), std::abs(b.x - a.x), std::abs(b.y - a.y)};

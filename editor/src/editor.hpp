@@ -4,6 +4,7 @@
 #include "ui.hpp"
 
 #include "ph/app/engine.hpp"
+#include "ph/core/json_text.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -31,7 +32,9 @@ public:
     void shutdown(Engine& engine) override;
 
 private:
-    enum class Tool { Select, Place, Pan };
+    // The editor's three rooms: levels, the game's data files, and painting art.
+    enum class Workspace { Level, Data, Paint };
+    enum class Tool { Select, Place, Pan, Brush, Region };
     enum class Drag { None, Move, Box, Pan };
 
     // A picture in the assets folder, shown on the art shelf.
@@ -104,6 +107,78 @@ private:
     void art_drop(Engine& engine); // art dragged from the shelf and let go over the scene
     bool thumbnail(Art& art, float size, bool chosen);
 
+    // data.cpp: the Data workspace
+    struct DataFile {
+        std::string path; // virtual path, for display
+        std::filesystem::path file;
+    };
+    struct DataEdit { // made while drawing, applied after (each edit re-reads the document)
+        enum Kind { Set, Insert, Erase } kind;
+        json::TextDocument::Path path;
+        json::Value value;
+        std::string key;
+    };
+    void scan_data();
+    void data_workspace(Engine& engine);
+    void data_tree(const json::Value& value, json::TextDocument::Path& path, std::string_view label);
+    void data_open(usize index);
+    bool data_save();
+    void data_shortcuts(Engine& engine);
+    void data_undo(int direction);
+
+    std::vector<DataFile> data_files_;
+    std::optional<usize> data_index_;
+    json::TextDocument data_doc_;
+    std::string data_saved_;                // the text as it is on disk
+    std::vector<std::string> data_history_; // undo steps (whole texts: data files are small)
+    usize data_cursor_ = 0;
+    std::vector<DataEdit> data_edits_;
+    char data_filter_[128] = {};
+
+    // paint.cpp: the Paint workspace, and the Brush tool that paints on art where it stands in the level
+    enum class PaintTool { Pencil, Eraser, Fill, Picker };
+    struct Canvas {
+        std::string path; // virtual path of the picture
+        std::filesystem::path file;
+        u32 w = 0, h = 0;
+        std::vector<u8> pixels;             // RGBA, straight alpha
+        std::unique_ptr<gfx::Texture> view; // nearest-filtered copy for the Paint canvas
+        std::vector<std::vector<u8>> history;
+        usize cursor = 0;
+        bool modified = false, dirty = false; // dirty: the GPU copies are behind
+    };
+    bool paint_open(Engine& engine, const std::string& path);
+    void paint_workspace(Engine& engine);
+    void paint_render(Engine& engine);
+    void paint_mouse(Engine& engine);
+    void brush_mouse(Engine& engine); // Level workspace: the Brush tool
+    void paint_stroke(i32 x, i32 y, bool first);
+    void paint_fill(i32 x, i32 y);
+    void paint_commit();              // a stroke ended: an undo step
+    void paint_upload(Engine& engine);
+    bool paint_save(Engine& engine);
+    void paint_undo(int direction);
+    gfx::Camera2D paint_camera(Engine& engine) const;
+
+    std::optional<Canvas> canvas_;
+    PaintTool paint_tool_ = PaintTool::Pencil;
+    Color paint_color_ = Color::hex(0xf2c45c);
+    std::vector<u32> paint_palette_; // colors in the picture, then picked ones
+    f32 paint_zoom_ = 8;
+    Vec2 paint_pan_;
+    bool painting_ = false;
+    i32 paint_last_x_ = 0, paint_last_y_ = 0;
+    gfx::SpriteBatch paint_batch_;
+
+    // Regions: colliders drawn and edited on the level (regions.cpp)
+    bool region_mouse(Engine& engine); // true when it used the mouse
+    void draw_colliders(Engine& engine, f32 px);
+    bool show_colliders_ = true;
+    ecs::Entity brush_target_;          // the sprite the Brush is painting on
+    int region_handle_ = -1; // the resize handle being dragged
+    Vec2 region_anchor_;
+
+    Workspace workspace_ = Workspace::Level;
     std::unique_ptr<Document> doc_;
     Selection selection_;
     Tool tool_ = Tool::Select;

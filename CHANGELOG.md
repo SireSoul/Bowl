@@ -6,6 +6,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Bowl Editor: Level, Data and Paint workspaces. Data edits every JSON file in the assets folder as a tree and as text,
+  keeping comments and layout; Paint is a pixel-art canvas (pencil, eraser, fill, picker, palette, undo); the Brush
+  tool paints on art where it stands in the level; the Region tool and handles draw and resize trigger regions and
+  colliders, which are all shown on the level. `--game` works on Windows through `<game>_editor_code.dll`.
+- `json::TextDocument`: edits JSON text in place (set, insert, erase) without disturbing comments or layout.
 - Inspector: `std::vector` and `std::array` fields are editable (`FieldVisitor::begin_list`), components can be removed
   and added (`inspector::add_component_menu`), and the overlay's entity list has a filter (`inspector::matches`).
 - Compute shaders: `ph-shaderc` compiles `.comp.glsl` for every backend in SDL_GPU's compute layout;

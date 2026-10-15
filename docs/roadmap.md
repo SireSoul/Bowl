@@ -38,9 +38,9 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   saved, on Windows, macOS and Linux, keeping the world in place (entity ids and plain-data components survive)~~
   (done)
 - ~~Bowl Editor: a separate app for laying out levels (.world files) with art shelf, outline, inspector, groups, undo,
-  autosave and the game's own components~~ (done). Next: a Data workspace (every JSON file, edited in place with its
-  comments kept), a Paint studio (pixel art painted where it stands), regions and collision shapes, the game's
-  components on Windows. Code-first stays primary
+  autosave, the game's own components (on Windows too), a Data workspace (every JSON file, edited in place with its
+  comments kept), a Paint workspace and a Brush that paints art where it stands, regions and collision shapes~~ (done).
+  Code-first stays primary
 - ~~Tracy profiler integration~~ (done, CPU). GPU timelines need timestamp queries in SDL_GPU
 
 Not planned: a scripting language. Game code is C++, and game-code hot reload gives the quick iteration scripting

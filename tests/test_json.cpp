@@ -1,4 +1,5 @@
 #include "ph/core/json.hpp"
+#include "ph/core/json_text.hpp"
 
 #include <doctest/doctest.h>
 
@@ -68,4 +69,56 @@ TEST_CASE("json: build, stringify and round-trip") {
     auto back = json::parse(json::stringify(doc));
     REQUIRE(back);
     CHECK(back.value == doc);
+}
+
+TEST_CASE("json text: edits keep comments, spacing and order") {
+    std::string original = R"({
+  // Enemies of the first area.
+  "slime": {
+    "hp": 30, // tune later
+    "speed": 1.5,
+    "drops": ["gel"],
+  },
+  /* bats come at night */
+  "bat": { "hp": 8, "tags": [] }
+}
+)";
+    json::TextDocument doc;
+    REQUIRE(doc.load(original));
+    REQUIRE(doc.set({"slime", "hp"}, 40));
+    CHECK(doc.text().find("\"hp\": 40, // tune later") != std::string::npos);
+    CHECK(doc.text().find("// Enemies of the first area.") != std::string::npos);
+    CHECK(doc.text().find("/* bats come at night */") != std::string::npos);
+    CHECK(doc.value()["slime"]["hp"].as_int() == 40);
+
+    REQUIRE(doc.insert({"slime", "drops"}, "slime ball"));
+    CHECK(doc.text().find(R"(["gel", "slime ball"])") != std::string::npos);
+    REQUIRE(doc.insert({"bat", "tags"}, "flying"));
+    CHECK(doc.text().find(R"("tags": ["flying"])") != std::string::npos);
+    REQUIRE(doc.insert({"slime"}, 2, "armor"));
+    CHECK(doc.value()["slime"]["armor"].as_int() == 2);
+    CHECK(doc.text().find("\n    \"armor\": 2") != std::string::npos); // lined up with its neighbours
+    REQUIRE(doc.insert({"slime"}, 3, "armor")); // an existing key is replaced
+    CHECK(doc.value()["slime"]["armor"].as_int() == 3);
+
+    REQUIRE(doc.erase({"slime", "speed"}));
+    CHECK_FALSE(doc.value()["slime"].contains("speed"));
+    CHECK(doc.text().find("\"hp\": 40, // tune later") != std::string::npos);
+    REQUIRE(doc.erase({"slime", "drops", usize{0}}));
+    CHECK(doc.value()["slime"]["drops"].size() == 1);
+    REQUIRE(doc.erase({"bat", "tags", usize{0}}));
+    CHECK(doc.text().find(R"("tags": [])") != std::string::npos);
+
+    // Replacing a value with a container indents it to fit.
+    json::Value boss;
+    boss.set("hp", 500);
+    REQUIRE(doc.set({"bat"}, boss));
+    CHECK(doc.value()["bat"]["hp"].as_int() == 500);
+    CHECK(doc.valid());
+
+    CHECK_FALSE(doc.set({"nope"}, 1));
+    CHECK_FALSE(doc.erase({"slime", "drops", usize{9}}));
+    CHECK_FALSE(doc.load("{ broken"));
+    CHECK(doc.error());
+    CHECK(doc.text() == "{ broken"); // kept, so it can be fixed
 }

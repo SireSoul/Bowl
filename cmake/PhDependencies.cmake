@@ -130,7 +130,10 @@ if(PH_OPUS)
              65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1)
     ph_fetch(opusfile https://downloads.xiph.org/releases/opus/opusfile-0.12.tar.gz
              118d8601c12dd6a44f52423e68ca9083cc9f2bfe72da7a8c1acb22a80ae3550b)
+    set(saved_log_level "${CMAKE_MESSAGE_LOG_LEVEL}")
+    set(CMAKE_MESSAGE_LOG_LEVEL NOTICE) # libopus prints a long feature list on every configure
     FetchContent_MakeAvailable(ogg opus)
+    set(CMAKE_MESSAGE_LOG_LEVEL "${saved_log_level}")
     FetchContent_GetProperties(opusfile)
     if(NOT opusfile_POPULATED)
         FetchContent_Populate(opusfile)
