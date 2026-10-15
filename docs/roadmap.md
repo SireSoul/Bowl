@@ -7,9 +7,9 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   slices (hitboxes, nine-slice, pivots), animation events by name, frames by name, the `ph-atlas` packer~~ (done)
 - ~~Text: TTF fonts, `draw_text`, UTF-8, kerning, wrapping, alignment, outlines and shadows, rich text markup,
   font fallback chains, SDF text~~ (done). Later: color emoji, right-to-left and complex scripts (shaping)
-- ~~Tilemaps: Tiled `.tmj`/`.tsj`, orthogonal + isometric, infinite maps, compressed layers, flips, animated tiles,
-  objects, properties, y-sorting~~ (done). Still to do: staggered/hex maps, `.tmx` XML, GPU-cached static chunks for
-  very large maps
+- ~~Tilemaps: Tiled `.tmj`/`.tsj` and `.tmx`/`.tsx`, orthogonal, isometric, staggered and hexagonal, infinite
+  maps, compressed layers, flips, animated tiles, objects, properties, y-sorting, GPU-cached chunks for very large
+  maps~~ (done). Later: Tiled object templates (`.tx`), Wang sets as data
 - ~~Audio formats: OGG Vorbis sounds, streamed music with gapless loops and crossfades~~ (done). Still to do: Opus,
   per-bus effects (low-pass, reverb), positional audio helpers
 - ~~Collision: shapes, sweeps, raycasts, spatial hash, `move_and_slide` against grids or boxes, polygons and

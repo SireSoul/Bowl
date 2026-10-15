@@ -36,6 +36,7 @@ ph_module(core
         core/src/localization.cpp
         core/src/profiler.cpp
         core/src/settings.cpp
+        core/src/xml.cpp
     PUBLIC_DEPS Threads::Threads)
 if(PH_TRACY)
     target_link_libraries(ph_core PRIVATE Tracy::TracyClient)

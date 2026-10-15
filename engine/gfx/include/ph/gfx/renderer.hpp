@@ -70,6 +70,10 @@ public:
     void submit_light(const SpriteBatch& batch);
     // UI: drawn after lighting and post-processing (unaffected by them), under the dev overlay.
     void submit_ui(const SpriteBatch& batch);
+    // Sprites already in GPU memory, seen through `camera`. Nothing is uploaded; they draw in submission order with the
+    // batches around them.
+    void submit(const StaticSprites& sprites, const Camera2D& camera, BlendMode blend = BlendMode::Alpha,
+                const Material* material = nullptr);
     void end_frame();
 
     PostSettings& post() { return post_; }
@@ -97,6 +101,7 @@ private:
         u32 first_draw, draw_count;
         BlendMode blend;
         const Material* material;
+        SDL_GPUBuffer* buffer = nullptr; // null: this frame's sprites
     };
     struct PipelineKey {
         u32 vertex, fragment;

@@ -1,8 +1,8 @@
 # Tilemaps
 
 Maps are made in [Tiled](https://www.mapeditor.org) and loaded with their tilesets, images, objects and custom
-properties. Orthogonal and isometric (diamond) maps are supported, finite or infinite, with animated tiles, flipped
-tiles and y-sorting for isometric depth.
+properties. Orthogonal, isometric, staggered and hexagonal maps are supported, finite or infinite, saved as JSON or
+XML, with animated tiles, flipped tiles, y-sorting for isometric depth, and GPU-cached chunks for very large maps.
 
 <p align="center"><img src="../images/isometric-day.jpg" width="70%" alt="An isometric map with y-sorted pillars"></p>
 
@@ -11,6 +11,8 @@ tiles and y-sorting for isometric depth.
 - [Layers](#layers)
 - [Coordinates](#coordinates)
 - [Isometric maps and y-sorting](#isometric-maps-and-y-sorting)
+- [Staggered and hexagonal maps](#staggered-and-hexagonal-maps)
+- [Very large maps](#very-large-maps)
 - [Custom properties](#custom-properties)
 - [Objects](#objects)
 - [Collision with tiles](#collision-with-tiles)
@@ -19,9 +21,10 @@ tiles and y-sorting for isometric depth.
 
 ## Saving maps from Tiled
 
-- Save maps as **JSON** (`.tmj`). External tilesets as JSON too (`.tsj`); embedded tilesets also work.
-- Layer data format: **CSV**, **Base64 (uncompressed)**, **Base64 (zlib)** or **Base64 (gzip)**. Zstandard isn't
-  supported; Tiled's default (CSV) is fine.
+- Save maps as **JSON** (`.tmj`) or **XML** (`.tmx`, Tiled's default). External tilesets can be either (`.tsj`,
+  `.tsx`), and embedded tilesets work too. The file extension decides how a map is read.
+- Layer data format: **CSV**, **XML**, **Base64 (uncompressed)**, **Base64 (zlib)** or **Base64 (gzip)**. Zstandard
+  isn't supported; Tiled's default (CSV) is fine.
 - Keep image paths relative (Tiled's default), and keep everything under your assets folder.
 
 ## Loading and drawing
@@ -52,6 +55,7 @@ images.
 | `layer_depth_step` | 1 | Depth added per layer, so later layers draw on top |
 | `y_sort` | `false` | Give tiles depth by their bottom edge (see below) |
 | `only_layer` | empty | Draw just the layer with this name |
+| `layers` | `All` | `Flat` or `Sorted` to draw only the layers that don't, or do, y-sort |
 
 ## Layers
 
@@ -72,6 +76,8 @@ Tile cells hold *gids*: a global tile id plus flip flags in the top bits. Mask w
 ```cpp
 Vec2 world = map.cell_to_world(x, y);          // where Tiled places cell (x, y)
 Vec2 cell = map.world_to_cell(world_point);    // fractional; floor() it for the cell
+auto [cx, cy] = map.cell_at(world_point);      // the cell under a point, for every orientation
+Vec2 size = map.pixel_size();                  // the whole map in pixels
 ```
 
 For orthogonal maps a cell's anchor is its top-left corner. For isometric maps it's the top corner of the diamond,
@@ -109,6 +115,44 @@ sort (the ground) draw below everything that does.
 
 The isometric sample shows the whole setup, including movement in screen directions and collision in cell space.
 `--behind-pillar` starts the player behind a pillar to show the sorting.
+
+## Staggered and hexagonal maps
+
+Staggered maps are isometric diamonds laid out in rows, so the map is a rectangle; hexagonal maps are the same with
+hexagons. Both shift every other row (stagger axis y) or column (stagger axis x), and Tiled's stagger axis, stagger
+index and hex side length are kept as `stagger_x`, `stagger_even` and `hex_side_length`.
+
+A cell's anchor (`cell_to_world`) is the top-left of the tile's box. `world_to_cell` and `cell_at` give the cell
+whose hexagon or diamond contains the point, which is what you want for picking under the mouse. Object positions
+are plain map pixels, as in orthogonal maps. Tiles draw in Tiled's order, so tall tiles overlap correctly, and
+`y_sort` works as it does for isometric maps.
+
+## Very large maps
+
+`draw_tilemap` walks the visible cells every frame. For big maps zoomed out, that's a lot of cells. `TilemapCache`
+cuts the flat layers into chunks of 32 x 32 cells and builds each chunk once into GPU memory
+(`gfx::StaticSprites`); a frame only submits the chunks on screen:
+
+```cpp
+gfx::TilemapCache ground;   // keep it with the map
+
+// render:
+gfx::TilemapDrawOptions tiles{.time = t, .y_sort = true};
+ground.submit(engine.renderer(), engine.gpu(), engine.camera(), *map, tiles);  // ground layers, cached
+batch.begin(engine.camera());
+tiles.layers = gfx::TilemapDrawOptions::Layers::Sorted;
+gfx::draw_tilemap(batch, *map, tiles);                                         // walls and trees, each frame
+// ... characters into the same batch ...
+engine.renderer().submit(batch);
+```
+
+The cache draws the layers that don't y-sort (all of them when `y_sort` is off) in order, before anything submitted
+after it. Animated tiles, image layers and tile objects in those layers are drawn every frame in between. Chunks
+rebuild by themselves when the map or its textures reload, or when the draw options change; after changing cells in
+code, call `invalidate()`.
+
+`StaticSprites` works for anything else that doesn't change: fill a `SpriteBatch`, `build` from it once, and
+`engine.renderer().submit(sprites, camera)` every frame.
 
 ## Custom properties
 
@@ -154,16 +198,16 @@ does exactly that. See [collision.md](collision.md).
 ## Maps built in code
 
 A `gfx::Tilemap` is plain data. You can fill one yourself (orientation, tile size, tilesets, layers) and register it
-with `assets.add`, which is how the isometric sample generates its island. `Tilemap::parse` reads `.tmj` JSON you've
-loaded some other way.
+with `assets.add`, which is how the isometric sample generates its island. `Tilemap::parse` reads `.tmj` JSON and
+`Tilemap::parse_tmx` reads `.tmx` XML you've loaded some other way.
 
 ## What's supported
 
 | Feature | |
 | --- | --- |
-| Orientation | Orthogonal, isometric. Not yet: staggered, hexagonal |
-| Map format | JSON (`.tmj`, `.tsj`). Not yet: XML (`.tmx`, `.tsx`) |
-| Layer data | CSV, base64, base64 + zlib, base64 + gzip |
+| Orientation | Orthogonal, isometric, staggered, hexagonal (both stagger axes and indexes) |
+| Map format | JSON (`.tmj`, `.tsj`) and XML (`.tmx`, `.tsx`) |
+| Layer data | CSV, XML, base64, base64 + zlib, base64 + gzip |
 | Infinite maps | Yes; chunks are merged into one rectangle per layer |
 | Tilesets | Image tilesets (margin, spacing, tile offset), image-collection tilesets, external and embedded |
 | Tiles | Flips (horizontal, vertical, diagonal), animation, properties, class |

@@ -6,6 +6,12 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Tilemaps: Tiled XML maps and tilesets (`.tmx`, `.tsx`, `Tilemap::parse_tmx`), staggered and hexagonal maps
+  (`Tilemap::cell_at`, `pixel_size`), and `TilemapCache`, which keeps the flat layers of big maps in GPU memory as
+  chunks. `TilemapDrawOptions::layers` draws only the flat or the y-sorted layers.
+- `gfx::StaticSprites` and `Renderer::submit(StaticSprites, camera)`: sprites uploaded once and drawn every frame
+  without being sent again. `gfx::sprite_order`.
+- `ph/core/xml.hpp`: a small XML reader.
 - Text: outlines and shadows (`TextStyle::outline`, `shadow`), rich text markup (`[color=#hex]`, `[wave]`, `[shake]`),
   fallback fonts (`Font::set_fallbacks`, `has_glyph`), distance-field text (`TextStyle::sdf`, `sdf_text_material`), and
   `layout_text` for drawing laid-out characters yourself. `Font::advance` measures without rasterizing.

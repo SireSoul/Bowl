@@ -1,13 +1,17 @@
 #include "ph/gfx/tilemap.hpp"
 
 #include "ph/core/log.hpp"
+#include "ph/core/profiler.hpp"
+#include "ph/core/xml.hpp"
 
 #define STBI_NO_STDIO
 #include <stb_image.h> // declarations only: stbi_zlib_decode_* (implemented in loaders.cpp)
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <format>
 #include <optional>
 #include <span>
@@ -294,6 +298,235 @@ bool parse_layers(const json::Value& list, const LayerContext& parent, std::stri
     return true;
 }
 
+// .tmx and .tsx: Tiled's XML holds the same data as its JSON, so it's turned into the JSON shape and read by the same
+// code.
+
+f64 number_of(std::string_view s, f64 fallback = 0) {
+    if (s.empty()) return fallback;
+    char* end = nullptr;
+    std::string copy(s);
+    f64 v = std::strtod(copy.c_str(), &end);
+    return end == copy.c_str() ? fallback : v;
+}
+
+void copy_numbers(const xml::Element& from, json::Value& to, std::initializer_list<std::string_view> keys) {
+    for (std::string_view k : keys)
+        if (from.has(k)) to.set(k, number_of(from.attribute(k)));
+}
+
+json::Value xml_properties(const xml::Element& e) {
+    json::Value list;
+    list.make_array();
+    const xml::Element* props = e.child("properties");
+    if (!props) return list;
+    for (const xml::Element& p : props->children) {
+        if (p.name != "property") continue;
+        json::Value prop;
+        std::string_view type = p.attribute("type", "string");
+        std::string_view value = p.has("value") ? p.attribute("value") : std::string_view(p.text);
+        prop.set("name", p.attribute("name"));
+        prop.set("type", type);
+        if (type == "bool") prop.set("value", value == "true");
+        else if (type == "int" || type == "float" || type == "object") prop.set("value", number_of(value));
+        else if (type == "class") {
+            json::Value fields;
+            fields.make_object();
+            for (const json::Value& f : xml_properties(p).array()) fields.set(f["name"].as_string(), f["value"]);
+            prop.set("value", std::move(fields));
+        } else prop.set("value", value);
+        list.push(std::move(prop));
+    }
+    return list;
+}
+
+void copy_common(const xml::Element& e, json::Value& out) {
+    if (e.has("id")) out.set("id", number_of(e.attribute("id")));
+    out.set("name", e.attribute("name"));
+    if (e.has("class")) out.set("class", e.attribute("class"));
+    if (e.has("type")) out.set("type", e.attribute("type"));
+    out.set("properties", xml_properties(e));
+}
+
+json::Value xml_tileset(const xml::Element& e) {
+    json::Value ts;
+    copy_common(e, ts);
+    copy_numbers(e, ts, {"tilewidth", "tileheight", "tilecount", "columns", "spacing", "margin"});
+    if (const xml::Element* off = e.child("tileoffset")) {
+        json::Value o;
+        o.set("x", number_of(off->attribute("x")));
+        o.set("y", number_of(off->attribute("y")));
+        ts.set("tileoffset", std::move(o));
+    }
+    if (const xml::Element* img = e.child("image")) {
+        ts.set("image", img->attribute("source"));
+        ts.set("imagewidth", number_of(img->attribute("width")));
+        ts.set("imageheight", number_of(img->attribute("height")));
+    }
+    json::Value tiles;
+    tiles.make_array();
+    for (const xml::Element& t : e.children) {
+        if (t.name != "tile") continue;
+        json::Value tile;
+        copy_common(t, tile);
+        if (const xml::Element* img = t.child("image")) {
+            tile.set("image", img->attribute("source"));
+            tile.set("imagewidth", number_of(img->attribute("width")));
+            tile.set("imageheight", number_of(img->attribute("height")));
+        }
+        if (const xml::Element* anim = t.child("animation")) {
+            json::Value frames;
+            frames.make_array();
+            for (const xml::Element& f : anim->children) {
+                if (f.name != "frame") continue;
+                json::Value frame;
+                frame.set("tileid", number_of(f.attribute("tileid")));
+                frame.set("duration", number_of(f.attribute("duration"), 100));
+                frames.push(std::move(frame));
+            }
+            tile.set("animation", std::move(frames));
+        }
+        tiles.push(std::move(tile));
+    }
+    ts.set("tiles", std::move(tiles));
+    return ts;
+}
+
+// Layer data: <tile gid=".."/> elements, CSV text, or base64 text (left for decode_cells).
+json::Value xml_cells(const xml::Element& data, std::string_view encoding) {
+    if (encoding == "base64") {
+        std::string trimmed;
+        for (char c : data.text)
+            if (c != ' ' && c != '\n' && c != '\r' && c != '\t') trimmed += c;
+        return json::Value(std::move(trimmed));
+    }
+    json::Value cells;
+    cells.make_array();
+    if (encoding == "csv") {
+        usize start = 0;
+        std::string_view text = data.text;
+        while (start < text.size()) {
+            usize comma = text.find(',', start);
+            std::string_view part = text.substr(start, comma == std::string_view::npos ? std::string_view::npos : comma - start);
+            usize a = part.find_first_not_of(" \t\r\n"), b = part.find_last_not_of(" \t\r\n");
+            if (a != std::string_view::npos) cells.push(number_of(part.substr(a, b - a + 1)));
+            if (comma == std::string_view::npos) break;
+            start = comma + 1;
+        }
+    } else {
+        for (const xml::Element& t : data.children)
+            if (t.name == "tile") cells.push(number_of(t.attribute("gid")));
+    }
+    return cells;
+}
+
+json::Value xml_object(const xml::Element& e) {
+    json::Value o;
+    copy_common(e, o);
+    copy_numbers(e, o, {"x", "y", "width", "height", "rotation", "gid"});
+    o.set("visible", e.attribute("visible", "1") != "0");
+    for (const xml::Element& c : e.children) {
+        if (c.name == "point" || c.name == "ellipse") o.set(c.name, true);
+        else if (c.name == "polygon" || c.name == "polyline") {
+            json::Value points;
+            points.make_array();
+            std::string_view list = c.attribute("points");
+            usize start = 0;
+            while (start < list.size()) {
+                usize space = list.find(' ', start);
+                std::string_view pair = list.substr(start, space == std::string_view::npos ? std::string_view::npos : space - start);
+                usize comma = pair.find(',');
+                if (comma != std::string_view::npos) {
+                    json::Value p;
+                    p.set("x", number_of(pair.substr(0, comma)));
+                    p.set("y", number_of(pair.substr(comma + 1)));
+                    points.push(std::move(p));
+                }
+                if (space == std::string_view::npos) break;
+                start = space + 1;
+            }
+            o.set(c.name, std::move(points));
+        } else if (c.name == "text") {
+            json::Value text;
+            text.set("text", c.text);
+            o.set("text", std::move(text));
+        }
+    }
+    return o;
+}
+
+json::Value xml_layers(const xml::Element& parent) {
+    json::Value layers;
+    layers.make_array();
+    for (const xml::Element& e : parent.children) {
+        json::Value l;
+        if (e.name == "layer") l.set("type", "tilelayer");
+        else if (e.name == "objectgroup") l.set("type", "objectgroup");
+        else if (e.name == "imagelayer") l.set("type", "imagelayer");
+        else if (e.name == "group") l.set("type", "group");
+        else continue;
+        copy_common(e, l);
+        copy_numbers(e, l, {"opacity", "offsetx", "offsety", "width", "height"});
+        l.set("visible", e.attribute("visible", "1") != "0");
+        if (e.has("tintcolor")) l.set("tintcolor", e.attribute("tintcolor"));
+        if (e.name == "layer") {
+            if (const xml::Element* data = e.child("data")) {
+                std::string_view encoding = data->attribute("encoding");
+                l.set("encoding", encoding.empty() ? "csv" : encoding);
+                if (data->has("compression")) l.set("compression", data->attribute("compression"));
+                if (data->child("chunk")) {
+                    json::Value chunks;
+                    chunks.make_array();
+                    for (const xml::Element& c : data->children) {
+                        if (c.name != "chunk") continue;
+                        json::Value chunk;
+                        copy_numbers(c, chunk, {"x", "y", "width", "height"});
+                        chunk.set("data", xml_cells(c, encoding));
+                        chunks.push(std::move(chunk));
+                    }
+                    l.set("chunks", std::move(chunks));
+                } else {
+                    l.set("data", xml_cells(*data, encoding));
+                }
+            }
+        } else if (e.name == "objectgroup") {
+            json::Value objects;
+            objects.make_array();
+            for (const xml::Element& o : e.children)
+                if (o.name == "object") objects.push(xml_object(o));
+            l.set("objects", std::move(objects));
+        } else if (e.name == "imagelayer") {
+            if (const xml::Element* img = e.child("image")) l.set("image", img->attribute("source"));
+        } else {
+            l.set("layers", xml_layers(e));
+        }
+        layers.push(std::move(l));
+    }
+    return layers;
+}
+
+json::Value xml_map(const xml::Element& e) {
+    json::Value m;
+    m.set("orientation", e.attribute("orientation", "orthogonal"));
+    copy_numbers(e, m, {"width", "height", "tilewidth", "tileheight", "hexsidelength"});
+    m.set("infinite", e.attribute("infinite") == "1");
+    for (std::string_view k : {"backgroundcolor", "staggeraxis", "staggerindex"})
+        if (e.has(k)) m.set(k, e.attribute(k));
+    m.set("properties", xml_properties(e));
+    json::Value tilesets;
+    tilesets.make_array();
+    for (const xml::Element& t : e.children) {
+        if (t.name != "tileset") continue;
+        json::Value ts;
+        if (t.has("source")) ts.set("source", t.attribute("source"));
+        else ts = xml_tileset(t);
+        ts.set("firstgid", number_of(t.attribute("firstgid"), 1));
+        tilesets.push(std::move(ts));
+    }
+    m.set("tilesets", std::move(tilesets));
+    m.set("layers", xml_layers(e));
+    return m;
+}
+
 } // namespace
 
 // Tileset / MapLayer
@@ -324,10 +557,15 @@ bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
     std::string_view orientation = doc["orientation"].as_string("orthogonal");
     if (orientation == "orthogonal") out.orientation = Orientation::Orthogonal;
     else if (orientation == "isometric") out.orientation = Orientation::Isometric;
+    else if (orientation == "staggered") out.orientation = Orientation::Staggered;
+    else if (orientation == "hexagonal") out.orientation = Orientation::Hexagonal;
     else {
-        error = std::format("'{}' maps aren't supported yet (orthogonal and isometric are)", orientation);
+        error = std::format("unknown map orientation '{}'", orientation);
         return false;
     }
+    out.stagger_x = doc["staggeraxis"].as_string("y") == "x";
+    out.stagger_even = doc["staggerindex"].as_string("odd") == "even";
+    out.hex_side_length = out.orientation == Orientation::Hexagonal ? static_cast<u32>(doc["hexsidelength"].as_int()) : 0;
     out.width = static_cast<u32>(doc["width"].as_int());
     out.height = static_cast<u32>(doc["height"].as_int());
     out.tile_width = static_cast<u32>(doc["tilewidth"].as_int());
@@ -344,23 +582,32 @@ bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
         Tileset ts;
         if (ref.contains("source")) {
             std::string source = std::string(ref["source"].as_string());
-            if (source.ends_with(".tsx")) {
-                error = std::format("tileset '{}' is XML; export it from Tiled as JSON (.tsj)", source);
-                return false;
-            }
             std::string path = normalize_path(std::string(base_dir) + source);
             auto text = read_file(path);
             if (!text) {
                 error = std::format("can't read tileset '{}'", path);
                 return false;
             }
-            auto parsed = json::parse(*text);
-            if (!parsed) {
-                error = std::format("tileset '{}' {}:{}: {}", path, parsed.error->line, parsed.error->column,
-                                    parsed.error->message);
-                return false;
+            json::Value tileset_doc;
+            if (source.ends_with(".tsx")) {
+                auto parsed = xml::parse(*text);
+                if (!parsed || parsed.root.name != "tileset") {
+                    error = parsed ? std::format("tileset '{}' has no <tileset>", path)
+                                   : std::format("tileset '{}' {}:{}: {}", path, parsed.error->line,
+                                                 parsed.error->column, parsed.error->message);
+                    return false;
+                }
+                tileset_doc = xml_tileset(parsed.root);
+            } else {
+                auto parsed = json::parse(*text);
+                if (!parsed) {
+                    error = std::format("tileset '{}' {}:{}: {}", path, parsed.error->line, parsed.error->column,
+                                        parsed.error->message);
+                    return false;
+                }
+                tileset_doc = std::move(parsed.value);
             }
-            if (!parse_tileset(parsed.value, dir_of(path), ts, error)) return false;
+            if (!parse_tileset(tileset_doc, dir_of(path), ts, error)) return false;
         } else if (!parse_tileset(ref, base_dir, ts, error)) {
             return false;
         }
@@ -369,6 +616,21 @@ bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
     }
     std::sort(out.tilesets.begin(), out.tilesets.end(), [](const Tileset& a, const Tileset& b) { return a.first_gid < b.first_gid; });
     return parse_layers(doc["layers"], {}, base_dir, out, error);
+}
+
+bool Tilemap::parse_tmx(std::string_view text, std::string_view base_dir,
+                        const std::function<std::optional<std::string>(const std::string&)>& read_file, Tilemap& out,
+                        std::string& error) {
+    auto parsed = xml::parse(text);
+    if (!parsed) {
+        error = std::format("XML error at {}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message);
+        return false;
+    }
+    if (parsed.root.name != "map") {
+        error = "not a Tiled map (no <map> element)";
+        return false;
+    }
+    return parse(xml_map(parsed.root), base_dir, read_file, out, error);
 }
 
 const MapLayer* Tilemap::layer(std::string_view name) const {
@@ -401,10 +663,120 @@ const json::Value& Tilemap::tile_property(std::string_view layer_name, i32 x, i3
     return info ? info->properties[key] : none;
 }
 
+namespace {
+
+// The measurements of a staggered or hexagonal grid, as Tiled works them out. Staggered maps are hexagonal maps whose
+// hexagons have no flat side (diamonds).
+struct HexGrid {
+    i32 tw, th, side_x, side_y, offset_x, offset_y, column_w, row_h;
+    bool stagger_x, even;
+
+    explicit HexGrid(const Tilemap& m) {
+        tw = static_cast<i32>(m.tile_width & ~1u);
+        th = static_cast<i32>(m.tile_height & ~1u);
+        stagger_x = m.stagger_x;
+        even = m.stagger_even;
+        i32 side = static_cast<i32>(m.hex_side_length);
+        side_x = stagger_x ? side : 0;
+        side_y = stagger_x ? 0 : side;
+        offset_x = (tw - side_x) / 2;
+        offset_y = (th - side_y) / 2;
+        column_w = offset_x + side_x;
+        row_h = offset_y + side_y;
+    }
+    // Whether a column (stagger_x) or row is the shifted one.
+    bool shifted(i32 index) const { return ((index & 1) != 0) != even; }
+
+    Vec2 to_world(f32 x, f32 y) const {
+        if (stagger_x)
+            return {x * static_cast<f32>(column_w),
+                    y * static_cast<f32>(th + side_y) + (shifted(static_cast<i32>(std::floor(x))) ? row_h : 0)};
+        return {x * static_cast<f32>(tw + side_x) + (shifted(static_cast<i32>(std::floor(y))) ? column_w : 0),
+                y * static_cast<f32>(row_h)};
+    }
+
+    // Tiled's neighbours of a cell in a staggered layout.
+    std::pair<i32, i32> step(i32 x, i32 y, int dx, int dy) const {
+        if (!stagger_x) {
+            bool s = shifted(y);
+            return {x + (dx < 0 ? (s ? 0 : -1) : (s ? 1 : 0)), y + dy};
+        }
+        bool s = shifted(x);
+        return {x + dx, y + (dy < 0 ? (s ? 0 : -1) : (s ? 1 : 0))};
+    }
+
+    std::pair<i32, i32> diamond_at(Vec2 p) const {
+        f32 x = p.x, y = p.y;
+        if (stagger_x) x -= even ? static_cast<f32>(offset_x) : 0.0f;
+        else y -= even ? static_cast<f32>(offset_y) : 0.0f;
+        i32 rx = static_cast<i32>(std::floor(x / static_cast<f32>(tw)));
+        i32 ry = static_cast<i32>(std::floor(y / static_cast<f32>(th)));
+        f32 rel_x = x - static_cast<f32>(rx * tw), rel_y = y - static_cast<f32>(ry * th);
+        i32& axis = stagger_x ? rx : ry;
+        axis *= 2;
+        if (even) ++axis;
+        f32 y_pos = rel_x * static_cast<f32>(th) / static_cast<f32>(tw);
+        f32 oy = static_cast<f32>(offset_y);
+        // Inside the reference square the diamond is in the middle; the corners belong to its neighbours.
+        if (oy - y_pos > rel_y) return step(rx, ry, -1, -1);
+        if (-oy + y_pos > rel_y) return step(rx, ry, +1, -1);
+        if (oy + y_pos < rel_y) return step(rx, ry, -1, +1);
+        if (oy * 3 - y_pos < rel_y) return step(rx, ry, +1, +1);
+        return {rx, ry};
+    }
+
+    std::pair<i32, i32> hexagon_at(Vec2 p) const {
+        f32 x = p.x, y = p.y;
+        if (stagger_x) x -= static_cast<f32>(even ? tw : offset_x);
+        else y -= static_cast<f32>(even ? th : offset_y);
+        f32 cw2 = static_cast<f32>(column_w * 2), rh2 = static_cast<f32>(row_h * 2);
+        i32 rx = static_cast<i32>(std::floor(x / cw2)), ry = static_cast<i32>(std::floor(y / rh2));
+        Vec2 rel{x - static_cast<f32>(rx) * cw2, y - static_cast<f32>(ry) * rh2};
+        i32& axis = stagger_x ? rx : ry;
+        axis *= 2;
+        if (even) ++axis;
+        Vec2 centers[4];
+        if (stagger_x) {
+            f32 left = static_cast<f32>(side_x / 2), cx = left + static_cast<f32>(column_w), cy = static_cast<f32>(th / 2);
+            centers[0] = {left, cy};
+            centers[1] = {cx, cy - static_cast<f32>(row_h)};
+            centers[2] = {cx, cy + static_cast<f32>(row_h)};
+            centers[3] = {cx + static_cast<f32>(column_w), cy};
+        } else {
+            f32 top = static_cast<f32>(side_y / 2), cx = static_cast<f32>(tw / 2), cy = top + static_cast<f32>(row_h);
+            centers[0] = {cx, top};
+            centers[1] = {cx - static_cast<f32>(column_w), cy};
+            centers[2] = {cx + static_cast<f32>(column_w), cy};
+            centers[3] = {cx, cy + static_cast<f32>(row_h)};
+        }
+        int nearest = 0;
+        f32 best = 1e30f;
+        for (int i = 0; i < 4; ++i) {
+            Vec2 d = centers[i] - rel;
+            f32 dist = d.x * d.x + d.y * d.y;
+            if (dist < best) {
+                best = dist;
+                nearest = i;
+            }
+        }
+        static constexpr int stagger_x_offsets[4][2] = {{0, 0}, {1, -1}, {1, 0}, {2, 0}};
+        static constexpr int stagger_y_offsets[4][2] = {{0, 0}, {-1, 1}, {0, 1}, {0, 2}};
+        const int* o = stagger_x ? stagger_x_offsets[nearest] : stagger_y_offsets[nearest];
+        return {rx + o[0], ry + o[1]};
+    }
+};
+
+bool staggered_layout(const Tilemap& m) {
+    return m.orientation == Tilemap::Orientation::Staggered || m.orientation == Tilemap::Orientation::Hexagonal;
+}
+
+} // namespace
+
 Vec2 Tilemap::cell_to_world(f32 x, f32 y) const {
     f32 tw = static_cast<f32>(tile_width), th = static_cast<f32>(tile_height);
     if (orientation == Orientation::Isometric)
         return {(x - y) * tw * 0.5f + static_cast<f32>(height) * tw * 0.5f, (x + y) * th * 0.5f};
+    if (staggered_layout(*this)) return HexGrid(*this).to_world(x, y);
     return {x * tw, y * th};
 }
 
@@ -415,7 +787,40 @@ Vec2 Tilemap::world_to_cell(Vec2 w) const {
         f32 b = w.y / (th * 0.5f);                                          // x + y
         return {(a + b) * 0.5f, (b - a) * 0.5f};
     }
+    if (staggered_layout(*this)) {
+        auto [x, y] = cell_at(w);
+        return {static_cast<f32>(x), static_cast<f32>(y)};
+    }
     return {w.x / tw, w.y / th};
+}
+
+std::pair<i32, i32> Tilemap::cell_at(Vec2 w) const {
+    if (orientation == Orientation::Staggered) return HexGrid(*this).diamond_at(w);
+    if (orientation == Orientation::Hexagonal) return HexGrid(*this).hexagon_at(w);
+    Vec2 c = world_to_cell(w);
+    return {static_cast<i32>(std::floor(c.x)), static_cast<i32>(std::floor(c.y))};
+}
+
+Vec2 Tilemap::pixel_size() const {
+    f32 w = static_cast<f32>(width), h = static_cast<f32>(height);
+    f32 tw = static_cast<f32>(tile_width), th = static_cast<f32>(tile_height);
+    switch (orientation) {
+    case Orientation::Orthogonal: return {w * tw, h * th};
+    case Orientation::Isometric: return {(w + h) * tw * 0.5f, (w + h) * th * 0.5f};
+    case Orientation::Staggered:
+    case Orientation::Hexagonal: {
+        HexGrid g(*this);
+        if (g.stagger_x) {
+            Vec2 size{w * static_cast<f32>(g.column_w) + static_cast<f32>(g.offset_x), h * static_cast<f32>(g.th + g.side_y)};
+            if (width > 1) size.y += static_cast<f32>(g.row_h);
+            return size;
+        }
+        Vec2 size{w * static_cast<f32>(g.tw + g.side_x), h * static_cast<f32>(g.row_h) + static_cast<f32>(g.offset_y)};
+        if (height > 1) size.x += static_cast<f32>(g.column_w);
+        return size;
+    }
+    }
+    return {};
 }
 
 // Drawing
@@ -480,67 +885,100 @@ void draw_tile_image(SpriteBatch& batch, const TileImage& img, u32 gid, Vec2 anc
     batch.draw(tex, s);
 }
 
-} // namespace
+// What draw_tilemap and TilemapCache share: which layers to draw, at what depth, and how to draw a cell.
+struct MapDraw {
+    const Tilemap& map;
+    const TilemapDrawOptions& o;
+    bool iso;
+    f32 tw, th, pivot_x, overhang = 0;
+    bool any_ysort_property;
+    static constexpr f32 underneath = -1e7f; // flat layers under everything y-sorted
 
-void draw_tilemap(SpriteBatch& batch, const Tilemap& map, const TilemapDrawOptions& o) {
-    bool iso = map.orientation == Tilemap::Orientation::Isometric;
-    f32 tw = static_cast<f32>(map.tile_width), th = static_cast<f32>(map.tile_height);
-    f32 pivot_x = iso ? 0.5f : 0.0f;
-    Rect view = batch.camera().visible_bounds();
-    view.x -= o.position.x;
-    view.y -= o.position.y;
-
-    // Tall tiles reach above their cell: widen the culling window by the tallest tile.
-    f32 overhang = 0;
-    for (const Tileset& ts : map.tilesets) {
-        overhang = std::max(overhang, static_cast<f32>(ts.tile_height) + std::abs(ts.tile_offset.y));
-        for (const TileInfo& t : ts.tiles) overhang = std::max(overhang, t.image_size.y);
+    MapDraw(const Tilemap& m, const TilemapDrawOptions& options) : map(m), o(options) {
+        iso = map.orientation == Tilemap::Orientation::Isometric;
+        tw = static_cast<f32>(map.tile_width);
+        th = static_cast<f32>(map.tile_height);
+        pivot_x = iso ? 0.5f : 0.0f;
+        // Tall tiles reach above their cell: widen culling by the tallest tile.
+        for (const Tileset& ts : map.tilesets) {
+            overhang = std::max(overhang, static_cast<f32>(ts.tile_height) + std::abs(ts.tile_offset.y));
+            for (const TileInfo& t : ts.tiles) overhang = std::max(overhang, t.image_size.y);
+        }
+        any_ysort_property = std::any_of(map.layers.begin(), map.layers.end(),
+                                         [](const MapLayer& l) { return l.properties["ysort"].is_bool(); });
     }
 
-    bool any_ysort_property = std::any_of(map.layers.begin(), map.layers.end(),
-                                          [](const MapLayer& l) { return l.properties["ysort"].is_bool(); });
-    constexpr f32 underneath = -1e7f; // flat layers under everything y-sorted
-
-    for (usize li = 0; li < map.layers.size(); ++li) {
+    bool sorts(usize li) const {
+        return o.y_sort && (any_ysort_property ? map.layers[li].properties["ysort"].as_bool() : li > 0);
+    }
+    bool wanted(usize li) const {
         const MapLayer& layer = map.layers[li];
-        if (!layer.visible || layer.opacity <= 0) continue;
-        if (!o.only_layer.empty() && layer.name != o.only_layer) continue;
-        Color color{layer.tint.r, layer.tint.g, layer.tint.b, layer.tint.a * layer.opacity};
-        bool sorts = o.y_sort && (any_ysort_property ? layer.properties["ysort"].as_bool() : li > 0);
-        f32 layer_depth = o.depth + static_cast<f32>(li) * o.layer_depth_step + (o.y_sort && !sorts ? underneath : 0.0f);
-        Vec2 base = o.position + layer.offset;
+        if (!layer.visible || layer.opacity <= 0) return false;
+        if (!o.only_layer.empty() && layer.name != o.only_layer) return false;
+        if (o.layers == TilemapDrawOptions::Layers::Flat && sorts(li)) return false;
+        if (o.layers == TilemapDrawOptions::Layers::Sorted && !sorts(li)) return false;
+        return true;
+    }
+    f32 layer_depth(usize li) const {
+        return o.depth + static_cast<f32>(li) * o.layer_depth_step + (o.y_sort && !sorts(li) ? underneath : 0.0f);
+    }
+    Color color(usize li) const {
+        const MapLayer& l = map.layers[li];
+        return {l.tint.r, l.tint.g, l.tint.b, l.tint.a * l.opacity};
+    }
+    Vec2 base(usize li) const { return o.position + map.layers[li].offset; }
+    bool animated(u32 gid) const {
+        const TileInfo* info = map.tile_info(gid);
+        return info && !info->animation.empty();
+    }
 
+    void cell(SpriteBatch& batch, usize li, i32 x, i32 y, f32 time) const {
+        u32 gid = map.layers[li].at(x, y);
+        if (!(gid & tile_gid_mask)) return;
+        const Tileset* ts = map.tileset_for(gid);
+        if (!ts) return;
+        TileImage img = image_for(*ts, (gid & tile_gid_mask) - ts->first_gid, time);
+        if (!img.texture) return;
+        // Bottom of the cell: the diamond's bottom corner (isometric) or the bottom-left of the cell's box.
+        Vec2 anchor = map.cell_to_world(static_cast<f32>(x), static_cast<f32>(y)) + Vec2{0, th} + base(li) + ts->tile_offset;
+        f32 depth = sorts(li) ? o.depth + anchor.y : layer_depth(li);
+        draw_tile_image(batch, img, gid, anchor, pivot_x, img.source.size(), color(li), depth);
+    }
+
+    // Image layers and tile objects (other object shapes are data).
+    void other(SpriteBatch& batch, usize li) const {
+        const MapLayer& layer = map.layers[li];
         if (layer.kind == MapLayer::Kind::Image) {
-            if (!layer.image) continue;
+            if (!layer.image) return;
             SpriteInstance s;
-            s.position = base;
+            s.position = base(li);
             s.size = layer.image->size();
             s.origin = {0, 0};
-            s.color = color;
-            s.depth = layer_depth;
+            s.color = color(li);
+            s.depth = layer_depth(li);
             batch.draw(*layer.image, s);
-            continue;
+            return;
         }
-
-        if (layer.kind == MapLayer::Kind::Objects) { // tile objects are drawn; other shapes are data
-            for (const MapObject& obj : layer.objects) {
-                if (!obj.visible || obj.shape != MapObject::Shape::Tile) continue;
-                const Tileset* ts = map.tileset_for(obj.gid);
-                if (!ts) continue;
-                TileImage img = image_for(*ts, (obj.gid & tile_gid_mask) - ts->first_gid, o.time);
-                if (!img.texture) continue;
-                // Tiled object coordinates in isometric maps are in "tile height" units along both grid axes.
-                Vec2 at = iso ? map.cell_to_world(obj.bounds.x / th, obj.bounds.y / th) : obj.bounds.position();
-                at += base + ts->tile_offset;
-                Vec2 size = obj.bounds.w > 0 ? obj.bounds.size() : img.source.size();
-                f32 depth = sorts ? o.depth + at.y : layer_depth;
-                draw_tile_image(batch, img, obj.gid, at, pivot_x, size, color, depth, obj.rotation);
-            }
-            continue;
+        for (const MapObject& obj : layer.objects) {
+            if (!obj.visible || obj.shape != MapObject::Shape::Tile) continue;
+            const Tileset* ts = map.tileset_for(obj.gid);
+            if (!ts) continue;
+            TileImage img = image_for(*ts, (obj.gid & tile_gid_mask) - ts->first_gid, o.time);
+            if (!img.texture) continue;
+            // Tiled object coordinates in isometric maps are in "tile height" units along both grid axes.
+            Vec2 at = iso ? map.cell_to_world(obj.bounds.x / th, obj.bounds.y / th) : obj.bounds.position();
+            at += base(li) + ts->tile_offset;
+            Vec2 size = obj.bounds.w > 0 ? obj.bounds.size() : img.source.size();
+            f32 depth = sorts(li) ? o.depth + at.y : layer_depth(li);
+            draw_tile_image(batch, img, obj.gid, at, pivot_x, size, color(li), depth, obj.rotation);
         }
+    }
 
-        // Tile layer: only the cells whose images can touch the view.
-        Rect padded{view.x - tw, view.y - th, view.w + 2 * tw, view.h + 2 * th + overhang};
+    // Cells of a tile layer whose images can touch `view` (world coordinates): x0, y0, x1, y1 inclusive.
+    std::array<i32, 4> cells_in(usize li, Rect view) const {
+        const MapLayer& layer = map.layers[li];
+        Vec2 b = base(li);
+        Rect padded{view.x - b.x - tw, view.y - b.y - th, view.w + 2 * tw, view.h + 2 * th + overhang};
         Vec2 corners[4] = {map.world_to_cell(padded.position()), map.world_to_cell({padded.right(), padded.y}),
                            map.world_to_cell({padded.x, padded.bottom()}), map.world_to_cell({padded.right(), padded.bottom()})};
         f32 min_x = corners[0].x, max_x = corners[0].x, min_y = corners[0].y, max_y = corners[0].y;
@@ -550,24 +988,126 @@ void draw_tilemap(SpriteBatch& batch, const Tilemap& map, const TilemapDrawOptio
             min_y = std::min(min_y, c.y);
             max_y = std::max(max_y, c.y);
         }
-        i32 x0 = std::max(layer.origin_x, static_cast<i32>(std::floor(min_x)));
-        i32 y0 = std::max(layer.origin_y, static_cast<i32>(std::floor(min_y)));
-        i32 x1 = std::min(layer.origin_x + static_cast<i32>(layer.width) - 1, static_cast<i32>(std::ceil(max_x)));
-        i32 y1 = std::min(layer.origin_y + static_cast<i32>(layer.height) - 1, static_cast<i32>(std::ceil(max_y)));
-        for (i32 y = y0; y <= y1; ++y)
-            for (i32 x = x0; x <= x1; ++x) {
-                u32 gid = layer.at(x, y);
-                if (!(gid & tile_gid_mask)) continue;
-                const Tileset* ts = map.tileset_for(gid);
-                if (!ts) continue;
-                TileImage img = image_for(*ts, (gid & tile_gid_mask) - ts->first_gid, o.time);
-                if (!img.texture) continue;
-                Vec2 cell = map.cell_to_world(static_cast<f32>(x), static_cast<f32>(y));
-                // Bottom of the cell: bottom-left (orthogonal) or the diamond's bottom corner (isometric).
-                Vec2 anchor = cell + Vec2{0, th} + base + ts->tile_offset;
-                f32 depth = sorts ? o.depth + anchor.y : layer_depth;
-                draw_tile_image(batch, img, gid, anchor, pivot_x, img.source.size(), color, depth);
+        i32 margin = staggered_layout(map) ? 1 : 0; // whole cells, so one more around the edge
+        return {std::max(layer.origin_x, static_cast<i32>(std::floor(min_x)) - margin),
+                std::max(layer.origin_y, static_cast<i32>(std::floor(min_y)) - margin),
+                std::min(layer.origin_x + static_cast<i32>(layer.width) - 1, static_cast<i32>(std::ceil(max_x)) + margin),
+                std::min(layer.origin_y + static_cast<i32>(layer.height) - 1, static_cast<i32>(std::ceil(max_y)) + margin)};
+    }
+
+    // Cells in the order Tiled draws them: row by row, and in maps staggered along x, the raised columns of each row
+    // before the lowered ones so they overlap correctly.
+    template <class F> void each_cell(std::array<i32, 4> r, F&& f) const {
+        bool two_passes = staggered_layout(map) && map.stagger_x;
+        HexGrid grid(map);
+        for (i32 y = r[1]; y <= r[3]; ++y)
+            for (int pass = 0; pass < (two_passes ? 2 : 1); ++pass)
+                for (i32 x = r[0]; x <= r[2]; ++x) {
+                    if (two_passes && grid.shifted(x) != (pass == 1)) continue;
+                    f(x, y);
+                }
+    }
+};
+
+} // namespace
+
+void draw_tilemap(SpriteBatch& batch, const Tilemap& map, const TilemapDrawOptions& o) {
+    MapDraw draw(map, o);
+    Rect view = batch.camera().visible_bounds();
+    for (usize li = 0; li < map.layers.size(); ++li) {
+        if (!draw.wanted(li)) continue;
+        if (map.layers[li].kind != MapLayer::Kind::Tiles) {
+            draw.other(batch, li);
+            continue;
+        }
+        draw.each_cell(draw.cells_in(li, view), [&](i32 x, i32 y) { draw.cell(batch, li, x, y, o.time); });
+    }
+}
+
+// TilemapCache
+
+u64 TilemapCache::signature(const Tilemap& map, const TilemapDrawOptions& o) const {
+    u64 h = 1469598103934665603ull;
+    auto mix = [&](u64 v) { h = (h ^ v) * 1099511628211ull; };
+    auto mix_f = [&](f32 v) {
+        u32 bits;
+        std::memcpy(&bits, &v, 4);
+        mix(bits);
+    };
+    mix(reinterpret_cast<uintptr_t>(&map));
+    mix(map.layers.size());
+    for (const Tileset& ts : map.tilesets) {
+        mix(reinterpret_cast<uintptr_t>(ts.image.get()));
+        mix(ts.image.version());
+        for (const TileInfo& t : ts.tiles) mix(reinterpret_cast<uintptr_t>(t.image.get()) ^ t.image.version());
+    }
+    mix_f(o.position.x);
+    mix_f(o.position.y);
+    mix_f(o.depth);
+    mix_f(o.layer_depth_step);
+    mix(o.y_sort);
+    mix(std::hash<std::string_view>{}(o.only_layer));
+    return h;
+}
+
+void TilemapCache::invalidate() {
+    built_for_ = 0;
+    chunks_.clear();
+    animated_.clear();
+}
+
+void TilemapCache::build(GpuDevice& device, const Tilemap& map, const TilemapDrawOptions& o) {
+    PH_PROFILE_SCOPE("TilemapCache::build");
+    chunks_.clear();
+    animated_.clear();
+    MapDraw draw(map, o);
+    for (usize li = 0; li < map.layers.size(); ++li) {
+        const MapLayer& layer = map.layers[li];
+        if (!draw.wanted(li) || layer.kind != MapLayer::Kind::Tiles) continue;
+        i32 x_end = layer.origin_x + static_cast<i32>(layer.width), y_end = layer.origin_y + static_cast<i32>(layer.height);
+        for (i32 cy = layer.origin_y; cy < y_end; cy += chunk_cells)
+            for (i32 cx = layer.origin_x; cx < x_end; cx += chunk_cells) {
+                scratch_.begin({}, SpriteSort::Depth);
+                std::array<i32, 4> range{cx, cy, std::min(cx + chunk_cells, x_end) - 1, std::min(cy + chunk_cells, y_end) - 1};
+                draw.each_cell(range, [&](i32 x, i32 y) {
+                    u32 gid = layer.at(x, y);
+                    if (!(gid & tile_gid_mask)) return;
+                    if (draw.animated(gid)) animated_.push_back({li, x, y});
+                    else draw.cell(scratch_, li, x, y, 0);
+                });
+                if (scratch_.size() == 0) continue;
+                auto chunk = std::make_unique<Chunk>();
+                chunk->layer = li;
+                if (chunk->sprites.build(device, scratch_)) chunks_.push_back(std::move(chunk));
             }
+    }
+}
+
+void TilemapCache::submit(Renderer& renderer, GpuDevice& device, const Camera2D& camera, const Tilemap& map,
+                          const TilemapDrawOptions& options) {
+    TilemapDrawOptions o = options;
+    o.layers = TilemapDrawOptions::Layers::Flat;
+    if (u64 sig = signature(map, o); sig != built_for_ || built_for_ == 0) {
+        build(device, map, o);
+        built_for_ = sig;
+    }
+    MapDraw draw(map, o);
+    Rect view = camera.visible_bounds();
+    usize next_chunk = 0, next_animated = 0;
+    for (usize li = 0; li < map.layers.size(); ++li) {
+        if (!draw.wanted(li)) continue;
+        for (; next_chunk < chunks_.size() && chunks_[next_chunk]->layer == li; ++next_chunk)
+            if (chunks_[next_chunk]->sprites.bounds().overlaps(view)) renderer.submit(chunks_[next_chunk]->sprites, camera);
+        // What changes every frame goes in a batch drawn right after the layer's chunks.
+        moving_.begin(camera, SpriteSort::Depth);
+        if (map.layers[li].kind != MapLayer::Kind::Tiles) draw.other(moving_, li);
+        for (; next_animated < animated_.size() && animated_[next_animated].layer == li; ++next_animated) {
+            const Animated& a = animated_[next_animated];
+            Vec2 at = map.cell_to_world(static_cast<f32>(a.x), static_cast<f32>(a.y)) + draw.base(li);
+            Rect reach{at.x - draw.tw, at.y - draw.overhang, draw.tw * 3, draw.overhang + draw.th * 2};
+            if (reach.overlaps(view)) draw.cell(moving_, li, a.x, a.y, o.time);
+        }
+        if (moving_.size() > 0) renderer.submit(moving_);
     }
 }
 
@@ -580,16 +1120,22 @@ void register_tilemap_loader(AssetManager& assets) {
             log_asset_error(ctx.path(), "Tilemap", "file not found in any mount");
             return nullptr;
         }
-        auto parsed = json::parse(*text);
-        if (!parsed) {
-            log_asset_error(ctx.path(), "Tilemap",
-                            std::format("JSON error at {}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message));
-            return nullptr;
-        }
         auto map = std::make_unique<Tilemap>();
         std::string error;
         auto read = [&](const std::string& path) { return ctx.read_text(path); }; // tracked: edits hot-reload
-        if (!Tilemap::parse(parsed.value, dir_of(ctx.path()), read, *map, error)) {
+        bool ok = false;
+        if (ctx.path().ends_with(".tmx")) {
+            ok = Tilemap::parse_tmx(*text, dir_of(ctx.path()), read, *map, error);
+        } else {
+            auto parsed = json::parse(*text);
+            if (!parsed) {
+                log_asset_error(ctx.path(), "Tilemap",
+                                std::format("JSON error at {}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message));
+                return nullptr;
+            }
+            ok = Tilemap::parse(parsed.value, dir_of(ctx.path()), read, *map, error);
+        }
+        if (!ok) {
             log_asset_error(ctx.path(), "Tilemap", error);
             return nullptr;
         }

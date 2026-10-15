@@ -62,6 +62,7 @@ engine/<module>/
 | | `file.hpp` | Reading and writing files, `FileWatcher` |
 | | `assets.hpp` | `AssetManager`, `Asset<T>`, `AssetLoadContext` |
 | | `json.hpp` | `json::Value`, `parse`, `stringify` |
+| | `xml.hpp` | `xml::Element`, `xml::parse` (enough XML for tool formats) |
 | | `reflect.hpp` | `PH_REFLECT`, field visitors |
 | | `serialize.hpp` | `serial::to_json`, `serial::from_json`, `serial::Context` |
 | | `settings.hpp` | `Settings` |
@@ -81,11 +82,11 @@ engine/<module>/
 | platform | `window.hpp` | `Window`, `WindowDesc` |
 | | `input.hpp` | `Input`, `Key`, `MouseButton`, gamepad enums, `InputBinding` |
 | gfx | `device.hpp` | `GpuDevice`, `Texture`, `Shader`, `TextureDesc` |
-| | `sprites.hpp` | `SpriteBatch`, `SpriteInstance`, `Camera2D`, `Material`, `BlendMode`, `SpriteSort` |
+| | `sprites.hpp` | `SpriteBatch`, `StaticSprites`, `SpriteInstance`, `Camera2D`, `Material`, `BlendMode`, `SpriteSort` |
 | | `renderer.hpp` | `Renderer`, `PostSettings`, `write_png` |
 | | `text.hpp` | `Font`, `draw_text`, `measure_text`, `TextStyle` |
 | | `sprite_sheet.hpp` | `SpriteSheet`, `SpriteAnimator`, `draw_frame` |
-| | `tilemap.hpp` | `Tilemap`, `draw_tilemap` |
+| | `tilemap.hpp` | `Tilemap`, `draw_tilemap`, `TilemapCache` |
 | | `particles.hpp` | `ParticleSystem`, `ParticleEmitter` |
 | audio | `audio.hpp` | `AudioEngine`, `Sound`, `Music`, buses |
 | physics | `collision.hpp` | Shapes, `collide`, `sweep`, `raycast`, `move_and_slide`, `SpatialHash` |

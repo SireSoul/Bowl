@@ -100,6 +100,8 @@ public:
 
 private:
     friend class Renderer;
+    friend class StaticSprites;
+    friend void sprite_order(const SpriteBatch&, std::vector<u32>&);
     Camera2D camera_;
     SpriteSort sort_ = SpriteSort::Depth;
     BlendMode blend_ = BlendMode::Alpha;
@@ -107,5 +109,36 @@ private:
     std::vector<SpriteInstance> sprites_;
     std::vector<const Texture*> textures_; // nullptr = the renderer's white texture
 };
+
+// Sprites uploaded to GPU memory once and then drawn every frame without being sent again: the ground of a big map,
+// a static backdrop. Build it from a filled batch (its sort order is kept); rebuild it when the sprites change.
+// Textures are kept by pointer, so rebuild after they hot-reload too. Draw it with Renderer::submit.
+class StaticSprites : NonCopyable {
+public:
+    StaticSprites() = default;
+    ~StaticSprites();
+
+    bool build(GpuDevice& device, const SpriteBatch& batch);
+    void clear();
+    usize size() const { return count_; }
+    bool empty() const { return count_ == 0; }
+    // World rectangle around every sprite, for culling.
+    Rect bounds() const { return bounds_; }
+
+private:
+    friend class Renderer;
+    struct Run {
+        u32 first, count;
+        const Texture* texture; // null: the white texture
+    };
+    GpuDevice* device_ = nullptr;
+    SDL_GPUBuffer* buffer_ = nullptr;
+    u32 count_ = 0;
+    std::vector<Run> runs_;
+    Rect bounds_;
+};
+
+// The order a batch draws its sprites in (indices into it), per its SpriteSort.
+void sprite_order(const SpriteBatch& batch, std::vector<u32>& order);
 
 } // namespace ph::gfx

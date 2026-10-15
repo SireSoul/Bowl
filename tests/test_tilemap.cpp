@@ -179,11 +179,172 @@ TEST_CASE("tilemap: isometric coordinates round-trip") {
 
 TEST_CASE("tilemap: helpful errors") {
     std::string error;
-    load(R"({"orientation": "hexagonal", "tilewidth": 8, "tileheight": 8})", &error);
-    CHECK(error.find("hexagonal") != std::string::npos);
+    load(R"({"orientation": "octagonal", "tilewidth": 8, "tileheight": 8})", &error);
+    CHECK(error.find("octagonal") != std::string::npos);
     load(R"({"orientation": "orthogonal", "tilewidth": 8, "tileheight": 8,
              "tilesets": [ { "firstgid": 1, "source": "x.tsx" } ]})", &error);
-    CHECK(error.find("JSON") != std::string::npos);
+    CHECK(error.find("maps/x.tsx") != std::string::npos);
+
+    Tilemap map;
+    auto none = [](const std::string&) -> std::optional<std::string> { return std::nullopt; };
+    CHECK_FALSE(Tilemap::parse_tmx("<map><layer></map>", "", none, map, error));
+    CHECK(error.find("XML") != std::string::npos);
+}
+
+namespace {
+
+// The same terrain tileset as terrain_tsj, as Tiled writes .tsx files.
+constexpr const char* terrain_tsx = R"(<?xml version="1.0" encoding="UTF-8"?>
+<tileset version="1.10" tiledversion="1.11.0" name="terrain" tilewidth="16" tileheight="16" spacing="2" margin="1" tilecount="8" columns="4">
+ <image source="../art/terrain.png" width="72" height="38"/>
+ <tile id="1">
+  <properties>
+   <property name="solid" type="bool" value="true"/>
+  </properties>
+ </tile>
+ <tile id="5">
+  <animation>
+   <frame tileid="5" duration="100"/>
+   <frame tileid="6" duration="150"/>
+  </animation>
+ </tile>
+</tileset>
+)";
+
+Tilemap load_tmx(const std::string& text) {
+    std::map<std::string, std::string> files{{"tilesets/terrain.tsx", terrain_tsx}};
+    auto read = [&](const std::string& path) -> std::optional<std::string> {
+        auto it = files.find(path);
+        if (it == files.end()) return std::nullopt;
+        return it->second;
+    };
+    Tilemap map;
+    std::string error;
+    REQUIRE_MESSAGE(Tilemap::parse_tmx(text, "maps/", read, map, error), error);
+    return map;
+}
+
+} // namespace
+
+TEST_CASE("tilemap: .tmx maps read like .tmj ones") {
+    std::string tmx = std::format(R"(<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.10" orientation="orthogonal" renderorder="right-down" width="4" height="3" tilewidth="16" tileheight="16" infinite="0" backgroundcolor="#80112233">
+ <properties>
+  <property name="music" value="town.ogg"/>
+  <property name="speed" type="float" value="1.5"/>
+  <property name="note">two
+lines</property>
+ </properties>
+ <tileset firstgid="1" source="../tilesets/terrain.tsx"/>
+ <tileset firstgid="9" name="props" tilewidth="32" tileheight="48" tilecount="1" columns="0">
+  <tile id="0"><image source="tree.png" width="32" height="48"/></tile>
+ </tileset>
+ <layer id="1" name="ground" width="4" height="3">
+  <data encoding="csv">
+1,2,2,1,
+1,6,0,1,
+2147483649,1073741825,536870913,3221225473
+</data>
+ </layer>
+ <group id="2" name="deco" offsetx="4" opacity="0.5">
+  <layer id="3" name="packed" width="4" height="3" offsetx="1">
+   <data encoding="base64" compression="zlib">
+   {}
+   </data>
+  </layer>
+  <objectgroup id="4" name="spawns">
+   <object id="1" name="player" type="spawn" x="24" y="40">
+    <properties><property name="facing" value="left"/></properties>
+    <point/>
+   </object>
+   <object id="2" name="tree" gid="9" x="0" y="48" width="32" height="48"/>
+   <object id="3" name="pond &amp; reeds" x="0" y="0"><polygon points="0,0 10,0 5,8"/></object>
+  </objectgroup>
+ </group>
+ <layer id="5" name="xml" width="2" height="1">
+  <data><tile gid="3"/><tile/></data>
+ </layer>
+ <imagelayer id="6" name="sky" visible="0"><image source="../art/sky.png" width="64" height="32"/></imagelayer>
+</map>
+)",
+                                  zlib_base64({0, 0, 3, 0, 0, 0, 0, 0, 4, 0, 0, 0}));
+    Tilemap map = load_tmx(tmx);
+    CHECK(map.width == 4);
+    CHECK(map.properties["music"].as_string() == "town.ogg");
+    CHECK(map.properties["speed"].as_float() == doctest::Approx(1.5f));
+    CHECK(map.properties["note"].as_string() == "two\nlines");
+    CHECK(map.background.a == doctest::Approx(0x80 / 255.0f));
+
+    REQUIRE(map.tilesets.size() == 2);
+    const Tileset& terrain = map.tilesets[0];
+    CHECK(terrain.image_path == "art/terrain.png");
+    CHECK(terrain.source_rect(5) == Rect{19, 19, 16, 16});
+    REQUIRE(terrain.tile(5));
+    CHECK(terrain.tile(5)->animation[1].seconds == doctest::Approx(0.15f));
+    CHECK(map.tilesets[1].tiles[0].image_path == "maps/tree.png");
+
+    const MapLayer* ground = map.layer("ground");
+    REQUIRE(ground);
+    CHECK(ground->at(1, 0) == 2);
+    CHECK(map.tile_property("ground", 1, 0, "solid").as_bool());
+    CHECK((ground->at(0, 2) & tile_flip_h) != 0);
+    CHECK((ground->at(2, 2) & tile_flip_d) != 0);
+
+    const MapLayer* packed = map.layer("deco/packed");
+    REQUIRE(packed);
+    CHECK(packed->at(2, 0) == 3);
+    CHECK(packed->at(0, 2) == 4);
+    CHECK(packed->offset == Vec2{5, 0});
+    CHECK(packed->opacity == doctest::Approx(0.5f));
+
+    const MapLayer* spawns = map.layer("deco/spawns");
+    REQUIRE(spawns);
+    REQUIRE(spawns->objects.size() == 3);
+    CHECK(spawns->objects[0].shape == MapObject::Shape::Point);
+    CHECK(spawns->objects[0].properties["facing"].as_string() == "left");
+    CHECK(spawns->objects[1].shape == MapObject::Shape::Tile);
+    CHECK(spawns->objects[1].gid == 9);
+    CHECK(spawns->objects[2].name == "pond & reeds");
+    REQUIRE(spawns->objects[2].points.size() == 3);
+    CHECK(spawns->objects[2].points[2] == Vec2{5, 8});
+
+    REQUIRE(map.layer("xml"));
+    CHECK(map.layer("xml")->at(0, 0) == 3);
+    CHECK(map.layer("xml")->at(1, 0) == 0);
+    REQUIRE(map.layer("sky"));
+    CHECK_FALSE(map.layer("sky")->visible);
+}
+
+TEST_CASE("tilemap: staggered and hexagonal maps find the cell under a point") {
+    struct Case {
+        const char* orientation;
+        const char* axis;
+        const char* index;
+        int side;
+    };
+    for (Case c : {Case{"staggered", "y", "odd", 0}, Case{"staggered", "x", "even", 0}, Case{"hexagonal", "y", "odd", 12},
+                   Case{"hexagonal", "x", "even", 14}, Case{"hexagonal", "y", "even", 16}}) {
+        CAPTURE(c.orientation);
+        CAPTURE(c.axis);
+        CAPTURE(c.index);
+        Tilemap map = load(std::format(R"({{"orientation": "{}", "staggeraxis": "{}", "staggerindex": "{}",
+            "hexsidelength": {}, "width": 8, "height": 8, "tilewidth": 32, "tileheight": 28, "tilesets": [], "layers": []}})",
+                                       c.orientation, c.axis, c.index, c.side));
+        for (i32 y = 0; y < 8; ++y)
+            for (i32 x = 0; x < 8; ++x) {
+                // The middle of each cell's box is inside its hexagon or diamond.
+                Vec2 center = map.cell_to_world(static_cast<f32>(x), static_cast<f32>(y)) + Vec2{16, 14};
+                CHECK(map.cell_at(center) == std::pair{x, y});
+            }
+        CHECK(map.pixel_size().x > 8 * 16);
+    }
+
+    Tilemap hex = load(R"({"orientation": "hexagonal", "staggeraxis": "y", "staggerindex": "odd", "hexsidelength": 12,
+        "width": 4, "height": 4, "tilewidth": 32, "tileheight": 28, "tilesets": [], "layers": []})");
+    CHECK(hex.cell_to_world(0, 0) == Vec2{0, 0});
+    CHECK(hex.cell_to_world(0, 1) == Vec2{16, 20}); // odd rows shift right by half a tile, down by side + offset
+    CHECK(hex.cell_to_world(1, 2) == Vec2{32, 40});
+    CHECK(hex.pixel_size() == Vec2{4 * 32 + 16, 4 * 20 + 8});
 }
 
 TEST_CASE("paths normalize") {

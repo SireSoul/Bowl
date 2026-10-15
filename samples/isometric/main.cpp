@@ -105,8 +105,12 @@ public:
     }
 
     void render(Engine& engine) override {
+        // The ground comes from chunks cached in GPU memory; the pillars sort with the player every frame.
+        gfx::TilemapDrawOptions tiles{.time = static_cast<f32>(engine.time()), .y_sort = true};
+        ground_.submit(engine.renderer(), engine.gpu(), engine.camera(), *map_, tiles);
         batch_.begin(engine.camera());
-        gfx::draw_tilemap(batch_, *map_, {.time = static_cast<f32>(engine.time()), .y_sort = true});
+        tiles.layers = gfx::TilemapDrawOptions::Layers::Sorted;
+        gfx::draw_tilemap(batch_, *map_, tiles);
         // The player's depth is its feet's y, so it sorts against the pillars' bases.
         Vec2 feet = map_->cell_to_world(player_cell(engine).x, player_cell(engine).y);
         gfx::SpriteInstance s;
@@ -321,6 +325,7 @@ private:
     }
 
     Asset<gfx::Tilemap> map_;
+    gfx::TilemapCache ground_;
     Asset<gfx::Texture> player_tex_;
     Asset<gfx::Font> font_;
     gfx::SpriteBatch batch_, ui_, lights_, sparks_;

@@ -223,22 +223,7 @@ bool Renderer::begin_frame() {
 void Renderer::record(const SpriteBatch& batch, std::vector<Pass>& passes) {
     if (!swapchain_ || batch.sprites_.empty()) return;
     usize n = batch.sprites_.size();
-    // Sort indices, never the sprites themselves.
-    order_.resize(n);
-    std::iota(order_.begin(), order_.end(), 0u);
-    auto tex_id = [&](u32 i) { return batch.textures_[i] ? batch.textures_[i]->id() : 0u; };
-    switch (batch.sort_) {
-    case SpriteSort::None: break;
-    case SpriteSort::Texture:
-        std::stable_sort(order_.begin(), order_.end(), [&](u32 a, u32 b) { return tex_id(a) < tex_id(b); });
-        break;
-    case SpriteSort::Depth:
-        std::stable_sort(order_.begin(), order_.end(), [&](u32 a, u32 b) {
-            f32 da = batch.sprites_[a].depth, db = batch.sprites_[b].depth;
-            return da != db ? da < db : tex_id(a) < tex_id(b);
-        });
-        break;
-    }
+    sprite_order(batch, order_);
     Pass pass{batch.camera_.view_projection(), static_cast<u32>(draws_.size()), 0, batch.blend_, batch.material_};
     u32 base = static_cast<u32>(frame_sprites_.size());
     frame_sprites_.reserve(frame_sprites_.size() + n);
@@ -259,6 +244,17 @@ void Renderer::submit(const SpriteBatch& batch) { record(batch, passes_); }
 
 void Renderer::submit_ui(const SpriteBatch& batch) { record(batch, ui_passes_); }
 
+void Renderer::submit(const StaticSprites& sprites, const Camera2D& camera, BlendMode blend, const Material* material) {
+    if (!swapchain_ || sprites.empty() || !sprites.buffer_) return;
+    Pass pass{camera.view_projection(), static_cast<u32>(draws_.size()), 0, blend, material, sprites.buffer_};
+    for (const StaticSprites::Run& run : sprites.runs_)
+        draws_.push_back({run.first, run.count, run.texture ? run.texture : white_.get()});
+    pass.draw_count = static_cast<u32>(sprites.runs_.size());
+    passes_.push_back(pass);
+    stats_.sprites += sprites.count_;
+    ++stats_.batches;
+}
+
 void Renderer::submit_light(const SpriteBatch& batch) {
     record(batch, light_passes_);
     if (!light_passes_.empty()) light_passes_.back().blend = BlendMode::Additive;
@@ -266,15 +262,22 @@ void Renderer::submit_light(const SpriteBatch& batch) {
 
 void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& passes, SDL_GPUTextureFormat format) {
     SDL_GPUGraphicsPipeline* bound = nullptr;
+    SDL_GPUBuffer* bound_buffer = nullptr;
     for (const Pass& p : passes) {
+        SDL_GPUBuffer* buffer = p.buffer ? p.buffer : sprite_buffer_;
+        if (!buffer) continue;
         const Shader* fs = sprite_fs_.get();
         if (p.material && p.material->fragment) fs = p.material->fragment.get();
         SDL_GPUGraphicsPipeline* pipe = pipeline(*sprite_vs_, *fs, format, p.blend);
         if (!pipe) continue;
         if (pipe != bound) {
             SDL_BindGPUGraphicsPipeline(pass, pipe);
-            SDL_BindGPUVertexStorageBuffers(pass, 0, &sprite_buffer_, 1);
             bound = pipe;
+            bound_buffer = nullptr;
+        }
+        if (buffer != bound_buffer) {
+            SDL_BindGPUVertexStorageBuffers(pass, 0, &buffer, 1);
+            bound_buffer = buffer;
         }
         struct {
             Mat4 view_projection;
@@ -387,7 +390,7 @@ void Renderer::end_frame() {
         color.load_op = SDL_GPU_LOADOP_CLEAR;
         color.store_op = SDL_GPU_STOREOP_STORE;
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd_, &color, 1, nullptr);
-        if (count > 0) draw_sprites(pass, passes_, hdr_format);
+        if (!passes_.empty()) draw_sprites(pass, passes_, hdr_format);
         SDL_EndGPURenderPass(pass);
 
         // Light map.
@@ -398,7 +401,7 @@ void Renderer::end_frame() {
             light.load_op = SDL_GPU_LOADOP_CLEAR;
             light.store_op = SDL_GPU_STOREOP_STORE;
             SDL_GPURenderPass* lp = SDL_BeginGPURenderPass(cmd_, &light, 1, nullptr);
-            if (count > 0 && !light_passes_.empty()) draw_sprites(lp, light_passes_, hdr_format);
+            if (!light_passes_.empty()) draw_sprites(lp, light_passes_, hdr_format);
             SDL_EndGPURenderPass(lp);
         }
 
@@ -416,7 +419,7 @@ void Renderer::end_frame() {
         SDL_GPURenderPass* final_pass = nullptr;
         fullscreen(final_, true, *final_fs_, device_->swapchain_format(), BlendMode::Opaque, inputs, &u, sizeof u,
                    &final_pass);
-        if (count > 0 && !ui_passes_.empty()) draw_sprites(final_pass, ui_passes_, device_->swapchain_format());
+        if (!ui_passes_.empty()) draw_sprites(final_pass, ui_passes_, device_->swapchain_format());
         if (overlay_.draw) overlay_.draw(cmd_, final_pass);
         SDL_EndGPURenderPass(final_pass);
 

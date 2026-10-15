@@ -20,6 +20,7 @@ add_executable(ph_tests
     test_sprite_sheet.cpp
     test_text.cpp
     test_tilemap.cpp
+    test_xml.cpp
     test_ui.cpp)
 target_link_libraries(ph_tests PRIVATE ph::engine ph_atlas doctest::doctest)
 target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"

@@ -1,7 +1,10 @@
 #include "ph/gfx/sprites.hpp"
 
+#include <SDL3/SDL_gpu.h>
+
 #include <algorithm>
 #include <cmath>
+#include <numeric>
 
 namespace ph::gfx {
 
@@ -114,6 +117,79 @@ void SpriteBatch::draw_rect(Rect rect, Color color, f32 depth) {
     s.color = color;
     sprites_.push_back(s);
     textures_.push_back(nullptr);
+}
+
+void sprite_order(const SpriteBatch& batch, std::vector<u32>& order) {
+    usize n = batch.sprites_.size();
+    // Sort indices, never the sprites themselves.
+    order.resize(n);
+    std::iota(order.begin(), order.end(), 0u);
+    auto tex_id = [&](u32 i) { return batch.textures_[i] ? batch.textures_[i]->id() : 0u; };
+    switch (batch.sort_) {
+    case SpriteSort::None: break;
+    case SpriteSort::Texture:
+        std::stable_sort(order.begin(), order.end(), [&](u32 a, u32 b) { return tex_id(a) < tex_id(b); });
+        break;
+    case SpriteSort::Depth:
+        std::stable_sort(order.begin(), order.end(), [&](u32 a, u32 b) {
+            f32 da = batch.sprites_[a].depth, db = batch.sprites_[b].depth;
+            return da != db ? da < db : tex_id(a) < tex_id(b);
+        });
+        break;
+    }
+}
+
+// StaticSprites
+
+StaticSprites::~StaticSprites() { clear(); }
+
+void StaticSprites::clear() {
+    if (buffer_ && device_) SDL_ReleaseGPUBuffer(device_->handle(), buffer_);
+    buffer_ = nullptr;
+    count_ = 0;
+    runs_.clear();
+    bounds_ = {};
+}
+
+bool StaticSprites::build(GpuDevice& device, const SpriteBatch& batch) {
+    clear();
+    device_ = &device;
+    std::vector<u32> order;
+    sprite_order(batch, order);
+    std::vector<SpriteInstance> sprites;
+    sprites.reserve(order.size());
+    f32 x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
+    for (u32 i : order) {
+        const SpriteInstance& s = batch.sprites_[i];
+        const Texture* t = batch.textures_[i];
+        if (!runs_.empty() && runs_.back().texture == t) ++runs_.back().count;
+        else runs_.push_back({static_cast<u32>(sprites.size()), 1, t});
+        sprites.push_back(s);
+        // Rotation turns the quad about its pivot; the circle through its farthest corner bounds every angle.
+        Vec2 lo = s.position - s.size * s.origin, hi = lo + s.size;
+        if (s.rotation != 0) {
+            f32 r = std::max(s.size.x * std::max(s.origin.x, 1 - s.origin.x), 0.0f);
+            f32 r2 = s.size.y * std::max(s.origin.y, 1 - s.origin.y);
+            f32 reach = std::sqrt(r * r + r2 * r2);
+            lo = s.position - Vec2{reach, reach};
+            hi = s.position + Vec2{reach, reach};
+        }
+        x0 = std::min(x0, lo.x);
+        y0 = std::min(y0, lo.y);
+        x1 = std::max(x1, hi.x);
+        y1 = std::max(y1, hi.y);
+    }
+    count_ = static_cast<u32>(sprites.size());
+    if (count_ == 0) return true;
+    bounds_ = {x0, y0, x1 - x0, y1 - y0};
+    u32 bytes = count_ * static_cast<u32>(sizeof(SpriteInstance));
+    SDL_GPUBufferCreateInfo info{SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ, bytes, 0};
+    buffer_ = SDL_CreateGPUBuffer(device.handle(), &info);
+    if (!buffer_ || !device.upload(buffer_, sprites.data(), bytes)) {
+        clear();
+        return false;
+    }
+    return true;
 }
 
 } // namespace ph::gfx
