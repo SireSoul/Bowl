@@ -1,7 +1,8 @@
 # Audio
 
 The engine mixes audio itself, on SDL's audio thread: up to 128 sounds at once, streamed music with crossfades, and
-six volume buses. Every `AudioEngine` call is thread-safe.
+six buses with their own volume, filters and reverb, and sounds placed in the world. Every `AudioEngine` call is
+thread-safe.
 
 ## Sounds
 
@@ -23,7 +24,8 @@ engine.audio().play(jump, {.gain = 0.6f, .pan = -0.5f, .pitch = 1.2f});
 | `bus` | `Effects` | Which volume bus it plays on |
 
 WAV files (anything SDL reads: PCM, float, ADPCM) and Ogg Vorbis files are supported, mono or stereo, at any sample
-rate; everything is converted to the mixer's 48 kHz stereo on load.
+rate; everything is converted to the mixer's 48 kHz stereo on load. Ogg Opus files (`.opus`) work too when the engine
+is built with `-DPH_OPUS=ON` (see [Opus](#opus)).
 
 A small random pitch variation (`0.9` to `1.1`) keeps repeated sounds, like footsteps, from sounding mechanical.
 
@@ -58,7 +60,7 @@ The sprites and tutorial samples synthesize their sounds this way, so they need 
 
 ## Music
 
-Music is `audio::Music`, an Ogg Vorbis file that's decoded a little at a time while it plays, so a long track doesn't
+Music is `audio::Music`, an Ogg Vorbis (or Opus) file that's decoded a little at a time while it plays, so a long track doesn't
 sit decoded in memory:
 
 ```cpp
@@ -100,17 +102,66 @@ engine.audio().set_bus_gain(audio::Bus::Music, engine.settings().get("audio.musi
 Buses are what volume sliders in an options menu should control. Store the values in `engine.settings()` so they're
 remembered (see [saving.md](saving.md#player-settings)).
 
-## Positional sound
+### Bus effects
 
-There's no 3D or positional helper yet. For 2D games, panning by screen position and attenuating by distance covers
-most needs:
+Each bus can filter and add reverb to everything playing through it:
 
 ```cpp
-Vec2 rel = source - engine.camera().position;
-f32 pan = clamp(rel.x / 600.0f, -1.0f, 1.0f);
-f32 gain = clamp(1.0f - rel.length() / 1200.0f, 0.0f, 1.0f);
-engine.audio().play(sound, {.gain = gain, .pan = pan});
+// Underwater: everything muffled.
+engine.audio().set_bus_effects(audio::Bus::Master, {.low_pass = 600});
+// The pause menu: music sounds like it's in the next room.
+engine.audio().set_bus_effects(audio::Bus::Music, {.low_pass = 900});
+// A cave: footsteps and voices ring.
+engine.audio().set_bus_effects(audio::Bus::Effects, {.reverb = 0.4f, .room_size = 0.8f});
+// Back to normal.
+engine.audio().set_bus_effects(audio::Bus::Effects, {});
 ```
+
+| `BusEffects` | Default | |
+| --- | --- | --- |
+| `low_pass` | 0 (off) | Hz. Cuts what's above: 400-1000 for muffled, 3000 for a wall away |
+| `high_pass` | 0 (off) | Hz. Cuts what's below: 1000-2000 for a radio or a phone |
+| `reverb` | 0 | 0 to 1, how much reverb is heard |
+| `room_size` | 0.5 | 0 to 1, how long it rings |
+| `damping` | 0.5 | 0 to 1, how fast its high frequencies die away |
+
+Changes glide over about 50 ms, so setting effects every frame from gameplay (how deep underwater the player is) is
+fine and doesn't click. Effects apply before the bus's volume; the master bus's effects apply to everything. The
+reverb is a Freeverb: eight combs and four allpasses per side, cheap enough for every bus at once.
+
+## Positional sound
+
+Sounds can be placed in the world. Their volume falls off with distance from the listener, and they pan to the side
+they're on:
+
+```cpp
+// every frame: hear from the camera (or the player)
+engine.audio().set_listener(engine.camera().position);
+
+// a one-off at a place
+engine.audio().play_at(splash, rock_position);
+
+// a loop that moves
+audio::Voice hum = engine.audio().play_at(hum_sound, cart.position, {.loop = true}, {.near = 32, .far = 600});
+engine.audio().set_position(hum, cart.position);   // as it moves
+```
+
+| `Attenuation` | Default | |
+| --- | --- | --- |
+| `near` | 64 | World units: full volume within this distance |
+| `far` | 1024 | Silent beyond this |
+| `pan_distance` | 512 | Fully to one side once this far left or right |
+
+Between `near` and `far` the volume falls off quickly at first and then gently. Gain and pan are worked out as the
+audio plays, so moving the listener or the sound needs nothing more. `audio::spatialize(source, listener,
+attenuation)` returns the same gain and pan, for sounds you start with `play`.
+
+## Opus
+
+Opus sounds better than Vorbis at the same size, especially for voices and at low bitrates. Configure with
+`-DPH_OPUS=ON` to load `.opus` files as sounds and music; it adds libogg, libopus and opusfile to the build.
+`audio::opus_supported()` says whether it's in. Without it, loading an Opus file logs an error that says how to
+turn it on.
 
 ## Without an audio device
 

@@ -23,6 +23,8 @@ Set them on the configure line (`-DPH_DEV_TOOLS=OFF`) or in your own presets.
 | `PH_MACOS_BUNDLES` | `OFF` | Build macOS games as `.app` bundles |
 | `PH_BUILD_EDITOR` | `ON` when the engine is the top-level project | [Bowl Editor](../guides/editor.md) (needs `PH_DEV_TOOLS`) |
 | `PH_TRACY` | `OFF` | Send profiler zones, frames, plots and log lines to the [Tracy](../guides/jobs-and-profiling.md#tracy) profiler |
+| `PH_BOX2D` | `OFF` | Rigid-body physics through Box2D v3 ([collision.md](../guides/collision.md)) |
+| `PH_OPUS` | `OFF` | Ogg Opus sounds and music; fetches libogg, libopus and opusfile ([audio.md](../guides/audio.md#opus)) |
 | `PH_SHADERC_EXECUTABLE` | empty | A prebuilt host `ph-shaderc` for cross-compiling; when set, the shader compiler isn't built |
 | `PH_ECS_MAX_COMPONENTS` | 256 | (A preprocessor define, not a CMake option.) Maximum component types; a multiple of 64 |
 

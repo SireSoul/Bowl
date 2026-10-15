@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Audio: bus effects (`set_bus_effects`: low-pass, high-pass, reverb, all smoothed), positional sounds (`play_at`,
+  `set_position`, `set_listener`, `Attenuation`, `spatialize`), and Ogg Opus sounds and music with `-DPH_OPUS=ON`.
 - Tilemaps: Tiled XML maps and tilesets (`.tmx`, `.tsx`, `Tilemap::parse_tmx`), staggered and hexagonal maps
   (`Tilemap::cell_at`, `pixel_size`), and `TilemapCache`, which keeps the flat layers of big maps in GPU memory as
   chunks. `TilemapDrawOptions::layers` draws only the flat or the y-sorted layers.
@@ -49,6 +51,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- **Breaking:** `audio::Music`'s constructor takes the codec (`Music::Codec`). Loading through assets is unchanged.
+- The mixer sums each bus separately before applying its gain, so bus effects can work on it.
 - Font atlases upload only the rectangle holding newly added glyphs, instead of the whole 4 MB page.
 - `ph_gfx` depends on `ph_ecs` (for the particle emitter helpers).
 - Every engine target carries C++20 as a usage requirement, so games that add the engine with `add_subdirectory`

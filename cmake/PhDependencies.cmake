@@ -114,6 +114,40 @@ if(PH_BOX2D)
     target_compile_options(box2d PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/w,-w>)
 endif()
 
+# Ogg Opus: optional .opus sounds and music (ph/audio). libogg and libopus build with their own CMake; opusfile's
+# release has none, so its four source files are compiled here (no HTTP streaming).
+if(PH_OPUS)
+    set(INSTALL_DOCS OFF CACHE BOOL "" FORCE)
+    set(INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+    set(INSTALL_CMAKE_PACKAGE_MODULE OFF CACHE BOOL "" FORCE)
+    set(OPUS_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(OPUS_BUILD_PROGRAMS OFF CACHE BOOL "" FORCE)
+    set(OPUS_INSTALL_PKG_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+    set(OPUS_INSTALL_CMAKE_CONFIG_MODULE OFF CACHE BOOL "" FORCE)
+    ph_fetch(ogg https://downloads.xiph.org/releases/ogg/libogg-1.3.5.tar.gz
+             0eb4b4b9420a0f51db142ba3f9c64b333f826532dc0f48c6410ae51f4799b664)
+    ph_fetch(opus https://downloads.xiph.org/releases/opus/opus-1.5.2.tar.gz
+             65c1d2f78b9f2fb20082c38cbe47c951ad5839345876e46941612ee87f9a7ce1)
+    ph_fetch(opusfile https://downloads.xiph.org/releases/opus/opusfile-0.12.tar.gz
+             118d8601c12dd6a44f52423e68ca9083cc9f2bfe72da7a8c1acb22a80ae3550b)
+    FetchContent_MakeAvailable(ogg opus)
+    FetchContent_GetProperties(opusfile)
+    if(NOT opusfile_POPULATED)
+        FetchContent_Populate(opusfile)
+    endif()
+    add_library(opusfile STATIC
+        ${opusfile_SOURCE_DIR}/src/info.c
+        ${opusfile_SOURCE_DIR}/src/internal.c
+        ${opusfile_SOURCE_DIR}/src/opusfile.c
+        ${opusfile_SOURCE_DIR}/src/stream.c)
+    target_include_directories(opusfile SYSTEM PUBLIC ${opusfile_SOURCE_DIR}/include)
+    target_link_libraries(opusfile PUBLIC ogg opus)
+    foreach(lib ogg opus opusfile)
+        set_target_properties(${lib} PROPERTIES FOLDER third_party)
+        target_compile_options(${lib} PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/w,-w>)
+    endforeach()
+endif()
+
 # doctest: unit tests
 if(PH_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

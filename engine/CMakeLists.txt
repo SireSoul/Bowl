@@ -82,9 +82,14 @@ endif()
 ph_module(audio
     SOURCES
         audio/src/audio.cpp
+        audio/src/opus.cpp
         audio/src/vorbis.cpp
     PUBLIC_DEPS ph_core SDL3::SDL3
     PRIVATE_DEPS ph_stb)
+if(PH_OPUS)
+    target_link_libraries(ph_audio PRIVATE opusfile)
+    target_compile_definitions(ph_audio PRIVATE PH_OPUS=1)
+endif()
 
 ph_module(physics
     SOURCES
