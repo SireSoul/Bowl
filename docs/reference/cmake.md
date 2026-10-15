@@ -56,6 +56,7 @@ All presets build into `build/<preset>` and export `compile_commands.json`.
 | `ph_shaderc` | The shader compiler as a library |
 | `ph-icon` | Makes application icons (`.icns`, `.ico`, PNGs) from one picture; `ph_add_game(... ICON)` runs it |
 | `ph-pack` | Packs a folder into an asset archive (`.phpak`), or lists one |
+| `ph-apidoc`, `ph_api_docs` | Writes the [API reference](api/README.md) from the headers; `ph_api_docs` runs it into `docs/reference/api` |
 | `ph_engine_assets` | Compiles the engine's shaders |
 | `ph_tests`, `ph_bench_ecs` | Tests and benchmark |
 | `<game>_assets` | Created by `ph_add_game`: copies and compiles a game's assets |

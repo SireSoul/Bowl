@@ -33,6 +33,7 @@ tools/
   atlas/                  ph-atlas: packs pictures into an atlas with sprite-sheet JSON
   icon/                   ph-icon: application icons from one picture
   pack/                   ph-pack: asset archives (.phpak)
+  apidoc/                 ph-apidoc: the API reference from the headers
 editor/                   Bowl Editor
 samples/
   icon.png                the samples' application icon
@@ -43,7 +44,7 @@ tests/
   test_*.cpp              unit tests, one file per area
   bench_ecs.cpp           ECS benchmark (not a test)
   data/                   test fixtures (small OGG files) and how they were made
-docs/                     this documentation; images/ holds the screenshots
+docs/                     this documentation; images/ holds the screenshots, reference/api/ is generated (ph_api_docs)
 ```
 
 Every module follows the same shape:

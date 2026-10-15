@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- API reference: `docs/reference/api`, one page per module made from the headers' comments by `ph-apidoc`
+  (`ph_api_docs` target).
 - Asset archives: `ph::Archive`, `write_archive`, `AssetManager::mount_archive`, `read` and `exists`; the `ph-pack`
   tool; `PH_PACK_ASSETS` (on in the `release` preset) ships `engine.phpak` and `assets.phpak`, which the App mounts
   when they're next to the game.

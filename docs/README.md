@@ -48,9 +48,10 @@ One page per system.
 | [Command line](reference/command-line.md) | Flags every game understands, and `ph-shaderc`'s |
 | [Project layout](reference/project-layout.md) | Every folder and what lives there; what a built game looks like on disk |
 | [Conventions](reference/conventions.md) | Coordinates, units, colors, naming, threading, error handling |
+| [API](reference/api/README.md) | Every public header: types, functions and their comments |
 
-The headers are the API reference. Each public type and function has a comment saying what it does; start with
-`engine/app/include/ph/app/engine.hpp`.
+The [API reference](reference/api/README.md) lists every public header with its types and functions, made from the
+headers' own comments. Start with [`ph/app/engine.hpp`](reference/api/app.md#phappenginehpp).
 
 ## Help
 

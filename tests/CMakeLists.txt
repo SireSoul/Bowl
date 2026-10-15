@@ -4,6 +4,7 @@ add_executable(ph_tests
     test_audio.cpp
     test_collision.cpp
     test_ecs.cpp
+    test_apidoc.cpp
     test_hierarchy.cpp
     test_icon.cpp
     test_input.cpp
@@ -24,7 +25,7 @@ add_executable(ph_tests
     test_tilemap.cpp
     test_xml.cpp
     test_ui.cpp)
-target_link_libraries(ph_tests PRIVATE ph::engine ph_atlas ph_icon doctest::doctest)
+target_link_libraries(ph_tests PRIVATE ph::engine ph_atlas ph_icon ph_apidoc doctest::doctest)
 target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"
     PH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(PH_BOX2D)

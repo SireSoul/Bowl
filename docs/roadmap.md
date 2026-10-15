@@ -59,7 +59,7 @@ would otherwise be for.
 
 ## Docs and tooling
 - ~~Full documentation: getting started, tutorial (backed by the `tutorial` sample), a guide per system, reference,
-  troubleshooting, FAQ, contributing guide~~ (done). Later: generated API reference from the headers
+  troubleshooting, FAQ, contributing guide, an API reference generated from the headers~~ (done)
 - ~~Inspector: edit `std::vector` and `std::array` fields, add and remove components, filter entities~~ (done)
 
 ## Known limitations

@@ -38,6 +38,7 @@ add_subdirectory(engine)
 add_subdirectory(tools/atlas)
 add_subdirectory(tools/icon)
 add_subdirectory(tools/pack)
+add_subdirectory(tools/apidoc)
 
 if(PH_BUILD_TESTS)
     enable_testing()
