@@ -123,7 +123,7 @@ If the engine's folder isn't inside your project's folder, pass a build director
 ```cmake
 include(FetchContent)
 FetchContent_Declare(bowl
-    GIT_REPOSITORY https://github.com/SireSoul/PLACEHOLDERENGINENAME.git
+    GIT_REPOSITORY https://github.com/SireSoul/BOWL.git
     GIT_TAG <commit or tag>)
 FetchContent_MakeAvailable(bowl)
 

@@ -71,7 +71,7 @@ Packs PNGs into one atlas image and writes sprite-sheet JSON with the same name 
 | `--no-trim` | | Keep transparent edges |
 | `--fps N` | 10 | Speed of animations made from numbered files |
 
-## Bowl Editor
+## BOWL Editor
 
 See [editor.md](../guides/editor.md#starting-it).
 

@@ -1,4 +1,4 @@
-# Bowl
+# BOWL
 
 A code-first 2D game engine in C++20, built on SDL3. One renderer for Vulkan, Metal and Direct3D 12, a parallel
 archetype ECS, hot reload for assets, shaders and game code, and dev tools that run inside the game.
@@ -68,11 +68,11 @@ All other dependencies are downloaded at pinned versions and checked against a S
 there is one; otherwise SDL3 is built from source.
 
 ```bash
-git clone https://github.com/SireSoul/PLACEHOLDERENGINENAME.git
+git clone https://github.com/SireSoul/BOWL.git
 ```
 
 ```bash
-cd PLACEHOLDERENGINENAME
+cd BOWL
 ```
 
 ```bash

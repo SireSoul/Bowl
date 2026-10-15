@@ -135,5 +135,5 @@ The first version: everything needed to start making a game.
 - **Samples:** `isometric` and `sprites`.
 - **CI:** Windows, macOS and Linux, `dev` and `release`, tests, and a Direct3D 12 render on Windows.
 
-[Unreleased]: https://github.com/SireSoul/PLACEHOLDERENGINENAME/compare/main...develop
-[0.1.0]: https://github.com/SireSoul/PLACEHOLDERENGINENAME/tree/main
+[Unreleased]: https://github.com/SireSoul/BOWL/compare/main...develop
+[0.1.0]: https://github.com/SireSoul/BOWL/tree/main

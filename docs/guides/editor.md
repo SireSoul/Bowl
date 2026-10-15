@@ -1,4 +1,4 @@
-# Bowl Editor
+# BOWL Editor
 
 Bowl Editor lays out levels: it places art and markers in a `.world` file that the game loads. It draws with the
 game's own renderer, so what you see is what the game shows.
