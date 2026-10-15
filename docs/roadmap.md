@@ -54,7 +54,7 @@ would otherwise be for.
 
 ## M6: together
 - Networking: reliable UDP transport, lockstep and rollback helpers built on the deterministic ECS
-- Deterministic entity ids for entities spawned in parallel systems
+- ~~Deterministic entity ids for entities spawned in parallel systems~~ (done)
 
 ## Docs and tooling
 - ~~Full documentation: getting started, tutorial (backed by the `tutorial` sample), a guide per system, reference,

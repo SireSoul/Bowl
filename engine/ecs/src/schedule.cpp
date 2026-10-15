@@ -68,7 +68,13 @@ const std::vector<std::vector<usize>>& Schedule::batches() {
 
 void Schedule::run_system(System& s, World& world, JobSystem& jobs, f32 dt) {
     if (!s.enabled) return;
-    if (!s.commands) s.commands = std::make_unique<CommandBuffer>(world);
+    if (!s.commands) {
+        s.commands = std::make_unique<CommandBuffer>(world);
+        // Stand-in ids, tagged by system, so systems running side by side create the same entities every run.
+        usize index = 0;
+        while (index < systems_.size() && systems_[index].get() != &s) ++index;
+        s.commands->use_placeholders(static_cast<u32>(index % 2047) + 1);
+    }
     ProfileScope zone(s.name);
     Stopwatch watch;
     SystemContext ctx{world, *s.commands, jobs, dt};

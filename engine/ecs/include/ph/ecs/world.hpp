@@ -123,6 +123,9 @@ public:
     // Drops every hook, resource and pending deferred command, keeping entities and components. Hot reload uses it to
     // let go of game code while the world itself stays.
     void forget_code();
+    // While a command buffer is being applied: the real entity for one of its stand-in ids (made on first use). Null
+    // outside of that. Other ids come back unchanged.
+    Entity resolve_placeholder(Entity e);
     bool locked() const { return lock_.load(std::memory_order_relaxed) > 0; }
 
     // Introspection
@@ -183,6 +186,17 @@ private:
     const Hooks* hooks_of(ComponentId c) const { return c < hooks_.size() && hooks_[c] ? hooks_[c].get() : nullptr; }
     void run_add_hooks(ComponentId c, Entity e);
     void run_remove_hooks(ComponentId c, Entity e);
+
+    // Stand-in ids (CommandBuffer::create) becoming real entities while a buffer is applied.
+    Entity resolve(Entity e);
+    reflect::FieldVisitor& placeholder_fixer();
+    template <class T> void fix_placeholders(T& value) {
+        if (!placeholders_) return;
+        if constexpr (std::is_same_v<T, Entity>) value = resolve(value);
+        else if constexpr (reflect::Reflected<T>) reflect::visit(placeholder_fixer(), "", value);
+    }
+    std::unordered_map<u32, Entity>* placeholders_ = nullptr;
+    std::unique_ptr<reflect::FieldVisitor> placeholder_fixer_;
 
     std::vector<Record> records_;
     std::vector<u32> free_;
@@ -438,11 +452,17 @@ template <class T> T* World::try_resource() const {
 // CommandBuffer templates
 
 template <class T> void CommandBuffer::AddCommand<T>::apply(World& w) {
-    if (w.alive(e)) w.add<T>(e, std::move(value));
+    Entity target = w.resolve(e);
+    if (!w.alive(target)) return;
+    w.fix_placeholders(value);
+    w.add<T>(target, std::move(value));
 }
 template <class... Ts> void CommandBuffer::InsertCommand<Ts...>::apply(World& w) {
-    if (w.alive(e)) std::apply([&](auto&... vs) { w.insert(e, std::move(vs)...); }, values);
+    Entity target = w.resolve(e);
+    if (!w.alive(target)) return;
+    std::apply([&](auto&... vs) { (w.fix_placeholders(vs), ...); }, values);
+    std::apply([&](auto&... vs) { w.insert(target, std::move(vs)...); }, values);
 }
-template <class T> void CommandBuffer::RemoveCommand<T>::apply(World& w) { w.remove<T>(e); }
+template <class T> void CommandBuffer::RemoveCommand<T>::apply(World& w) { w.remove<T>(w.resolve(e)); }
 
 } // namespace ph::ecs

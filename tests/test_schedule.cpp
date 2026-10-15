@@ -74,13 +74,58 @@ TEST_CASE("schedule: results are identical with and without parallelism") {
             if (a.v % 11 == 0) ctx.commands.create(A{a.v + 1}, B{1});
         });
         for (int frame = 0; frame < 5; ++frame) s.run(w, jobs, 1.0f / 60);
-        // Component data and iteration order are deterministic. Entity ids reserved from parallel chunks are unique
-        // but depend on thread timing, so they're left out here (see the sequential test below for ids).
-        std::vector<int> out;
-        w.each<const A>([&](const A& a) { out.push_back(a.v); });
+        // Component data, iteration order and entity ids are all deterministic: ids created from parallel chunks are
+        // stand-ins until the chunks' commands are applied, in chunk order.
+        std::vector<std::pair<u64, int>> out;
+        w.each<const A>([&](Entity e, const A& a) { out.emplace_back(e.bits(), a.v); });
         return out;
     };
-    CHECK(simulate(true) == simulate(false));
+    auto expected = simulate(false);
+    for (int run = 0; run < 5; ++run) CHECK(simulate(true) == expected);
+}
+
+namespace {
+struct Link { // a reflected component pointing at other entities
+    Entity to;
+    std::vector<Entity> also;
+};
+PH_REFLECT(Link, to, also)
+} // namespace
+
+TEST_CASE("schedule: stand-in ids from parallel systems become real ones, inside components too") {
+    auto simulate = [](int workers) {
+        World w;
+        JobSystem jobs(workers);
+        for (int i = 0; i < 3000; ++i) w.create(A{i});
+        Schedule s;
+        s.par_each<const A>("spawn pairs", [](SystemContext& ctx, Entity e, const A& a) {
+            if (a.v % 5 != 0) return;
+            Entity first = ctx.commands.create(B{a.v});
+            // The second points at the first (a stand-in) and at its spawner (a real entity).
+            ctx.commands.create(C{a.v}, Link{first, {e, first}});
+        });
+        s.run(w, jobs, 1.0f / 60);
+        std::vector<std::tuple<u64, u64, u64, u64>> links;
+        bool right = true;
+        w.each<const Link, const C>([&](Entity e, const Link& l, const C& c) {
+            right = right && w.alive(l.to) && !l.to.is_placeholder() && w.get<B>(l.to).v == c.v && l.also.size() == 2 &&
+                    l.also[1] == l.to && w.get<A>(l.also[0]).v == c.v;
+            links.emplace_back(e.bits(), l.to.bits(), l.also[0].bits(), l.also[1].bits());
+        });
+        CHECK(right); // each points at its own partner and spawner
+        CHECK(links.size() == 600);
+        return links;
+    };
+    auto expected = simulate(0);
+    for (int run = 0; run < 5; ++run) CHECK(simulate(4) == expected);
+
+    // Outside a schedule, a buffer hands out real ids as before.
+    World w;
+    CommandBuffer cmd(w);
+    Entity e = cmd.create(A{1});
+    CHECK_FALSE(e.is_placeholder());
+    cmd.apply();
+    CHECK(w.get<A>(e).v == 1);
 }
 
 TEST_CASE("schedule: entities spawned from sequential systems get deterministic ids") {

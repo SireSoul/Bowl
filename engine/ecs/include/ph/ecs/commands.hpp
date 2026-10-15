@@ -24,6 +24,12 @@ public:
     CommandBuffer& operator=(const CommandBuffer&) = delete;
 
     // Reserves an entity id now (thread-safe); the entity becomes alive when the buffer is applied.
+    //
+    // A system's buffer (and each chunk's in a par_each) hands out a stand-in id instead (Entity::is_placeholder),
+    // because systems running side by side would otherwise race for ids and get different ones each run. Stand-ins
+    // become real entities when the commands are applied, in system and chunk order, so a simulation creates the same
+    // ids every time. Use a stand-in in this buffer's commands and in entity fields of reflected components (both are
+    // swapped for the real id); don't keep it beyond that.
     Entity create();
     template <class... Ts>
         requires(Component<std::decay_t<Ts>> && ...)
@@ -53,6 +59,9 @@ public:
     usize size() const { return commands_.size(); }
     // Moves all of `other`'s commands to the end of this buffer.
     void append(CommandBuffer&& other);
+    // Makes create() hand out stand-in ids marked with `tag` (1 to 4095, unique among the buffers applied together).
+    // Schedules do this for their systems.
+    void use_placeholders(u32 tag) { placeholder_tag_ = tag; }
 
 private:
     struct Command {
@@ -108,6 +117,9 @@ private:
     std::vector<Command> commands_;
     std::vector<Block> blocks_;
     usize block_used_ = 0; // bytes used in blocks_.back()
+    u32 placeholder_tag_ = 0;       // 0: real reserved ids
+    u32 next_placeholder_ = 0;      // stand-ins handed out since the last apply
+    bool has_placeholders_ = false; // its commands (its own or appended) mention stand-ins
 };
 
 } // namespace ph::ecs

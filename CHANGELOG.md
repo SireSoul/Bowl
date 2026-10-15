@@ -83,6 +83,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- Systems' command buffers hand out stand-in ids (`Entity::is_placeholder`) that become real entities, in system and
+  chunk order, when applied: entity ids are now the same every run whatever the thread count. Stand-ins in the
+  buffer's commands and in reflected components' entity fields are swapped for the real ids.
+  `reflect::FieldVisitor::entity_ref` lets a visitor change entity references.
 - **Breaking:** game-code hot reload keeps the world instead of saving and reloading it. Entity ids no longer change,
   and plain-data components survive whether or not they're reflected; savable components that aren't plain data are
   saved and loaded back as before. The engine registers its own component types at startup.

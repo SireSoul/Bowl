@@ -73,7 +73,9 @@ void World::destroy(Entity e) {
     if (moved) records_[moved.index].row = r.row;
     r.alive = false;
     r.archetype = nullptr;
-    r.generation = r.generation + 1 == 0 ? 1 : r.generation + 1;
+    // Never 0 (null) and never the stand-in generation.
+    u32 next = r.generation + 1;
+    r.generation = next == 0 || next == Entity::placeholder_generation ? 1 : next;
     free_.push_back(e.index);
     free_cursor_.store(static_cast<i64>(free_.size()), std::memory_order_relaxed);
     --entity_count_;
@@ -229,13 +231,59 @@ void World::flush() {
     PH_ASSERT(deferred_.empty(), "deferred commands keep scheduling more commands");
 }
 
+// Stand-in ids
+
+namespace {
+// Swaps stand-in ids inside a component's reflected fields for the real entities.
+class PlaceholderFixer final : public reflect::FieldVisitor {
+public:
+    explicit PlaceholderFixer(World& world) : world_(world) {}
+    void boolean(std::string_view, bool&) override {}
+    void integer(std::string_view, i64&, i64, i64) override {}
+    void real(std::string_view, f64&) override {}
+    void text(std::string_view, std::string&) override {}
+    void vector(std::string_view, f32*, int) override {}
+    void color(std::string_view, Color&) override {}
+    void entity(std::string_view, u64) override {}
+    void entity_ref(std::string_view, u64& bits) override {
+        Entity e = Entity::from_bits(bits);
+        if (e.is_placeholder()) bits = world_.resolve_placeholder(e).bits();
+    }
+    bool begin_group(std::string_view) override { return true; }
+    void end_group() override {}
+    bool begin_list(std::string_view, usize&, bool) override { return true; }
+    void unsupported(std::string_view, std::string_view) override {}
+
+private:
+    World& world_;
+};
+} // namespace
+
+Entity World::resolve(Entity e) {
+    if (!e.is_placeholder()) return e;
+    if (!placeholders_) return null_entity; // a stand-in kept past its buffer: it means nothing now
+    auto [it, made] = placeholders_->try_emplace(e.index);
+    if (made) it->second = create();
+    return it->second;
+}
+
+Entity World::resolve_placeholder(Entity e) { return resolve(e); }
+
+reflect::FieldVisitor& World::placeholder_fixer() {
+    if (!placeholder_fixer_) placeholder_fixer_ = std::make_unique<PlaceholderFixer>(*this);
+    return *placeholder_fixer_;
+}
+
 // CommandBuffer
 
 CommandBuffer::CommandBuffer(CommandBuffer&& o) noexcept
-    : world_(o.world_), commands_(std::move(o.commands_)), blocks_(std::move(o.blocks_)), block_used_(o.block_used_) {
+    : world_(o.world_), commands_(std::move(o.commands_)), blocks_(std::move(o.blocks_)), block_used_(o.block_used_),
+      placeholder_tag_(o.placeholder_tag_), next_placeholder_(o.next_placeholder_), has_placeholders_(o.has_placeholders_) {
     o.commands_.clear();
     o.blocks_.clear();
     o.block_used_ = 0;
+    o.next_placeholder_ = 0;
+    o.has_placeholders_ = false;
 }
 
 CommandBuffer& CommandBuffer::operator=(CommandBuffer&& o) noexcept {
@@ -245,9 +293,14 @@ CommandBuffer& CommandBuffer::operator=(CommandBuffer&& o) noexcept {
         commands_ = std::move(o.commands_);
         blocks_ = std::move(o.blocks_);
         block_used_ = o.block_used_;
+        placeholder_tag_ = o.placeholder_tag_;
+        next_placeholder_ = o.next_placeholder_;
+        has_placeholders_ = o.has_placeholders_;
         o.commands_.clear();
         o.blocks_.clear();
         o.block_used_ = 0;
+        o.next_placeholder_ = 0;
+        o.has_placeholders_ = false;
     }
     return *this;
 }
@@ -272,6 +325,13 @@ void* CommandBuffer::allocate(usize size, usize align) {
 }
 
 Entity CommandBuffer::create() {
+    if (placeholder_tag_) {
+        PH_ASSERT(placeholder_tag_ < 4096 && next_placeholder_ < (1u << 20), "too many stand-in entities in one buffer");
+        Entity e{(placeholder_tag_ << 20) | next_placeholder_++, Entity::placeholder_generation};
+        has_placeholders_ = true;
+        push<SpawnCommand>(e);
+        return e;
+    }
     Entity e = world_->reserve_entity();
     push<SpawnCommand>(e);
     return e;
@@ -279,8 +339,11 @@ Entity CommandBuffer::create() {
 
 void CommandBuffer::destroy(Entity e) { push<DestroyCommand>(e); }
 
-void CommandBuffer::SpawnCommand::apply(World& w) { w.spawn_reserved(e); }
-void CommandBuffer::DestroyCommand::apply(World& w) { w.destroy(e); }
+void CommandBuffer::SpawnCommand::apply(World& w) {
+    if (e.is_placeholder()) w.resolve(e); // made now, in command order
+    else w.spawn_reserved(e);
+}
+void CommandBuffer::DestroyCommand::apply(World& w) { w.destroy(w.resolve(e)); }
 
 void CommandBuffer::apply() {
     if (commands_.empty()) return;
@@ -291,10 +354,17 @@ void CommandBuffer::apply() {
     commands_.clear();
     blocks_.clear();
     block_used_ = 0;
+    // Stand-ins become real entities as the commands reach them.
+    std::unordered_map<u32, Entity> placeholders;
+    auto* outer = world_->placeholders_;
+    if (has_placeholders_) world_->placeholders_ = &placeholders;
+    has_placeholders_ = false;
+    next_placeholder_ = 0;
     for (Command& c : commands) {
         c.apply(*world_, c.payload);
         c.destroy(c.payload);
     }
+    world_->placeholders_ = outer;
     // Keep one block for reuse.
     if (blocks_.empty() && !blocks.empty()) {
         auto biggest = std::max_element(blocks.begin(), blocks.end(), [](const Block& a, const Block& b) { return a.size < b.size; });
@@ -312,10 +382,15 @@ void CommandBuffer::clear() {
     commands_.clear();
     if (blocks_.size() > 1) blocks_.erase(blocks_.begin(), blocks_.end() - 1);
     block_used_ = 0;
+    next_placeholder_ = 0;
+    has_placeholders_ = false;
 }
 
 void CommandBuffer::append(CommandBuffer&& other) {
     if (&other == this || other.commands_.empty()) return;
+    has_placeholders_ = has_placeholders_ || other.has_placeholders_;
+    other.has_placeholders_ = false;
+    other.next_placeholder_ = 0;
     commands_.insert(commands_.end(), other.commands_.begin(), other.commands_.end());
     if (blocks_.empty()) {
         blocks_ = std::move(other.blocks_);

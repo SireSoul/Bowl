@@ -46,6 +46,8 @@ public:
     virtual void vector(std::string_view name, f32* values, int count) = 0;
     virtual void color(std::string_view name, Color& value) = 0;
     virtual void entity(std::string_view name, u64 bits) = 0; // read-only
+    // The same, for visitors that change entity references (the ECS swaps stand-in ids for real ones this way).
+    virtual void entity_ref(std::string_view name, u64& bits) { entity(name, bits); }
     virtual bool begin_group(std::string_view name) = 0;      // false: skip its fields
     virtual void end_group() = 0;
     virtual void unsupported(std::string_view name, std::string_view type) = 0;

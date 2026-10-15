@@ -111,13 +111,25 @@ The world's own buffer, `world.deferred()`, is applied by `world.flush()`, which
 
 ## Determinism
 
-Given the same inputs, schedules produce the same component data every run, on any number of threads. Iteration order
-is fixed, chunk boundaries depend only on the entity count, and commands merge in a fixed order. The tests check this
-by running the same simulation with different thread counts.
+Given the same inputs, schedules produce the same component data and the same entity ids every run, on any number of
+threads. Iteration order is fixed, chunk boundaries depend only on the entity count, and commands merge in a fixed
+order. The tests check this by running the same simulation with different thread counts.
 
-One exception: entities *created* inside `par_each` chunks all get valid, unique ids, but which entity gets which id
-depends on timing. Their components are still deterministic. When ids themselves must be reproducible (lockstep or
-rollback networking, replays that store ids), create entities from `each` or exclusive systems.
+Entities created through a system's `ctx.commands` get their real ids when the commands are applied, in system and
+chunk order, since systems and chunks running side by side would otherwise race for ids. Until then `create()` returns
+a *stand-in* (`Entity::is_placeholder()`):
+
+```cpp
+schedule.par_each<const Spawner>("spawn", [](ecs::SystemContext& ctx, ecs::Entity e, const Spawner& s) {
+    ecs::Entity bullet = ctx.commands.create(Bullet{}, Position{s.at});
+    ctx.commands.create(Trail{.follows = bullet, .owner = e});   // fine: swapped for the real id
+});
+```
+
+A stand-in works in the same buffer's commands and in entity fields of reflected components (including lists of
+entities); both are swapped for the real entity as the commands are applied. Don't keep one anywhere else (a resource,
+a plain struct): it means nothing after the commands are applied. A `CommandBuffer` you make yourself, and the world's
+`deferred()` buffer, hand out real ids as before.
 
 ## Managing schedules
 
