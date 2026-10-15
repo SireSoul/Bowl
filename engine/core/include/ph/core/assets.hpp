@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -66,15 +67,26 @@ public:
 
     const std::vector<std::filesystem::path>& dependencies() const { return dependencies_; }
 
+    // Background loads (AssetManager::load_async): what the type's decoder made from the file on the loading thread,
+    // or null. The loader then only does what has to happen on the main thread (a GPU upload, say).
+    template <class P> P* prepared() const { return static_cast<P*>(prepared_.get()); }
+
 private:
+    friend class AssetManager;
     AssetManager& assets_;
     std::string path_;
     std::vector<std::filesystem::path> dependencies_;
+    std::optional<std::vector<u8>> prefetched_; // the asset's own file, already read on the loading thread
+    std::shared_ptr<void> prepared_;
 };
 
 template <class T> using AssetLoader = std::function<std::unique_ptr<T>(AssetLoadContext&)>;
+// Runs on the loading thread for load_async: turns the file's bytes into whatever saves the loader work (decoded
+// pixels, decoded samples). Must be thread-safe. Null: nothing to prepare.
+using AssetDecoder = std::function<std::shared_ptr<void>(std::string_view path, std::span<const u8> bytes)>;
 
-// Loads and caches assets by virtual path from an ordered list of mounted folders. Main thread only.
+// Loads and caches assets by virtual path from an ordered list of mounted folders. Main thread only (load_async does
+// its file reading and decoding on a thread of its own).
 // If a reload fails (say, a shader with a syntax error), the previous value stays in place.
 class AssetManager : NonCopyable {
 public:
@@ -92,8 +104,21 @@ public:
     }
 
     // Returns the cached asset or loads it. On failure the handle is empty (and the error is logged); if the file
-    // appears or is fixed later, hot reload fills it in.
+    // appears or is fixed later, hot reload fills it in. An asset still loading in the background is finished now.
     template <class T> Asset<T> load(std::string_view path);
+
+    // Starts loading in the background and returns the handle at once: the file is read, and decoded if the type has
+    // a decoder, on a loading thread; finish_loads() (the App calls it every frame) completes it on this thread. The
+    // handle stays empty until then, so check it before use. Loading screens: start everything, wait for loading()
+    // to reach zero.
+    template <class T> Asset<T> load_async(std::string_view path);
+    template <class T> void register_decoder(AssetDecoder decoder) {
+        decoders_[type_id<T>()] = std::make_shared<AssetDecoder>(std::move(decoder));
+    }
+    // Background loads not finished yet.
+    usize loading() const;
+    // Completes the background loads that are ready.
+    void finish_loads();
 
     // Registers an asset made in code (procedural textures, generated sounds). Never reloaded.
     template <class T> Asset<T> add(std::string_view path, std::unique_ptr<T> value);
@@ -144,6 +169,9 @@ private:
         std::function<bool()> loaded;
         std::vector<FileWatcher::WatchId> watches;
         bool dirty = false;
+        // Background loads: waiting for the loading thread, and how to finish with what it read.
+        bool pending = false;
+        std::function<bool(Entry&, std::optional<std::vector<u8>>, std::shared_ptr<void>)> finish;
     };
     struct Key {
         TypeId type;
@@ -159,7 +187,10 @@ private:
     };
 
     template <class T> Entry& make_entry(Key key, bool from_file);
-    template <class T> bool run_loader(Entry& entry);
+    template <class T>
+    bool run_loader(Entry& entry, std::optional<std::vector<u8>> prefetched = {}, std::shared_ptr<void> prepared = {});
+    struct Background; // the loading thread and its queues
+    void start_background(const Key& key, std::filesystem::path file, std::shared_ptr<AssetDecoder> decoder);
     void watch_dependencies(Entry& entry, const std::vector<std::filesystem::path>& files);
     void notify(std::string_view path, bool ok);
 
@@ -170,11 +201,14 @@ private:
     FileWatcher watcher_;
     bool hot_reload_ = false;
     u64 serial_ = 0;
+    std::unordered_map<TypeId, std::shared_ptr<AssetDecoder>> decoders_;
+    std::unique_ptr<Background> background_;
 };
 
 void log_asset_error(std::string_view path, std::string_view type, std::string_view message);
 
-template <class T> bool AssetManager::run_loader(Entry& entry) {
+template <class T>
+bool AssetManager::run_loader(Entry& entry, std::optional<std::vector<u8>> prefetched, std::shared_ptr<void> prepared) {
     auto it = loaders_.find(type_id<T>());
     if (it == loaders_.end() || !it->second) {
         log_asset_error(entry.path, type_name<T>(), "no loader registered for this type");
@@ -182,6 +216,8 @@ template <class T> bool AssetManager::run_loader(Entry& entry) {
     }
     auto& loader = *static_cast<AssetLoader<T>*>(it->second->loader.get());
     AssetLoadContext ctx(*this, entry.path);
+    ctx.prefetched_ = std::move(prefetched);
+    ctx.prepared_ = std::move(prepared);
     std::unique_ptr<T> value = loader(ctx);
     watch_dependencies(entry, ctx.dependencies());
     if (!value) return false;
@@ -208,10 +244,34 @@ template <class T> AssetManager::Entry& AssetManager::make_entry(Key key, bool f
 
 template <class T> Asset<T> AssetManager::load(std::string_view path) {
     Key key{type_id<T>(), std::string(path)};
-    if (auto it = entries_.find(key); it != entries_.end())
+    if (auto it = entries_.find(key); it != entries_.end()) {
+        if (it->second->pending) { // needed now: don't wait for the loading thread
+            it->second->pending = false;
+            run_loader<T>(*it->second);
+        }
         return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(it->second->slot));
+    }
     Entry& entry = make_entry<T>(std::move(key), true);
     run_loader<T>(entry);
+    return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(entry.slot));
+}
+
+template <class T> Asset<T> AssetManager::load_async(std::string_view path) {
+    Key key{type_id<T>(), std::string(path)};
+    if (auto it = entries_.find(key); it != entries_.end())
+        return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(it->second->slot));
+    Entry& entry = make_entry<T>(key, true);
+    auto file = resolve(path);
+    if (!file) { // nothing to read: fail (and start watching) the usual way
+        run_loader<T>(entry);
+        return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(entry.slot));
+    }
+    entry.pending = true;
+    entry.finish = [this](Entry& e, std::optional<std::vector<u8>> bytes, std::shared_ptr<void> prepared) {
+        return run_loader<T>(e, std::move(bytes), std::move(prepared));
+    };
+    auto decoder = decoders_.find(type_id<T>());
+    start_background(key, std::move(*file), decoder == decoders_.end() ? nullptr : decoder->second);
     return Asset<T>(std::static_pointer_cast<AssetSlot<T>>(entry.slot));
 }
 

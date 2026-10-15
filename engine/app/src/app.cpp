@@ -150,6 +150,7 @@ struct AppRunner {
         last_ticks = now;
 
         e.input_.end_events();
+        e.assets_.finish_loads(); // background loads that are ready
         if (e.assets_.hot_reload() && now_seconds() - last_asset_poll > 0.25) {
             PH_PROFILE_SCOPE("assets.poll");
             last_asset_poll = now_seconds();

@@ -3,6 +3,8 @@
 
 #include <doctest/doctest.h>
 
+#include <atomic>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <thread>
@@ -126,4 +128,66 @@ TEST_CASE("assets: rollback drops what came after a mark and restores replaced l
     CHECK(assets.load<Text>("c.txt")->value == "c"); // the original loader is back
     assets.reload("a.txt");
     CHECK(calls == 0); // the callback went with the rollback
+}
+
+namespace {
+struct Shouted {
+    std::string value;
+};
+} // namespace
+
+TEST_CASE("assets: background loads read and decode on another thread, then finish on this one") {
+    fs::path dir = temp_dir("async");
+    write(dir / "a.txt", "hello");
+    write(dir / "b.txt", "world");
+    AssetManager assets;
+    assets.mount("", dir);
+    std::thread::id main = std::this_thread::get_id(), decoded_on;
+    std::atomic<int> decodes{0};
+    // The decoder does the slow part off the main thread; the loader just takes the result.
+    assets.register_decoder<Shouted>([&](std::string_view, std::span<const u8> bytes) -> std::shared_ptr<void> {
+        decoded_on = std::this_thread::get_id();
+        ++decodes;
+        std::string s(bytes.begin(), bytes.end());
+        for (char& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return std::make_shared<std::string>(s);
+    });
+    assets.register_loader<Shouted>([&](AssetLoadContext& ctx) -> std::unique_ptr<Shouted> {
+        CHECK(std::this_thread::get_id() == main);
+        if (auto* done = ctx.prepared<std::string>()) return std::make_unique<Shouted>(Shouted{*done});
+        auto text = ctx.read_text(ctx.path());
+        return text ? std::make_unique<Shouted>(Shouted{*text}) : nullptr;
+    });
+
+    Asset<Shouted> a = assets.load_async<Shouted>("a.txt");
+    Asset<Shouted> b = assets.load_async<Shouted>("b.txt");
+    CHECK(assets.load_async<Shouted>("a.txt") == a); // asked twice: one load
+    for (int i = 0; i < 500 && assets.loading() > 0; ++i) {
+        assets.finish_loads();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CHECK(assets.loading() == 0);
+    REQUIRE(a);
+    REQUIRE(b);
+    CHECK(a->value == "HELLO");
+    CHECK(b->value == "WORLD");
+    CHECK(decodes == 2);
+    CHECK(decoded_on != main);
+
+    // load() doesn't wait: a pending asset is finished on the spot.
+    write(dir / "c.txt", "now");
+    Asset<Shouted> c = assets.load_async<Shouted>("c.txt");
+    Asset<Shouted> c_now = assets.load<Shouted>("c.txt");
+    REQUIRE(c_now);
+    CHECK(c == c_now);
+    CHECK(c->value == "now"); // loaded directly, without the decoder
+    for (int i = 0; i < 500 && assets.loading() > 0; ++i) {
+        assets.finish_loads();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CHECK(c->value == "now"); // the late background result is ignored
+
+    // A missing file fails at once, like load().
+    CHECK_FALSE(assets.load_async<Shouted>("missing.txt"));
+    CHECK(assets.loading() == 0);
 }

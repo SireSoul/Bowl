@@ -6,6 +6,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Background asset loading: `AssetManager::load_async`, `loading`, `finish_loads` (the App calls it every frame) and
+  `register_decoder`. Textures and sounds decode on the loading thread; other types read their file there.
 - `ecs::World::compact` frees archetypes no entity uses; queries notice (`World::layout_epoch`) and refresh.
 - Game shaders can `#include "engine/shaders/common.glsl"`: ph-shaderc takes include roots (`--include
   <prefix>=<folder>`, `CompileOptions::include_roots`), and builds and dev reloads pass the engine's.

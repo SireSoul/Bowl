@@ -83,27 +83,47 @@ std::unique_ptr<ComputeShader> load_compute_shader(AssetLoadContext& ctx, GpuDev
     return bundle ? device.create_compute_shader(*bundle, ctx.path()) : nullptr;
 }
 
-std::unique_ptr<Texture> load_texture(AssetLoadContext& ctx, GpuDevice& device, Filter filter) {
-    auto bytes = ctx.read(ctx.path());
-    if (!bytes) {
-        log_asset_error(ctx.path(), "Texture", "file not found in any mount");
-        return nullptr;
+// A picture decoded to RGBA (on the loading thread, for background loads).
+struct DecodedImage {
+    int w = 0, h = 0;
+    stbi_uc* pixels = nullptr;
+    const char* error = nullptr;
+    ~DecodedImage() {
+        if (pixels) stbi_image_free(pixels);
     }
-    int w = 0, h = 0, channels = 0;
-    stbi_uc* pixels = stbi_load_from_memory(bytes->data(), static_cast<int>(bytes->size()), &w, &h, &channels, 4);
-    if (!pixels) {
-        log_asset_error(ctx.path(), "Texture", stbi_failure_reason());
+};
+
+std::shared_ptr<DecodedImage> decode_image(std::span<const u8> bytes) {
+    auto image = std::make_shared<DecodedImage>();
+    int channels = 0;
+    image->pixels = stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()), &image->w, &image->h, &channels, 4);
+    if (!image->pixels) image->error = stbi_failure_reason();
+    return image;
+}
+
+std::unique_ptr<Texture> load_texture(AssetLoadContext& ctx, GpuDevice& device, Filter filter) {
+    std::shared_ptr<DecodedImage> decoded;
+    DecodedImage* image = ctx.prepared<DecodedImage>(); // decoded already by a background load
+    if (!image) {
+        auto bytes = ctx.read(ctx.path());
+        if (!bytes) {
+            log_asset_error(ctx.path(), "Texture", "file not found in any mount");
+            return nullptr;
+        }
+        decoded = decode_image(*bytes);
+        image = decoded.get();
+    }
+    if (!image->pixels) {
+        log_asset_error(ctx.path(), "Texture", image->error ? image->error : "not a picture");
         return nullptr;
     }
     TextureDesc desc;
-    desc.width = static_cast<u32>(w);
-    desc.height = static_cast<u32>(h);
-    desc.rgba8 = pixels;
+    desc.width = static_cast<u32>(image->w);
+    desc.height = static_cast<u32>(image->h);
+    desc.rgba8 = image->pixels;
     desc.filter = filter;
     desc.name = ctx.path();
-    auto texture = device.create_texture(desc);
-    stbi_image_free(pixels);
-    return texture;
+    return device.create_texture(desc);
 }
 
 } // namespace
@@ -124,6 +144,10 @@ void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter defa
     assets.register_loader<ComputeShader>([&device](AssetLoadContext& ctx) { return load_compute_shader(ctx, device); });
     assets.register_loader<Texture>(
         [&device, default_filter](AssetLoadContext& ctx) { return load_texture(ctx, device, default_filter); });
+    // Background loads decode the picture on the loading thread; only the upload is left for the main thread.
+    assets.register_decoder<Texture>([](std::string_view, std::span<const u8> bytes) -> std::shared_ptr<void> {
+        return decode_image(bytes);
+    });
     assets.register_loader<Font>([&device](AssetLoadContext& ctx) -> std::unique_ptr<Font> {
         auto bytes = ctx.read(ctx.path());
         if (!bytes) {

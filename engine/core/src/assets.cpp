@@ -1,8 +1,14 @@
 #include "ph/core/assets.hpp"
 
 #include "ph/core/log.hpp"
+#include "ph/core/profiler.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 
 namespace ph {
 
@@ -18,6 +24,11 @@ std::optional<std::vector<u8>> AssetLoadContext::read(std::string_view virtual_p
     auto file = assets_.resolve(virtual_path);
     if (!file) return std::nullopt;
     depends_on(*file);
+    if (prefetched_ && virtual_path == path_) { // read already, on the loading thread
+        auto bytes = std::move(prefetched_);
+        prefetched_.reset();
+        return bytes;
+    }
     return read_file_bytes(*file);
 }
 
@@ -31,8 +42,84 @@ bool AssetLoadContext::exists(std::string_view virtual_path) const { return asse
 
 // AssetManager
 
+// The loading thread: reads files (and decodes them, for types with a decoder) one at a time, in the order asked.
+struct AssetManager::Background {
+    struct Request {
+        Key key;
+        fs::path file;
+        std::shared_ptr<AssetDecoder> decoder;
+        std::optional<std::vector<u8>> bytes;
+        std::shared_ptr<void> prepared;
+    };
+    std::mutex mutex;
+    std::condition_variable wake;
+    std::deque<Request> todo;
+    std::vector<Request> done;
+    std::atomic<usize> outstanding{0};
+    bool stop = false;
+    std::thread thread;
+
+    Background() {
+        thread = std::thread([this] {
+            profiler::set_thread_name("asset loading");
+            for (;;) {
+                Request r;
+                {
+                    std::unique_lock lock(mutex);
+                    wake.wait(lock, [&] { return stop || !todo.empty(); });
+                    if (stop) return;
+                    r = std::move(todo.front());
+                    todo.pop_front();
+                }
+                r.bytes = read_file_bytes(r.file);
+                if (r.bytes && r.decoder && *r.decoder) r.prepared = (*r.decoder)(r.key.path, *r.bytes);
+                std::lock_guard lock(mutex);
+                done.push_back(std::move(r));
+            }
+        });
+    }
+    ~Background() {
+        {
+            std::lock_guard lock(mutex);
+            stop = true;
+        }
+        wake.notify_all();
+        thread.join();
+    }
+};
+
 AssetManager::AssetManager() = default;
 AssetManager::~AssetManager() = default;
+
+void AssetManager::start_background(const Key& key, fs::path file, std::shared_ptr<AssetDecoder> decoder) {
+    if (!background_) background_ = std::make_unique<Background>();
+    {
+        std::lock_guard lock(background_->mutex);
+        background_->todo.push_back({key, std::move(file), std::move(decoder), std::nullopt, nullptr});
+    }
+    background_->outstanding.fetch_add(1, std::memory_order_relaxed);
+    background_->wake.notify_one();
+}
+
+usize AssetManager::loading() const { return background_ ? background_->outstanding.load(std::memory_order_relaxed) : 0; }
+
+void AssetManager::finish_loads() {
+    if (!background_ || loading() == 0) return;
+    std::vector<Background::Request> ready;
+    {
+        std::lock_guard lock(background_->mutex);
+        ready.swap(background_->done);
+    }
+    for (auto& r : ready) {
+        background_->outstanding.fetch_sub(1, std::memory_order_relaxed);
+        auto it = entries_.find(r.key);
+        if (it == entries_.end() || !it->second->pending) continue; // finished early by load(), or rolled back
+        Entry& entry = *it->second;
+        entry.pending = false;
+        bool ok = entry.finish(entry, std::move(r.bytes), std::move(r.prepared));
+        notify(entry.path, ok);
+    }
+}
 
 void AssetManager::mount(std::string virtual_prefix, fs::path directory) {
     info("assets: mounted '{}' -> {}", virtual_prefix, directory.string());
@@ -68,6 +155,7 @@ void AssetManager::notify(std::string_view path, bool ok) {
 }
 
 void AssetManager::poll() {
+    finish_loads();
     if (!hot_reload_) return;
     watcher_.poll();
     // Snapshot first: loaders may load other assets (a sprite sheet loads its image), which inserts into entries_.

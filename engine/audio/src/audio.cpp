@@ -558,52 +558,65 @@ std::unique_ptr<Sound> to_mixer_format(std::string_view path, const SDL_AudioSpe
 
 bool is_ogg(std::string_view path) { return path.ends_with(".ogg") || path.ends_with(".oga") || path.ends_with(".opus"); }
 
+// A whole sound file decoded to the mixer's format. Thread-safe: background loads run it on the loading thread.
+std::unique_ptr<Sound> decode_sound(std::string_view path, std::span<const u8> bytes) {
+    std::vector<u8> copy(bytes.begin(), bytes.end());
+    if (detail::looks_like_opus(copy)) {
+        auto decoder = detail::open_opus(copy);
+        if (!decoder) {
+            log_asset_error(path, "Sound", opus_supported() ? "not a valid Ogg Opus file" : "Opus needs the engine built with -DPH_OPUS=ON");
+            return nullptr;
+        }
+        std::vector<f32> samples; // already 48 kHz stereo
+        std::vector<f32> block(4096 * 2);
+        while (u32 got = decoder->read(block.data(), 4096)) samples.insert(samples.end(), block.begin(), block.begin() + got * 2);
+        return std::make_unique<Sound>(std::move(samples));
+    }
+    if (is_ogg(path)) {
+        int channels = 0, rate = 0;
+        short* pcm = nullptr;
+        int frames = stb_vorbis_decode_memory(copy.data(), static_cast<int>(copy.size()), &channels, &rate, &pcm);
+        if (frames <= 0 || !pcm) {
+            log_asset_error(path, "Sound", "not a valid Ogg Vorbis file");
+            return nullptr;
+        }
+        SDL_AudioSpec spec{SDL_AUDIO_S16, channels, rate};
+        auto sound = to_mixer_format(path, spec, pcm, frames * channels * static_cast<int>(sizeof(short)));
+        std::free(pcm);
+        return sound;
+    }
+    SDL_IOStream* io = SDL_IOFromConstMem(copy.data(), copy.size());
+    SDL_AudioSpec spec;
+    Uint8* data = nullptr;
+    Uint32 length = 0;
+    if (!SDL_LoadWAV_IO(io, true, &spec, &data, &length)) {
+        log_asset_error(path, "Sound", SDL_GetError());
+        return nullptr;
+    }
+    auto sound = to_mixer_format(path, spec, data, static_cast<int>(length));
+    SDL_free(data);
+    return sound;
+}
+
+struct DecodedSound {
+    std::unique_ptr<Sound> sound; // null if decoding failed (and said why)
+};
+
 } // namespace
 
 void register_asset_loaders(AssetManager& assets) {
     // Sound: decoded fully up front. Use for effects; use Music for long tracks.
     assets.register_loader<Sound>([](AssetLoadContext& ctx) -> std::unique_ptr<Sound> {
+        if (auto* decoded = ctx.prepared<DecodedSound>()) return std::move(decoded->sound); // a background load
         auto bytes = ctx.read(ctx.path());
         if (!bytes) {
             log_asset_error(ctx.path(), "Sound", "file not found in any mount");
             return nullptr;
         }
-        if (detail::looks_like_opus(*bytes)) {
-            auto decoder = detail::open_opus(*bytes);
-            if (!decoder) {
-                log_asset_error(ctx.path(), "Sound",
-                                opus_supported() ? "not a valid Ogg Opus file" : "Opus needs the engine built with -DPH_OPUS=ON");
-                return nullptr;
-            }
-            std::vector<f32> samples; // already 48 kHz stereo
-            std::vector<f32> block(4096 * 2);
-            while (u32 got = decoder->read(block.data(), 4096)) samples.insert(samples.end(), block.begin(), block.begin() + got * 2);
-            return std::make_unique<Sound>(std::move(samples));
-        }
-        if (is_ogg(ctx.path())) {
-            int channels = 0, rate = 0;
-            short* pcm = nullptr;
-            int frames = stb_vorbis_decode_memory(bytes->data(), static_cast<int>(bytes->size()), &channels, &rate, &pcm);
-            if (frames <= 0 || !pcm) {
-                log_asset_error(ctx.path(), "Sound", "not a valid Ogg Vorbis file");
-                return nullptr;
-            }
-            SDL_AudioSpec spec{SDL_AUDIO_S16, channels, rate};
-            auto sound = to_mixer_format(ctx.path(), spec, pcm, frames * channels * static_cast<int>(sizeof(short)));
-            std::free(pcm);
-            return sound;
-        }
-        SDL_IOStream* io = SDL_IOFromConstMem(bytes->data(), bytes->size());
-        SDL_AudioSpec spec;
-        Uint8* data = nullptr;
-        Uint32 length = 0;
-        if (!SDL_LoadWAV_IO(io, true, &spec, &data, &length)) {
-            log_asset_error(ctx.path(), "Sound", SDL_GetError());
-            return nullptr;
-        }
-        auto sound = to_mixer_format(ctx.path(), spec, data, static_cast<int>(length));
-        SDL_free(data);
-        return sound;
+        return decode_sound(ctx.path(), *bytes);
+    });
+    assets.register_decoder<Sound>([](std::string_view path, std::span<const u8> bytes) -> std::shared_ptr<void> {
+        return std::make_shared<DecodedSound>(DecodedSound{decode_sound(path, bytes)});
     });
 
     assets.register_loader<Music>([](AssetLoadContext& ctx) -> std::unique_ptr<Music> {
