@@ -39,8 +39,9 @@ function(ph_compile_shaders outputs_var source_dir output_dir)
 endfunction()
 
 # Moves a game's sources into a loadable library (<target>_code) and turns <target> into the engine host that loads
-# and reloads it. The host contains every engine object file (force-linked) and exports its symbols, so the library
-# links against nothing and resolves engine calls from the host at load time.
+# and reloads it. The host contains every engine object file and exports its symbols. On macOS and Linux the library
+# links against nothing and finds engine functions in the host when it's loaded. Windows has no such lazy lookup, so
+# there the library links against the host's import library instead.
 function(ph_make_hot_reloadable target)
     get_target_property(sources ${target} SOURCES)
     get_target_property(source_dir ${target} SOURCE_DIR)
@@ -67,7 +68,20 @@ function(ph_make_hot_reloadable target)
     endif()
     set_target_properties(${code} PROPERTIES FOLDER samples)
 
-    set_property(TARGET ${target} PROPERTY SOURCES "${PH_ENGINE_SOURCE_DIR}/app/hot/host_main.cpp")
+    set(host_sources "${PH_ENGINE_SOURCE_DIR}/app/hot/host_main.cpp")
+    set(engine_libs ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app ph_imgui)
+    if(WIN32)
+        # WINDOWS_EXPORT_ALL_SYMBOLS only exports a target's own object files, so the engine's objects are built
+        # into the host directly (the static libraries it also links then have nothing left to contribute).
+        foreach(lib IN LISTS engine_libs)
+            if(TARGET ${lib})
+                list(APPEND host_sources $<TARGET_OBJECTS:${lib}>)
+            endif()
+        endforeach()
+        set_target_properties(${target} PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+        target_link_libraries(${code} PRIVATE ${target})
+    endif()
+    set_property(TARGET ${target} PROPERTY SOURCES ${host_sources})
     set_target_properties(${target} PROPERTIES ENABLE_EXPORTS ON)
     # The host rebuilds the library itself when a source file is saved: it watches the folders holding the sources
     # and runs this build.
@@ -78,7 +92,12 @@ function(ph_make_hot_reloadable target)
         PH_HOT_RELOAD_BUILD_DIR="${CMAKE_BINARY_DIR}"
         PH_HOT_RELOAD_TARGET="${code}"
         PH_HOT_RELOAD_CONFIG="$<CONFIG>")
-    foreach(lib ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui ph_app ph_imgui ph_shaderc)
+    if(WIN32)
+        # The library links against the host, so the host can't also depend on the library. Building everything (or
+        # the library) builds both.
+        return()
+    endif()
+    foreach(lib IN LISTS engine_libs ITEMS ph_shaderc)
         if(TARGET ${lib})
             if(APPLE)
                 target_link_options(${target} PRIVATE "LINKER:-force_load,$<TARGET_FILE:${lib}>")
@@ -99,14 +118,14 @@ endfunction()
 # With PH_MACOS_BUNDLES (on in the release preset) a macOS game is a .app with these folders in Contents/Resources.
 # `cmake --install <build dir> --prefix <folder>` lays out a shippable copy of every game.
 #   BUNDLE_ID com.example.game   macOS bundle identifier (default: com.bowl.<target>)
-#   HOT_RELOAD                   dev builds on macOS/Linux: the game's sources become <target>_code, a library the
+#   HOT_RELOAD                   dev builds: the game's sources become <target>_code, a library the
 #                                <target> executable reloads whenever it's rebuilt (see ph/app/hot_reload.hpp)
 function(ph_add_game target)
     cmake_parse_arguments(ARG "HOT_RELOAD" "ASSETS;BUNDLE_ID" "" ${ARGN})
     target_link_libraries(${target} PRIVATE ph::engine)
     ph_configure_target(${target})
 
-    if(ARG_HOT_RELOAD AND PH_DEV_TOOLS AND NOT WIN32)
+    if(ARG_HOT_RELOAD AND PH_DEV_TOOLS)
         if(CMAKE_VERSION VERSION_LESS 3.27)
             message(WARNING "${target}: hot reload needs CMake 3.27+; building it normally")
         else()

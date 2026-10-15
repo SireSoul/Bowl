@@ -7,7 +7,9 @@
 #include <SDL3/SDL_properties.h>
 #include <SDL3/SDL_stdinc.h>
 
-#if !defined(_WIN32)
+#if defined(_WIN32)
+#include <windows.h>
+#else
 #include <dlfcn.h>
 #endif
 
@@ -139,6 +141,40 @@ void AutoBuilder::poll() {
 
 // HotReloadHost
 
+namespace {
+
+// The few operating-system calls hot reload needs.
+#if defined(_WIN32)
+void* load_library(const fs::path& path) { return LoadLibraryW(path.c_str()); }
+void* find_symbol(void* library, const char* name) {
+    return reinterpret_cast<void*>(GetProcAddress(static_cast<HMODULE>(library), name));
+}
+void unload_library(void* library) { FreeLibrary(static_cast<HMODULE>(library)); }
+std::string last_error() { return std::format("Windows error {}", GetLastError()); }
+// The module (executable or library) whose code contains an address.
+const void* module_of(const void* address) {
+    HMODULE module = nullptr;
+    if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                            reinterpret_cast<LPCWSTR>(address), &module))
+        return nullptr;
+    return module;
+}
+#else
+void* load_library(const fs::path& path) { return dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL); }
+void* find_symbol(void* library, const char* name) { return dlsym(library, name); }
+void unload_library(void* library) { dlclose(library); }
+std::string last_error() {
+    const char* e = dlerror();
+    return e ? e : "unknown error";
+}
+const void* module_of(const void* address) {
+    Dl_info info{};
+    return dladdr(address, &info) ? info.dli_fbase : nullptr;
+}
+#endif
+
+} // namespace
+
 using CreateGame = Game* (*)();
 
 struct HotReloadHost::Library {
@@ -148,9 +184,7 @@ struct HotReloadHost::Library {
     const void* base = nullptr;
 
     ~Library() {
-#if !defined(_WIN32)
-        if (handle) dlclose(handle);
-#endif
+        if (handle) unload_library(handle);
         std::error_code ec;
         if (!copy.empty()) fs::remove(copy, ec);
     }
@@ -165,10 +199,6 @@ HotReloadHost::~HotReloadHost() {
 }
 
 std::unique_ptr<HotReloadHost::Library> HotReloadHost::open_copy() {
-#if defined(_WIN32)
-    error("hot reload: not supported on Windows yet");
-    return nullptr;
-#else
     const fs::path& library = options_.library;
     auto lib = std::make_unique<Library>();
     std::error_code ec;
@@ -180,20 +210,18 @@ std::unique_ptr<HotReloadHost::Library> HotReloadHost::open_copy() {
         lib->copy.clear();
         return nullptr;
     }
-    lib->handle = dlopen(lib->copy.c_str(), RTLD_NOW | RTLD_LOCAL);
+    lib->handle = load_library(lib->copy);
     if (!lib->handle) {
-        error("hot reload: {}", dlerror());
+        error("hot reload: can't load {}: {}", library.string(), last_error());
         return nullptr;
     }
-    lib->create = reinterpret_cast<CreateGame>(dlsym(lib->handle, "ph_create_game"));
+    lib->create = reinterpret_cast<CreateGame>(find_symbol(lib->handle, "ph_create_game"));
     if (!lib->create) {
         error("hot reload: {} has no ph_create_game (is it built with PH_MAIN?)", library.string());
         return nullptr;
     }
-    Dl_info info{};
-    if (dladdr(reinterpret_cast<const void*>(lib->create), &info)) lib->base = info.dli_fbase;
+    lib->base = module_of(reinterpret_cast<const void*>(lib->create));
     return lib;
-#endif
 }
 
 AppConfig HotReloadHost::configure() {
@@ -240,20 +268,12 @@ void HotReloadHost::check(Engine& engine) {
 
 namespace {
 bool code_in_library(const ecs::ComponentInfo& info, void* base) {
-#if defined(_WIN32)
-    (void)info;
-    (void)base;
-    return false;
-#else
     const void* fns[] = {reinterpret_cast<const void*>(info.move_construct), reinterpret_cast<const void*>(info.destroy),
                          reinterpret_cast<const void*>(info.construct_default), reinterpret_cast<const void*>(info.save),
                          reinterpret_cast<const void*>(info.load), reinterpret_cast<const void*>(info.visit)};
-    for (const void* fn : fns) {
-        Dl_info di{};
-        if (fn && dladdr(fn, &di) && di.dli_fbase == base) return true;
-    }
+    for (const void* fn : fns)
+        if (fn && module_of(fn) == base) return true;
     return false;
-#endif
 }
 } // namespace
 
