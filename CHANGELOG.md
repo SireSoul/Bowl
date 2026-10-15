@@ -6,6 +6,15 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Packaging: `ph_add_game(... NAME <name> ICON <png> [ICON_PIXEL_ART])` makes the `.icns`, the `.ico` (built into the
+  `.exe`), Linux PNG and desktop files, and the window icon (`ph::embedded_icon`, `Window::set_icon`); the `ph-icon`
+  tool. Installing signs macOS bundles (`PH_MACOS_SIGN_IDENTITY`, ad hoc by default; `PH_MACOS_ENTITLEMENTS`) and,
+  with `PH_WINDOWS_SIGN_COMMAND`, Windows executables; `cmake/PhNotarize.cmake` notarizes and staples. `ph_package`
+  makes installers with `cpack` (DMG, NSIS, ZIP, TGZ), an AppImage (`<game>_appimage`) and a Flatpak manifest
+  (`PH_LINUX_SHARE`).
+- Steam Deck: `ph::is_steam_deck()`, fullscreen there by default (`AppConfig::fullscreen_on_steam_deck`), and
+  `--deck` to preview a game in a 1280 x 800 window. `Input::last_device()` for keyboard or gamepad prompts.
+- `gfx::decode_png`.
 - Networking (`ph_net`, guide in docs/guides/networking.md): `net::Host`, connections over UDP with reliable ordered
   messages (resent until acknowledged, up to 64 KB) and unreliable ones, timeouts, stats and a simulated bad network;
   `net::Lockstep` and `net::Rollback` (guessed inputs, saved states, re-running ticks when a guess was wrong).

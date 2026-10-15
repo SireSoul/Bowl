@@ -1,4 +1,5 @@
 #include "ph/platform/input.hpp"
+#include "ph/platform/system.hpp"
 
 #include <SDL3/SDL_events.h>
 #include <doctest/doctest.h>
@@ -80,4 +81,14 @@ TEST_CASE("input: vector normalizes diagonals") {
     CHECK(v.length() == doctest::Approx(1.0f));
     CHECK(v.x > 0);
     CHECK(v.y > 0);
+}
+
+TEST_CASE("platform: Steam Deck detection can be overridden") {
+    bool detected = ph::is_steam_deck(); // false on the machines tests run on, but don't rely on it
+    ph::set_steam_deck(true);
+    CHECK(ph::is_steam_deck());
+    ph::set_steam_deck(false);
+    CHECK_FALSE(ph::is_steam_deck());
+    ph::set_steam_deck(std::nullopt);
+    CHECK(ph::is_steam_deck() == detected);
 }

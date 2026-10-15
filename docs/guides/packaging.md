@@ -61,7 +61,148 @@ The bundle's identifier defaults to `com.bowl.<target>`; set yours with
 `ph_add_game(my_game ... BUNDLE_ID com.yourstudio.mygame)`. The bundle version comes from the `project(... VERSION)`
 in your `CMakeLists.txt`.
 
-Zip the folder (or the `.app`) and it runs on another machine of the same OS and architecture.
+Zip the folder (or the `.app`) and it runs on another machine of the same OS and architecture. Or let
+[`ph_package`](#installers) make installers.
+
+## The icon
+
+Give `ph_add_game` a picture and a name:
+
+```cmake
+ph_add_game(my_game ASSETS assets NAME "My Game" ICON art/icon.png)
+```
+
+The icon is a square PNG, 1024 x 1024 at best. The build turns it into what each platform wants:
+
+| | |
+| --- | --- |
+| macOS | `my_game.icns` with every size from 16 to 1024, in the bundle's `Resources/` |
+| Windows | `my_game.ico` with 16 to 256, built into `my_game.exe` (the icon Explorer shows) |
+| Linux | `my_game.png` (256 x 256) and `my_game.desktop` next to the game, for menus, AppImage and Flatpak |
+| Everywhere | the window's icon (title bar, taskbar; the Dock when the game isn't an `.app`) |
+
+A small pixel-art icon scales up blurry; add `ICON_PIXEL_ART` to keep its pixels hard-edged. The samples use
+`samples/icon.png`, 64 x 64, that way.
+
+The `ph-icon` tool does the work, and you can run it yourself:
+
+```bash
+ph-icon icon.png --icns my_game.icns --ico my_game.ico --png 512 my_game-512.png
+```
+
+## Signing and notarization
+
+### macOS
+
+Installing signs each `.app` with `codesign`. By default the signature is ad hoc (`PH_MACOS_SIGN_IDENTITY` is `-`):
+the bundle is sealed, so nothing in it can change unnoticed, but it doesn't say who made it. That's enough on your own
+Mac. On other Macs, Gatekeeper warns about an app from the internet unless it's signed with a Developer ID and
+notarized by Apple.
+
+To ship, join the Apple Developer Program, then:
+
+1. Sign with your Developer ID. Installing then also turns on the hardened runtime and a secure timestamp, which
+   notarization needs:
+
+   ```bash
+   cmake --preset release -DPH_MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+   ```
+
+2. Store your notarization credentials once (an app-specific password, or an App Store Connect API key):
+
+   ```bash
+   xcrun notarytool store-credentials my-profile --apple-id you@example.com --team-id TEAMID
+   ```
+
+3. Have Apple check the app or disk image, and staple the result to it:
+
+   ```bash
+   cmake -DFILE=build/release/MyGame-1.2.0-Darwin.dmg -DPROFILE=my-profile -P cmake/PhNotarize.cmake
+   ```
+
+`PH_MACOS_ENTITLEMENTS` takes an entitlements file, if the game needs any. Set `PH_MACOS_SIGN_IDENTITY` to empty to
+skip signing.
+
+### Windows
+
+Windows SmartScreen warns about unsigned programs. With a code-signing certificate, set `PH_WINDOWS_SIGN_COMMAND` to
+the command that signs a file; installing runs it on each game's `.exe`:
+
+```bash
+cmake --preset release -DPH_WINDOWS_SIGN_COMMAND="signtool;sign;/fd;SHA256;/a;/tr;http://timestamp.digicert.com;/td;SHA256"
+```
+
+## Installers
+
+`ph_package` in your `CMakeLists.txt`, after `ph_add_game`, sets up installers for the game:
+
+```cmake
+ph_package(my_game VENDOR "Your Studio" DESCRIPTION "A game about bowls" LICENSE LICENSE.txt)
+```
+
+Build, then run `cpack` in the build folder:
+
+```bash
+cmake --build --preset release
+```
+
+```bash
+cd build/release && cpack
+```
+
+| OS | Makes |
+| --- | --- |
+| macOS | `MyGame-1.2.0-Darwin.dmg`: the signed `.app` next to a link to Applications, with the icon on the volume. Also a `.zip` |
+| Windows | `MyGame-1.2.0-Windows.exe`, an installer with a Start menu entry and an uninstaller, when [NSIS](https://nsis.sourceforge.io) is installed. Also a `.zip` |
+| Linux | `MyGame-1.2.0-Linux.tar.gz` |
+
+Each comes with a `.sha256` file. `cpack` installs and signs the game the same way `cmake --install` does.
+
+### AppImage
+
+An AppImage is one file that runs on most Linux distributions:
+
+```bash
+cmake --build build/release --target my_game_appimage
+```
+
+This installs the game into `build/release/my_game.AppDir`, adds what an AppImage needs (`AppRun`, the desktop file and
+the icon, so the game needs an `ICON`), and packs it with
+[appimagetool](https://github.com/AppImage/appimagetool/releases) if that's on `PATH`. Without it, the AppDir is left
+ready for you to pack. Build on the oldest distribution you support: an AppImage runs on systems as new as or newer
+than the one it was built on.
+
+### Flatpak
+
+`ph_package` writes `build/release/<bundle id>.flatpak.json`, a manifest for `flatpak-builder`. It builds the game from
+your source folder with the freedesktop runtime, and installs the desktop file and icon where Flatpak looks
+(`PH_LINUX_SHARE`):
+
+```bash
+flatpak-builder --user --install --force-clean build/flatpak build/release/com.yourstudio.mygame.flatpak.json
+```
+
+The manifest lets the build download the engine's dependencies, which a local build allows and Flathub doesn't; for
+Flathub, list them as sources instead. If the engine lives outside your project's folder, add it as a source too. The
+game gets the display, the GPU, sound and gamepads; add `--share=network` to `finish-args` if it plays online.
+
+## Steam Deck
+
+On a Steam Deck (Steam says so, or the hardware is one), `ph::is_steam_deck()` is true and the game starts fullscreen
+(turn that off with `AppConfig::fullscreen_on_steam_deck`). To see how a game looks there, run it with `--deck`: a
+1280 x 800 window that also makes `is_steam_deck()` true.
+
+Valve's checks for "Deck Verified", and what they mean here:
+
+- **Controls.** Everything works with a gamepad, including menus and text entry. Bind gamepad buttons for every
+  action (see [Input](input.md)); the [UI](ui.md) navigates by focus.
+- **Glyphs.** Show gamepad buttons, not keys, when the player uses a gamepad (`input.last_device()`).
+- **Text.** At 1280 x 800, text is at least 9 pixels tall, 12 is better. Check with `--deck`.
+- **Resolution.** The game runs at 1280 x 800 (16:10) without black bars where possible, or at 16:9 letterboxed.
+- **No launcher**, and no mouse needed anywhere.
+
+The Deck runs Linux builds directly and Windows builds through Proton. A Linux build is the more direct path. Test on a
+real Deck before shipping: performance, suspend and resume, and the on-screen keyboard can't be checked in a window.
 
 ## What players need
 
@@ -84,8 +225,5 @@ Zip the folder (or the `.app`) and it runs on another machine of the same OS and
 
 These are on the [roadmap](../roadmap.md):
 
-- application icons (Windows `.ico`, macOS `.icns`);
-- macOS code signing and notarization (until then, Gatekeeper warns about the app on other Macs);
-- a Windows installer, a Linux AppImage or Flatpak;
 - iOS and Android packaging;
 - packing assets into an archive (they're loose files today).

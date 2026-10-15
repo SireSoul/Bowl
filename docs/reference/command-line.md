@@ -14,6 +14,7 @@ The engine reads these before the game starts. All arguments, including these, a
 | `--no-vsync` | Don't wait for the display's refresh; useful for measuring frame times |
 | `--driver <name>` | GPU backend: `vulkan`, `metal` or `direct3d12` |
 | `--lang <code>` | Language for localized strings, such as `es` |
+| `--deck` | Pretend to be a Steam Deck, in a 1280 x 800 window (see [packaging](../guides/packaging.md#steam-deck)) |
 | `--no-auto-build` | Hot-reload builds: don't rebuild the game code when a source file is saved |
 
 Together, `--frames` and `--screenshot` make visual checks scriptable. CI uses them to render a sample on Direct3D 12:

@@ -3,6 +3,7 @@
 #include "ph/core/math.hpp"
 #include "ph/core/types.hpp"
 
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -35,6 +36,8 @@ public:
     void set_title(std::string_view title);
     void set_fullscreen(bool fullscreen);
     bool fullscreen() const;
+    // The title bar and taskbar icon, from RGBA8 pixels. The App sets the game's ICON (ph_add_game) by itself.
+    bool set_icon(u32 width, u32 height, std::span<const u8> rgba);
 
 private:
     SDL_Window* window_ = nullptr;

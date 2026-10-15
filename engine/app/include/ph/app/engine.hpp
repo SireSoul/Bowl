@@ -10,6 +10,7 @@
 #include "ph/ecs/ecs.hpp"
 #include "ph/gfx/renderer.hpp"
 #include "ph/platform/input.hpp"
+#include "ph/platform/system.hpp"
 #include "ph/platform/window.hpp"
 
 #include <memory>
@@ -34,6 +35,7 @@ struct AppConfig {
     std::string organization = "Bowl";
     std::string application;         // empty: the window title
     std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
+    bool fullscreen_on_steam_deck = true; // see is_steam_deck() in ph/platform/system.hpp
     // For tools built on the engine, like the editor: Game::dev_ui is always shown, not only while the F1 overlay
     // is open, and the engine's own windows move from F1 to F12. Dev builds only.
     bool dev_ui_always = false;

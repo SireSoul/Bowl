@@ -92,6 +92,10 @@ public:
     f32 axis(GamepadAxis a, int pad = 0) const;
     void rumble(int pad, f32 low, f32 high, u32 milliseconds);
 
+    // What the player used last: show gamepad buttons in prompts while it's a gamepad, keys while it's the keyboard.
+    enum class Device : u8 { KeyboardMouse, Gamepad };
+    Device last_device() const { return last_device_; }
+
     // Text typed this frame (UTF-8), for name entry and chat.
     std::string_view text() const { return text_; }
 
@@ -169,6 +173,7 @@ private:
     Context context_ = Context::Frame;
     bool block_keyboard_ = false, block_mouse_ = false;
     std::optional<InputBinding> last_pressed_;
+    Device last_device_ = Device::KeyboardMouse;
 };
 
 } // namespace ph

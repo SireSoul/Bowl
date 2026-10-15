@@ -133,20 +133,32 @@ function(ph_export_engine target)
     endforeach()
 endfunction()
 
-# ph_add_game(<target> [ASSETS <dir>] [BUNDLE_ID <id>] [HOT_RELOAD])
+# ph_add_game(<target> [ASSETS <dir>] [NAME <name>] [ICON <png>] [ICON_PIXEL_ART] [BUNDLE_ID <id>] [HOT_RELOAD])
 # Links the engine and lays out the runtime folder next to the executable:
 #   <exe dir>/engine/...  engine assets (compiled shaders)
 #   <exe dir>/assets/...  the game's assets, with its shaders compiled
 # Dev builds read assets straight from the source folders instead, so edits hot-reload.
 # With PH_MACOS_BUNDLES (on in the release preset) a macOS game is a .app with these folders in Contents/Resources.
-# `cmake --install <build dir> --prefix <folder>` lays out a shippable copy of every game.
-#   BUNDLE_ID com.example.game   macOS bundle identifier (default: com.bowl.<target>)
+# `cmake --install <build dir> --prefix <folder>` lays out a shippable copy of every game (signed, see
+# PhPackaging.cmake); ph_package adds installers.
+#   NAME "My Game"               the name players see: macOS bundle, Linux menus, installers (default: <target>)
+#   ICON art/icon.png            the application icon: a square PNG, 1024 x 1024 at best. Becomes the .icns, .ico or
+#                                Linux icon, and the window's icon
+#   ICON_PIXEL_ART               scale the icon with hard pixel edges
+#   BUNDLE_ID com.example.game   macOS bundle identifier, Flatpak app id (default: com.bowl.<target>)
 #   HOT_RELOAD                   dev builds: the game's sources become <target>_code, a library the
 #                                <target> executable reloads whenever it's rebuilt (see ph/app/hot_reload.hpp)
 function(ph_add_game target)
-    cmake_parse_arguments(ARG "HOT_RELOAD" "ASSETS;BUNDLE_ID" "" ${ARGN})
+    cmake_parse_arguments(ARG "HOT_RELOAD;ICON_PIXEL_ART" "ASSETS;BUNDLE_ID;NAME;ICON" "" ${ARGN})
     target_link_libraries(${target} PRIVATE ph::engine)
     ph_configure_target(${target})
+    if(NOT ARG_NAME)
+        set(ARG_NAME "${target}")
+    endif()
+    if(NOT ARG_BUNDLE_ID)
+        string(TOLOWER "com.bowl.${target}" ARG_BUNDLE_ID)
+    endif()
+    set_target_properties(${target} PROPERTIES PH_DISPLAY_NAME "${ARG_NAME}" PH_BUNDLE_ID "${ARG_BUNDLE_ID}")
 
     if(ARG_HOT_RELOAD AND PH_DEV_TOOLS)
         if(CMAKE_VERSION VERSION_LESS 3.27)
@@ -159,12 +171,14 @@ function(ph_add_game target)
     set(bundle OFF)
     if(APPLE AND NOT IOS AND PH_MACOS_BUNDLES)
         set(bundle ON)
-        if(NOT ARG_BUNDLE_ID)
-            string(TOLOWER "com.bowl.${target}" ARG_BUNDLE_ID)
-        endif()
+    endif()
+    if(ARG_ICON)
+        _ph_game_icon(${target} "${ARG_ICON}" "${ARG_ICON_PIXEL_ART}" ${bundle})
+    endif()
+    if(bundle)
         set_target_properties(${target} PROPERTIES
             MACOSX_BUNDLE TRUE
-            MACOSX_BUNDLE_BUNDLE_NAME "${target}"
+            MACOSX_BUNDLE_BUNDLE_NAME "${ARG_NAME}"
             MACOSX_BUNDLE_GUI_IDENTIFIER "${ARG_BUNDLE_ID}"
             MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
             MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}")
@@ -202,5 +216,14 @@ function(ph_add_game target)
         if(ARG_ASSETS)
             install(DIRECTORY "${dest}/assets" DESTINATION ${target})
         endif()
+        if(NOT APPLE AND NOT WIN32)
+            if(ARG_ICON)
+                set(has_icon ON)
+            else()
+                set(has_icon OFF)
+            endif()
+            _ph_linux_desktop(${target} "${ARG_NAME}" "${ARG_BUNDLE_ID}" ${has_icon})
+        endif()
     endif()
+    _ph_sign_installed(${target} ${bundle})
 endfunction()

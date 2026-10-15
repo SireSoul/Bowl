@@ -4,6 +4,7 @@
 - [Presets](#presets)
 - [Targets](#targets)
 - [ph_add_game](#ph_add_game)
+- [ph_package](#ph_package)
 - [ph_compile_shaders](#ph_compile_shaders)
 - [Other helpers](#other-helpers)
 - [Using the engine in your own project](#using-the-engine-in-your-own-project)
@@ -21,6 +22,10 @@ Set them on the configure line (`-DPH_DEV_TOOLS=OFF`) or in your own presets.
 | `PH_FETCH_SDL` | `OFF` | Build SDL3 from source (statically) even if an installed SDL3 is found |
 | `PH_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in engine, tool, test and game code as errors (CI turns this on for Linux and macOS) |
 | `PH_MACOS_BUNDLES` | `OFF` | Build macOS games as `.app` bundles |
+| `PH_MACOS_SIGN_IDENTITY` | `-` | codesign identity for installed `.app` bundles: `-` signs ad hoc, `Developer ID Application: ...` for shipping, empty skips ([packaging](../guides/packaging.md#signing-and-notarization)) |
+| `PH_MACOS_ENTITLEMENTS` | empty | An entitlements file for codesign |
+| `PH_WINDOWS_SIGN_COMMAND` | empty | A command (a CMake list) run on each installed `.exe` to sign it, such as `signtool;sign;/fd;SHA256;/a` |
+| `PH_LINUX_SHARE` | `OFF` | Also install the desktop file and icon under `share/` and the game under `bin/` (Flatpak, distro packages) |
 | `PH_BUILD_EDITOR` | `ON` when the engine is the top-level project | [Bowl Editor](../guides/editor.md) (needs `PH_DEV_TOOLS`) |
 | `PH_TRACY` | `OFF` | Send profiler zones, frames, plots and log lines to the [Tracy](../guides/jobs-and-profiling.md#tracy) profiler |
 | `PH_BOX2D` | `OFF` | Rigid-body physics through Box2D v3 ([collision.md](../guides/collision.md)) |
@@ -45,19 +50,21 @@ All presets build into `build/<preset>` and export `compile_commands.json`.
 | Target | |
 | --- | --- |
 | `ph::engine` | Everything; what games link |
-| `ph::core`, `ph::ecs`, `ph::platform`, `ph::gfx`, `ph::audio`, `ph::physics`, `ph::ui`, `ph::app` | The individual modules, for tools that need only part of the engine |
+| `ph::core`, `ph::ecs`, `ph::platform`, `ph::gfx`, `ph::audio`, `ph::physics`, `ph::ui`, `ph::net`, `ph::app` | The individual modules, for tools that need only part of the engine |
 | `ph-shaderc` | The shader compiler executable |
 | `ph_shaderc` | The shader compiler as a library |
+| `ph-icon` | Makes application icons (`.icns`, `.ico`, PNGs) from one picture; `ph_add_game(... ICON)` runs it |
 | `ph_engine_assets` | Compiles the engine's shaders |
 | `ph_tests`, `ph_bench_ecs` | Tests and benchmark |
 | `<game>_assets` | Created by `ph_add_game`: copies and compiles a game's assets |
 | `<game>_code` | Created by `ph_add_game(... HOT_RELOAD)`: the game's code as a loadable library |
+| `<game>_appimage` | Created by `ph_package` on Linux: an AppImage of the game |
 | `bowl-editor` | The [editor](../guides/editor.md) |
 
 ## ph_add_game
 
 ```cmake
-ph_add_game(<target> [ASSETS <dir>] [BUNDLE_ID <id>] [HOT_RELOAD])
+ph_add_game(<target> [ASSETS <dir>] [NAME <name>] [ICON <png>] [ICON_PIXEL_ART] [BUNDLE_ID <id>] [HOT_RELOAD])
 ```
 
 Turns an executable target into a game:
@@ -66,16 +73,32 @@ Turns an executable target into a game:
 - compiles every `*.vert.glsl` and `*.frag.glsl` under `ASSETS` into `.phsh` bundles;
 - copies the engine's assets and the game's assets next to the executable, as `engine/` and `assets/`;
 - in dev builds, tells the game where its source asset folder is, so it reads (and hot-reloads) assets from there;
-- adds install rules (see [packaging](../guides/packaging.md)).
+- with an `ICON`, makes the platform's icon files and puts the icon in the executable for the window;
+- adds install rules, signing the installed copy (see [packaging](../guides/packaging.md)).
 
 | Argument | |
 | --- | --- |
 | `ASSETS <dir>` | The game's asset folder, relative to the current `CMakeLists.txt`. Optional for games with no files |
-| `BUNDLE_ID <id>` | macOS bundle identifier, used when `PH_MACOS_BUNDLES` is on. Default `com.bowl.<target>` |
+| `NAME <name>` | The name players see: the macOS bundle name, Linux menus, installers. Default `<target>` |
+| `ICON <png>` | The application icon: a square PNG, 1024 x 1024 at best. Becomes the macOS `.icns`, the Windows `.ico` (in the `.exe`), the Linux PNG, and the window's icon |
+| `ICON_PIXEL_ART` | Scale the icon with hard pixel edges, for small pixel-art icons |
+| `BUNDLE_ID <id>` | macOS bundle identifier and Flatpak app id. Default `com.bowl.<target>` |
 | `HOT_RELOAD` | Build the game's sources as `<target>_code`, a library the `<target>` host reloads when it's rebuilt (and rebuilds it when a source file is saved). Dev builds with CMake 3.27+; ignored elsewhere. See [hot-reload.md](../guides/hot-reload.md#game-code) |
 
 Add sources to the target before calling `ph_add_game` when using `HOT_RELOAD`: the sources are moved into the library
 at that point.
+
+## ph_package
+
+```cmake
+ph_package(<target> [VENDOR <name>] [CONTACT <email>] [DESCRIPTION <text>] [LICENSE <file>])
+```
+
+Installers for one game, made by running `cpack` in the build folder after building: a `.dmg` and a `.zip` on
+macOS, an NSIS installer (when `makensis` is installed) and a `.zip` on Windows, a `.tar.gz` on Linux, each with a
+SHA-256 file. On Linux it also adds `<target>_appimage` and writes `<bundle id>.flatpak.json`. The name, version, icon
+and bundle id come from `ph_add_game` and `project()`. Call it once per build. See
+[packaging](../guides/packaging.md#installers).
 
 ## ph_compile_shaders
 

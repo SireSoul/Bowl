@@ -77,6 +77,10 @@ Convert the cursor to world coordinates with the camera: `engine.camera().screen
 
 Gamepads are picked up when they're connected, in up to four slots, and released when they're unplugged.
 
+`input.last_device()` says what the player used last, `Input::Device::KeyboardMouse` or `Input::Device::Gamepad`.
+Use it to show the right prompts ("Press A" or "Press Space") and switch the moment the player does. A stick only
+counts once it's pushed past halfway, and the mouse once it really moves, so drift and a bumped desk don't flip it.
+
 ## Rebinding
 
 A "press a key for Jump" screen needs the input the player pushes next:

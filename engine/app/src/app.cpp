@@ -1,6 +1,7 @@
 #include "ph/app/entry.hpp"
 
 #include "dev_tools.hpp"
+#include "ph/app/icon.hpp"
 #include "ph/core/profiler.hpp"
 #include "ph/core/time.hpp"
 #include "ph/ecs/hierarchy.hpp"
@@ -65,7 +66,17 @@ struct AppRunner {
                 e.config_.gpu_driver = argv[++i];
             } else if (arg == "--lang" && i + 1 < argc) {
                 e.config_.language = argv[++i];
+            } else if (arg == "--deck") { // a Steam Deck's screen, in a window
+                set_steam_deck(true);
+                e.config_.window.width = 1280;
+                e.config_.window.height = 800;
+                e.config_.window.fullscreen = false;
+                e.config_.fullscreen_on_steam_deck = false;
             }
+        }
+        if (is_steam_deck()) {
+            info("running on a Steam Deck");
+            if (e.config_.fullscreen_on_steam_deck) e.config_.window.fullscreen = true;
         }
         if (e.config_.game_asset_dir.empty() && game_asset_dir) e.config_.game_asset_dir = game_asset_dir;
         logging::set_level(e.config_.log_level);
@@ -90,6 +101,7 @@ struct AppRunner {
 
         e.jobs_ = std::make_unique<JobSystem>(e.config_.worker_threads);
         if (!e.window_.create(e.config_.window)) return false;
+        set_window_icon(e.window_);
         gfx::GpuDeviceDesc gpu_desc;
         gpu_desc.vsync = e.config_.vsync;
         gpu_desc.driver = e.config_.gpu_driver;
@@ -127,6 +139,19 @@ struct AppRunner {
         last_ticks = SDL_GetTicksNS();
         info("ready: {} worker threads, {} backend", e.jobs_->worker_count(), e.gpu_.driver());
         return true;
+    }
+
+    // The game's ICON on the window. An .app bundle's Dock icon comes from its .icns, which is sharper.
+    static void set_window_icon(Window& window) {
+        auto png = embedded_icon();
+        if (png.empty()) return;
+#if defined(__APPLE__)
+        const char* base = SDL_GetBasePath();
+        if (base && std::string_view(base).find(".app/Contents/") != std::string_view::npos) return;
+#endif
+        u32 w = 0, h = 0;
+        std::vector<u8> rgba;
+        if (gfx::decode_png(png, w, h, rgba)) window.set_icon(w, h, rgba);
     }
 
     void mount_assets(Engine& e) {

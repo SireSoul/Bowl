@@ -57,6 +57,7 @@ ph_module(ecs
 ph_module(platform
     SOURCES
         platform/src/input.cpp
+        platform/src/system.cpp
         platform/src/window.cpp
     PUBLIC_DEPS ph_core SDL3::SDL3)
 
@@ -123,6 +124,7 @@ ph_module(app
     SOURCES
         app/src/app.cpp
         app/src/dev_tools.cpp
+        app/src/icon.cpp
         app/src/hot_reload.cpp
         app/src/inspector.cpp
         app/src/scene.cpp

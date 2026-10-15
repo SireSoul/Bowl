@@ -75,16 +75,20 @@ void Input::handle_event(const SDL_Event& e) {
         if (e.key.repeat) break;
         // Releases always go through, so keys never get stuck when dev UI grabs focus mid-press.
         if (e.type == SDL_EVENT_KEY_DOWN && block_keyboard_) break;
+        if (e.type == SDL_EVENT_KEY_DOWN) last_device_ = Device::KeyboardMouse;
         set_down(static_cast<u16>(e.key.scancode & 511), e.type == SDL_EVENT_KEY_DOWN);
         break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP:
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && block_mouse_) break;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) last_device_ = Device::KeyboardMouse;
         set_down(static_cast<u16>(mouse_base + e.button.button), e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
         break;
     case SDL_EVENT_MOUSE_MOTION:
         mouse_ = {e.motion.x, e.motion.y};
         if (!block_mouse_) mouse_delta_ += {e.motion.xrel, e.motion.yrel};
+        // A real move, not the jiggle of a bumped desk.
+        if (!block_mouse_ && std::abs(e.motion.xrel) + std::abs(e.motion.yrel) > 4) last_device_ = Device::KeyboardMouse;
         break;
     case SDL_EVENT_MOUSE_WHEEL:
         if (!block_mouse_) wheel_ += e.wheel.y;
@@ -120,12 +124,14 @@ void Input::handle_event(const SDL_Event& e) {
         int slot = pad_slot(e.gbutton.which);
         if (slot >= 0 && e.gbutton.button < 32)
             set_down(static_cast<u16>(pad_base + slot * 32 + e.gbutton.button), e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN);
+        if (slot >= 0 && e.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN) last_device_ = Device::Gamepad;
         break;
     }
     case SDL_EVENT_GAMEPAD_AXIS_MOTION: {
         int slot = pad_slot(e.gaxis.which);
         if (slot >= 0 && e.gaxis.axis < 6) {
             f32 v = std::clamp(e.gaxis.value / 32767.0f, -1.0f, 1.0f);
+            if (std::abs(v) > 0.5f) last_device_ = Device::Gamepad; // past any drift
             if (!last_pressed_ && std::abs(v) > 0.6f && std::abs(axes_[slot][e.gaxis.axis]) <= 0.6f)
                 last_pressed_ = InputBinding::axis(static_cast<GamepadAxis>(e.gaxis.axis), v > 0 ? 1.0f : -1.0f);
             axes_[slot][e.gaxis.axis] = v;

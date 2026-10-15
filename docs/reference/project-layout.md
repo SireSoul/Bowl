@@ -11,6 +11,9 @@ cmake/
   PhCompiler.cmake        ph_configure_target, ph_optimize_debug: flags and warnings
   PhDependencies.cmake    third-party libraries, pinned by URL and SHA-256
   PhShaders.cmake         ph_compile_shaders, ph_add_game, game-code hot reload
+  PhPackaging.cmake       icons, signing, ph_package (installers)
+  PhAppImage.cmake        script: an AppImage from an install
+  PhNotarize.cmake        script: Apple notarization
 engine/
   CMakeLists.txt          one static library per module, and ph::engine
   assets/                 engine assets, mounted as "engine/"
@@ -28,8 +31,10 @@ engine/
 tools/
   shaderc/                ph-shaderc: library and command-line tool
   atlas/                  ph-atlas: packs pictures into an atlas with sprite-sheet JSON
+  icon/                   ph-icon: application icons from one picture
 editor/                   Bowl Editor
 samples/
+  icon.png                the samples' application icon
   tutorial/               Fireflies, the game docs/tutorial.md builds
   isometric/              y-sorted isometric map, night lighting, menu, dialogue
   sprites/                ECS stress test, custom shader, animation, hot-reloadable

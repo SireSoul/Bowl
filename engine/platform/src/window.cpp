@@ -47,6 +47,16 @@ void Window::set_title(std::string_view title) { SDL_SetWindowTitle(window_, std
 
 void Window::set_fullscreen(bool fullscreen) { SDL_SetWindowFullscreen(window_, fullscreen); }
 
+bool Window::set_icon(u32 width, u32 height, std::span<const u8> rgba) {
+    if (!window_ || rgba.size() < static_cast<usize>(width) * height * 4) return false;
+    SDL_Surface* surface = SDL_CreateSurfaceFrom(static_cast<int>(width), static_cast<int>(height), SDL_PIXELFORMAT_RGBA32,
+                                                 const_cast<u8*>(rgba.data()), static_cast<int>(width * 4));
+    if (!surface) return false;
+    bool ok = SDL_SetWindowIcon(window_, surface);
+    SDL_DestroySurface(surface);
+    return ok;
+}
+
 bool Window::fullscreen() const { return (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0; }
 
 } // namespace ph

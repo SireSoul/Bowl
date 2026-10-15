@@ -30,10 +30,12 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(PhCompiler)
 include(PhDependencies)
 include(PhShaders)
+include(PhPackaging)
 
 add_subdirectory(tools/shaderc)
 add_subdirectory(engine)
 add_subdirectory(tools/atlas)
+add_subdirectory(tools/icon)
 
 if(PH_BUILD_TESTS)
     enable_testing()

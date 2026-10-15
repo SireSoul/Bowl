@@ -128,6 +128,15 @@ std::unique_ptr<Texture> load_texture(AssetLoadContext& ctx, GpuDevice& device, 
 
 } // namespace
 
+bool decode_png(std::span<const u8> bytes, u32& width, u32& height, std::vector<u8>& rgba) {
+    auto image = decode_image(bytes);
+    if (!image->pixels) return false;
+    width = static_cast<u32>(image->w);
+    height = static_cast<u32>(image->h);
+    rgba.assign(image->pixels, image->pixels + static_cast<usize>(width) * height * 4);
+    return true;
+}
+
 bool write_png(const std::filesystem::path& path, u32 width, u32 height, std::span<const u8> rgba) {
     std::vector<u8> png;
     auto append = [](void* ctx, void* data, int size) {
