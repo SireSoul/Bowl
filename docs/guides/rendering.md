@@ -9,7 +9,7 @@ renderer draws the batches with post-processing and 2D lighting on top. This pag
 - [Color and blending](#color-and-blending)
 - [Textures](#textures)
 - [Materials](#materials)
-- [The three layers: scene, lights, UI](#the-three-layers-scene-lights-ui)
+- [The layers: scene, lights, UI](#the-layers-scene-lights-ui)
 - [Post-processing](#post-processing)
 - [2D lighting](#2d-lighting)
 - [Pixel art](#pixel-art)

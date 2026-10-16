@@ -10,7 +10,7 @@ fraction of a second.
 - [Includes](#includes)
 - [Live editing](#live-editing)
 - [bowl-shaderc](#bowl-shaderc)
-- [The .bowlsh bundle](#the-phsh-bundle)
+- [The .bowlsh bundle](#the-bowlsh-bundle)
 - [Engine shaders](#engine-shaders)
 - [Limitations](#limitations)
 
