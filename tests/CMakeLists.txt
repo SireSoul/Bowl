@@ -2,6 +2,7 @@ add_executable(ph_tests
     main.cpp
     test_assets.cpp
     test_audio.cpp
+    test_bidi.cpp
     test_collision.cpp
     test_ecs.cpp
     test_apidoc.cpp

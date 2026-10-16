@@ -64,6 +64,7 @@ ph_module(platform
 
 ph_module(gfx
     SOURCES
+        gfx/src/bidi.cpp
         gfx/src/color_glyphs.cpp
         gfx/src/device.cpp
         gfx/src/gpu_particles.cpp
@@ -83,6 +84,12 @@ if(PH_DEV_TOOLS)
 endif()
 if(WIN32)
     target_link_libraries(ph_gfx PRIVATE d3dcompiler) # HLSL -> DXBC for the D3D12 backend
+endif()
+if(PH_HARFBUZZ)
+    target_link_libraries(ph_gfx PRIVATE ph_harfbuzz)
+    target_compile_definitions(ph_gfx PRIVATE PH_HARFBUZZ=1)
+else()
+    target_compile_definitions(ph_gfx PRIVATE PH_HARFBUZZ=0)
 endif()
 
 ph_module(audio

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ph/core/assets.hpp"
+#include "ph/gfx/bidi.hpp"
 #include "ph/gfx/sprites.hpp"
 
 #include <algorithm>
@@ -85,7 +86,14 @@ private:
     };
     struct Impl;
     struct Face; // which font file draws a character, and its glyph index there
+    friend struct TextShaper; // text layout: glyphs by index, for shaped text
     Face face_for(u32 codepoint) const;
+    Glyph rasterize(const Face& face, u32 px);
+    // Fonts by slot: 0 is this one, 1.. its fallbacks. -1: none has the character.
+    int slot_for(u32 codepoint) const;
+    f32 slot_scale(int slot, f32 pixel_size) const; // font units to pixels
+    void* hb_font(int slot) const;                  // its hb_font_t, in HarfBuzz builds
+    const Glyph& glyph_at(int slot, u32 glyph_index, f32 pixel_size);
     static bool place(std::vector<Page>& pages, u32 w, u32 h, u16& page, u32& x, u32& y);
     const Texture* upload(std::vector<Page>& pages, u16 index, std::string_view label);
 
@@ -93,10 +101,16 @@ private:
     GpuDevice* device_ = nullptr;
     std::string name_;
     std::vector<Page> pages_, sdf_pages_;
-    std::unordered_map<u64, Glyph> glyphs_; // key: size_px << 32 | codepoint
+    std::unordered_map<u64, Glyph> glyphs_;       // key: size_px << 32 | codepoint
+    std::unordered_map<u64, Glyph> index_glyphs_; // key: size_px << 40 | slot << 32 | glyph index
     std::unordered_map<u32, Glyph> sdf_glyphs_;
     std::vector<Asset<Font>> fallbacks_;
 };
+
+// Whether this build shapes text with HarfBuzz (PH_HARFBUZZ): joined Arabic letters, Indic and other complex scripts,
+// ligatures and OpenType kerning. Without it, characters are drawn one by one; right-to-left text is still put in
+// order (see ph/gfx/bidi.hpp).
+bool text_shaping();
 
 enum class TextAlign : u8 { Left, Center, Right };
 
@@ -104,6 +118,9 @@ struct TextStyle {
     f32 size = 16;            // font size (ascent to descent) in world units; logical points for UI
     Color color = Color::white();
     TextAlign align = TextAlign::Left;
+    // Which way paragraphs run: from their first letter (Auto), or as set. Right-to-left characters (Hebrew, Arabic) are
+    // put in reading order either way.
+    bidi::Direction direction = bidi::Direction::Auto;
     f32 max_width = 0;        // > 0: wrap words at this width
     f32 line_spacing = 1;     // multiplier on the font's line height
     // How many pixels one world unit covers, so glyphs rasterize at screen resolution. For a UI camera on a high-DPI
@@ -131,14 +148,15 @@ struct TextStyle {
 
 // One laid-out character, for drawing text your own way.
 struct PlacedGlyph {
-    u32 codepoint = 0;
-    u32 index = 0;      // among the visible characters, from 0
+    u32 codepoint = 0;        // the character drawn (a bracket in right-to-left text is drawn mirrored)
+    u32 glyph_index = 0;      // shaped text: the glyph in its font (a character can be several glyphs, or share one)
+    u32 index = 0;            // among the visible characters, from 0, in reading order
     u16 page = 0;
     bool sdf = false;
     bool color_glyph = false; // an emoji: its color is white with the text's alpha, so it keeps its own colors
-    Rect source;        // in the font page
-    Vec2 position;      // top-left corner in the world
-    Vec2 size;          // in the world
+    Rect source;              // in the font page
+    Vec2 position;            // top-left corner in the world
+    Vec2 size;                // in the world
     Color color;
 };
 

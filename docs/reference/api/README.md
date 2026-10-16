@@ -45,6 +45,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [ph/ecs/schedule.hpp](ecs.md#phecsschedulehpp) | An ordered list of systems. |
 | [ph/ecs/world.hpp](ecs.md#phecsworldhpp) | Extra include/exclude terms for a query, for components you filter on but don't read. |
 | [ph/ecs/world_io.hpp](ecs.md#phecsworld_iohpp) | Saving and loading entities as JSON, for save games, scenes, prefabs and copy/paste in tools. |
+| [ph/gfx/bidi.hpp](gfx.md#phgfxbidihpp) | Embedding levels for one paragraph's characters: even runs left to right, odd right to left. |
 | [ph/gfx/device.hpp](gfx.md#phgfxdevicehpp) | A rectangle of whole pixels in a texture, top-left origin. |
 | [ph/gfx/gpu_particles.hpp](gfx.md#phgfxgpu_particleshpp) | How a GpuParticles emitter behaves. |
 | [ph/gfx/particles.hpp](gfx.md#phgfxparticleshpp) | What an emitter spawns. |

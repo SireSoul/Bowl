@@ -2,6 +2,9 @@
 
 #include "color_glyphs.hpp"
 #include "ph/core/log.hpp"
+#if PH_HARFBUZZ
+#include <hb.h>
+#endif
 #include "ph/core/utf8.hpp"
 
 #include <algorithm>
@@ -29,7 +32,25 @@ struct Font::Impl {
     std::vector<u8> data;
     stbtt_fontinfo info{};
     color::Tables colors; // emoji
+#if PH_HARFBUZZ
+    hb_font_t* hb = nullptr; // shaping, in font units
+    ~Impl() {
+        if (hb) hb_font_destroy(hb);
+    }
+#endif
 };
+
+bool text_shaping() { return PH_HARFBUZZ != 0; }
+
+void* Font::hb_font(int slot) const {
+#if PH_HARFBUZZ
+    const Impl* impl = slot <= 0 ? impl_.get() : fallbacks_[static_cast<usize>(slot - 1)]->impl_.get();
+    return impl->hb;
+#else
+    (void)slot;
+    return nullptr;
+#endif
+}
 
 struct Font::Face {
     const stbtt_fontinfo* info = nullptr;
@@ -95,6 +116,17 @@ std::unique_ptr<Font> Font::from_memory(GpuDevice* device, std::vector<u8> ttf, 
         return nullptr;
     }
     font->impl_->colors = color::find_tables(font->impl_->data, static_cast<u32>(offset));
+#if PH_HARFBUZZ
+    // HarfBuzz reads the same bytes (which the Impl keeps alive), the first font of a collection as stb does.
+    hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(data), static_cast<unsigned>(font->impl_->data.size()),
+                                     HB_MEMORY_MODE_READONLY, nullptr, nullptr);
+    hb_face_t* face = hb_face_create(blob, 0);
+    font->impl_->hb = hb_font_create(face);
+    unsigned upem = hb_face_get_upem(face);
+    hb_font_set_scale(font->impl_->hb, static_cast<int>(upem), static_cast<int>(upem));
+    hb_face_destroy(face);
+    hb_blob_destroy(blob);
+#endif
     font->device_ = device;
     font->name_ = std::string(name);
     return font;
@@ -106,6 +138,7 @@ void Font::set_fallbacks(std::vector<Asset<Font>> fonts) {
     fallbacks_ = std::move(fonts);
     // Characters drawn as '?' so far may have a real glyph now.
     glyphs_.clear();
+    index_glyphs_.clear();
     sdf_glyphs_.clear();
     pages_.clear();
     sdf_pages_.clear();
@@ -176,6 +209,33 @@ const Font::Glyph& Font::glyph(u32 codepoint, f32 pixel_size) {
         Glyph missing = glyph('?', pixel_size);
         return glyphs_[key] = missing;
     }
+    Glyph g = rasterize(face, px);
+    return glyphs_[key] = g;
+}
+
+const Font::Glyph& Font::glyph_at(int slot, u32 index, f32 pixel_size) {
+    u32 px = size_px(pixel_size);
+    u64 key = (static_cast<u64>(px) << 40) | (static_cast<u64>(slot & 0xFF) << 32) | index;
+    if (auto it = index_glyphs_.find(key); it != index_glyphs_.end()) return it->second;
+    const Impl* impl = slot == 0 ? impl_.get() : fallbacks_[static_cast<usize>(slot - 1)]->impl_.get();
+    Glyph g = rasterize({&impl->info, static_cast<int>(index), impl}, px);
+    return index_glyphs_[key] = g;
+}
+
+int Font::slot_for(u32 codepoint) const {
+    if (stbtt_FindGlyphIndex(&impl_->info, static_cast<int>(codepoint)) != 0) return 0;
+    for (usize i = 0; i < fallbacks_.size(); ++i)
+        if (fallbacks_[i] && fallbacks_[i].get() != this && stbtt_FindGlyphIndex(&fallbacks_[i]->impl_->info, static_cast<int>(codepoint)) != 0)
+            return static_cast<int>(i + 1);
+    return -1;
+}
+
+f32 Font::slot_scale(int slot, f32 pixel_size) const {
+    const Impl* impl = slot <= 0 ? impl_.get() : fallbacks_[static_cast<usize>(slot - 1)]->impl_.get();
+    return stbtt_ScaleForPixelHeight(&impl->info, static_cast<f32>(size_px(pixel_size)));
+}
+
+Font::Glyph Font::rasterize(const Face& face, u32 px) {
     f32 scale = stbtt_ScaleForPixelHeight(face.info, static_cast<f32>(px));
     int advance = 0, lsb = 0;
     stbtt_GetGlyphHMetrics(face.info, face.index, &advance, &lsb);
@@ -198,7 +258,7 @@ const Font::Glyph& Font::glyph(u32 codepoint, f32 pixel_size) {
             g.visible = true;
             g.color = true;
         }
-        return glyphs_[key] = g;
+        return g;
     }
     u32 w = static_cast<u32>(std::max(0, x1 - x0)), h = static_cast<u32>(std::max(0, y1 - y0));
     if (w > 0 && h > 0 && place(pages_, w, h, g.page, ax, ay)) {
@@ -215,7 +275,7 @@ const Font::Glyph& Font::glyph(u32 codepoint, f32 pixel_size) {
         g.source = {static_cast<f32>(ax), static_cast<f32>(ay), static_cast<f32>(w), static_cast<f32>(h)};
         g.visible = true;
     }
-    return glyphs_[key] = g;
+    return g;
 }
 
 const Font::Glyph& Font::sdf_glyph(u32 codepoint) {
@@ -373,56 +433,237 @@ struct Line {
     f32 width;        // raster pixels
 };
 
-f32 measure_range(Font& font, std::string_view text, usize begin, usize end, f32 px) {
-    f32 width = 0;
-    u32 prev = 0;
-    for (usize i = begin; i < end;) {
-        u32 cp = utf8::next(text, i);
-        if (prev) width += font.kerning(prev, cp, px);
-        width += font.advance(cp, px);
-        prev = cp;
-    }
-    return width;
-}
+} // namespace
 
-std::vector<Line> break_lines(Font& font, std::string_view text, f32 px, f32 max_width) {
-    std::vector<Line> lines;
-    usize line_start = 0, last_space = std::string_view::npos;
-    f32 width = 0, width_at_space = 0;
-    u32 prev = 0;
-    for (usize i = 0; i < text.size();) {
-        usize at = i;
-        u32 cp = utf8::next(text, i);
-        if (cp == '\n') {
-            lines.push_back({line_start, at, width});
-            line_start = i;
-            width = 0;
-            last_space = std::string_view::npos;
-            prev = 0;
-            continue;
+// One glyph of a laid-out line, in drawing order (left to right on screen). Not rasterized yet.
+struct LineGlyph {
+    int slot;       // shaped: the font slot `id` is a glyph index in; -1: `id` is a character, drawn with Font::glyph
+    u32 id;
+    usize cluster;  // byte offset of the character it draws
+    f32 x, y;       // from the line's start on the baseline, pixels (y down)
+    bool rtl = false; // shaped right to left (so a bracket was drawn mirrored)
+};
+struct ShapedLine {
+    std::vector<LineGlyph> glyphs;
+    f32 width = 0;
+};
+
+// Lays out lines of one text: its characters' bidi levels, and shaping (HarfBuzz builds) or one glyph per character.
+struct TextShaper {
+    Font& font;
+    std::string_view text;
+    f32 px;
+    bool shape_runs; // HarfBuzz, for bitmap text
+    std::vector<u32> cps;
+    std::vector<usize> offsets; // each character's byte offset
+    std::vector<u8> levels, paragraph_levels;
+    bool any_rtl = false;
+#if PH_HARFBUZZ
+    hb_buffer_t* buffer = hb_buffer_create();
+    ~TextShaper() { hb_buffer_destroy(buffer); }
+#endif
+
+    TextShaper(Font& f, std::string_view t, f32 pixels, bool sdf, bidi::Direction direction)
+        : font(f), text(t), px(pixels), shape_runs(PH_HARFBUZZ && !sdf) {
+        for (usize i = 0; i < text.size();) {
+            offsets.push_back(i);
+            cps.push_back(utf8::next(text, i));
         }
-        f32 adv = font.advance(cp, px) + (prev ? font.kerning(prev, cp, px) : 0.0f);
-        if (max_width > 0 && cp != ' ' && width + adv > max_width && at > line_start) {
-            if (last_space != std::string_view::npos) {
-                lines.push_back({line_start, last_space, width_at_space});
-                line_start = last_space + 1;
-                width = measure_range(font, text, line_start, at, px);
-            } else { // one long word: break inside it
-                lines.push_back({line_start, at, width});
-                line_start = at;
-                width = 0;
+        levels.resize(cps.size());
+        paragraph_levels.resize(cps.size());
+        for (usize begin = 0; begin < cps.size();) { // paragraph by paragraph
+            usize end = begin;
+            while (end < cps.size() && cps[end] != '\n') ++end;
+            bool rtl = direction == bidi::Direction::RightToLeft;
+            for (usize i = begin; i < end && !rtl; ++i) rtl = bidi::type_of(cps[i]) != bidi::Type::L || cps[i] >= 0x0590;
+            if (rtl) { // only text with right-to-left or neutral characters needs the full algorithm
+                bidi::Paragraph p = bidi::resolve(std::span(cps).subspan(begin, end - begin), direction);
+                std::copy(p.levels.begin(), p.levels.end(), levels.begin() + static_cast<std::ptrdiff_t>(begin));
+                std::fill_n(paragraph_levels.begin() + static_cast<std::ptrdiff_t>(begin), end - begin, p.level);
+                for (u8 l : p.levels) any_rtl = any_rtl || l > 0;
             }
-            last_space = std::string_view::npos;
-            adv = font.advance(cp, px);
+            begin = end + 1;
         }
-        if (cp == ' ') {
-            last_space = at;
-            width_at_space = width;
-        }
-        width += adv;
-        prev = cp;
     }
-    lines.push_back({line_start, text.size(), width});
+
+    std::pair<usize, usize> chars(usize begin, usize end) const {
+        auto a = std::lower_bound(offsets.begin(), offsets.end(), begin) - offsets.begin();
+        auto b = std::lower_bound(offsets.begin(), offsets.end(), end) - offsets.begin();
+        return {static_cast<usize>(a), static_cast<usize>(b)};
+    }
+
+    // Levels for a line, with trailing whitespace at the paragraph's level (UAX #9, L1).
+    std::vector<u8> line_levels(usize a, usize b) const {
+        std::vector<u8> out(levels.begin() + static_cast<std::ptrdiff_t>(a), levels.begin() + static_cast<std::ptrdiff_t>(b));
+        for (usize i = b; i > a; --i) {
+            bidi::Type t = bidi::type_of(cps[i - 1]);
+            if (t != bidi::Type::WS && t != bidi::Type::S) break;
+            out[i - 1 - a] = paragraph_levels[a];
+        }
+        return out;
+    }
+
+    // Characters one by one, in visual order, with the font's kerning between neighbours.
+    ShapedLine unshaped(usize a, usize b) const {
+        ShapedLine line;
+        std::vector<u32> order;
+        if (any_rtl) order = bidi::visual_order(std::span(cps).subspan(a, b - a), line_levels(a, b), paragraph_levels[a]);
+        f32 x = 0;
+        u32 prev = 0;
+        for (usize k = 0; k < b - a; ++k) {
+            usize i = a + (order.empty() ? k : order[k]);
+            u32 cp = levels[i] % 2 ? bidi::mirror(cps[i]) : cps[i];
+            if (prev) x += font.kerning(prev, cp, px);
+            line.glyphs.push_back({-1, cp, offsets[i], x, 0});
+            x += font.advance(cp, px);
+            prev = cp;
+        }
+        line.width = x;
+        return line;
+    }
+
+#if PH_HARFBUZZ
+    // Runs of one level, font and script, each shaped by HarfBuzz, in visual order.
+    ShapedLine shaped(usize a, usize b) {
+        struct Item {
+            usize begin, end; // characters
+            int slot;
+            hb_script_t script;
+            u8 level;
+        };
+        std::vector<u8> lv = line_levels(a, b);
+        hb_unicode_funcs_t* unicode = hb_unicode_funcs_get_default();
+        std::vector<Item> items;
+        for (usize i = a; i < b; ++i) {
+            u32 cp = cps[i];
+            int slot = font.slot_for(cp);
+            hb_script_t script = hb_unicode_script(unicode, cp);
+            bool joins_previous = bidi::type_of(cp) == bidi::Type::NSM || cp == 0x200D || (cp >= 0xFE00 && cp <= 0xFE0F) ||
+                                  (cp >= 0x1F3FB && cp <= 0x1F3FF) || (cp >= 0xE0020 && cp <= 0xE007F) || cp == 0x20E3;
+            bool common = script == HB_SCRIPT_COMMON || script == HB_SCRIPT_INHERITED || script == HB_SCRIPT_UNKNOWN;
+            if (!items.empty()) {
+                Item& last = items.back();
+                if (joins_previous) slot = last.slot;
+                if (common) script = last.script;
+                else if (last.script == HB_SCRIPT_COMMON) last.script = script; // a run of punctuation takes what follows
+                if (slot == last.slot && script == last.script && lv[i - a] == last.level) {
+                    last.end = i + 1;
+                    continue;
+                }
+            }
+            items.push_back({i, i + 1, slot, common ? HB_SCRIPT_COMMON : script, lv[i - a]});
+        }
+        std::vector<u32> dummy(items.size(), 'x');
+        std::vector<u8> item_levels;
+        for (const Item& it : items) item_levels.push_back(it.level);
+        std::vector<u32> order = bidi::visual_order(dummy, item_levels, paragraph_levels.empty() ? 0 : paragraph_levels[a]);
+
+        ShapedLine line;
+        f32 x = 0;
+        for (u32 k : order) {
+            const Item& it = items[k];
+            if (it.slot < 0) { // no font has these: one '?' each, right to left in right-to-left runs
+                bool rtl = it.level % 2 != 0;
+                for (usize k = 0; k < it.end - it.begin; ++k) {
+                    usize i = rtl ? it.end - 1 - k : it.begin + k;
+                    u32 cp = rtl ? bidi::mirror(cps[i]) : cps[i];
+                    line.glyphs.push_back({-1, cp, offsets[i], x, 0});
+                    x += font.advance(cp, px);
+                }
+                continue;
+            }
+            hb_buffer_clear_contents(buffer);
+            usize from = offsets[it.begin], to = it.end < offsets.size() ? offsets[it.end] : text.size();
+            hb_buffer_add_utf8(buffer, text.data(), static_cast<int>(text.size()), static_cast<unsigned>(from),
+                               static_cast<int>(to - from));
+            hb_buffer_set_direction(buffer, it.level % 2 ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
+            hb_buffer_set_script(buffer, it.script == HB_SCRIPT_COMMON ? HB_SCRIPT_LATIN : it.script);
+            hb_buffer_set_language(buffer, hb_language_get_default());
+            hb_shape(static_cast<hb_font_t*>(font.hb_font(it.slot)), buffer, nullptr, 0);
+            unsigned n = 0;
+            hb_glyph_info_t* info = hb_buffer_get_glyph_infos(buffer, &n);
+            hb_glyph_position_t* pos = hb_buffer_get_glyph_positions(buffer, &n);
+            f32 scale = font.slot_scale(it.slot, px);
+            for (unsigned g = 0; g < n; ++g) {
+                line.glyphs.push_back({it.slot, info[g].codepoint, info[g].cluster, x + pos[g].x_offset * scale,
+                                       -pos[g].y_offset * scale, it.level % 2 != 0});
+                x += pos[g].x_advance * scale;
+            }
+        }
+        line.width = x;
+        return line;
+    }
+#endif
+
+    ShapedLine shape(usize begin, usize end) {
+        auto [a, b] = chars(begin, end);
+#if PH_HARFBUZZ
+        if (shape_runs && b > a) return shaped(a, b);
+#endif
+        return unshaped(a, b);
+    }
+    f32 measure(usize begin, usize end) { return shape(begin, end).width; }
+
+    // The rasterized glyph for a line glyph.
+    const Font::Glyph& glyph(const LineGlyph& lg, bool sdf) {
+        if (lg.slot >= 0) return font.glyph_at(lg.slot, lg.id, px);
+        return sdf ? font.sdf_glyph(lg.id) : font.glyph(lg.id, px);
+    }
+};
+
+namespace {
+
+// Paragraphs at '\n', each broken into lines no wider than max_width (if > 0) at spaces, or inside a word too long
+// for a line.
+std::vector<Line> break_lines(TextShaper& s, f32 max_width) {
+    std::vector<Line> lines;
+    std::string_view text = s.text;
+    for (usize p = 0; p <= text.size();) {
+        usize p_end = text.find('\n', p);
+        if (p_end == std::string_view::npos) p_end = text.size();
+        usize start = p;
+        while (true) {
+            if (max_width <= 0) {
+                lines.push_back({start, p_end, s.measure(start, p_end)});
+                break;
+            }
+            // The longest run of whole words that fits.
+            usize fit_end = std::string_view::npos;
+            f32 fit_width = 0;
+            for (usize e = start;;) {
+                usize space = text.find(' ', e);
+                usize word_end = space == std::string_view::npos || space > p_end ? p_end : space;
+                f32 w = s.measure(start, word_end);
+                if (w > max_width) break; // (if it's the first word, it's too long on its own)
+                fit_end = word_end;
+                fit_width = w;
+                if (word_end >= p_end) break;
+                e = word_end + 1;
+            }
+            if (fit_end == std::string_view::npos) { // break inside the word: as many characters as fit, at least one
+                usize at = start, last_fit = std::string_view::npos;
+                f32 w = 0;
+                while (at < p_end) {
+                    usize next = at;
+                    utf8::next(text, next);
+                    f32 nw = s.measure(start, next);
+                    if (nw > max_width && last_fit != std::string_view::npos) break;
+                    last_fit = next;
+                    w = nw;
+                    at = next;
+                }
+                lines.push_back({start, last_fit, w});
+                start = last_fit;
+                if (start >= p_end) break;
+                continue;
+            }
+            lines.push_back({start, fit_end, fit_width});
+            if (fit_end >= p_end) break;
+            start = fit_end + 1; // the space the line broke at
+            if (start >= p_end) break;
+        }
+        p = p_end + 1;
+    }
     return lines;
 }
 
@@ -450,59 +691,70 @@ Laid lay_out(Font& font, std::string_view source, Vec2 position, const TextStyle
     f32 scale = style.sdf ? Font::sdf_size / std::max(style.size, 1e-3f) : std::max(style.raster_scale, 1e-3f);
     f32 unit = 1.0f / scale;
     f32 px = style.sdf ? Font::sdf_size : style.size * scale;
-    auto lines = break_lines(font, text, px, style.max_width * scale);
+    TextShaper shaper(font, text, px, style.sdf, style.direction);
+    auto lines = break_lines(shaper, style.max_width * scale);
     Font::Metrics m = font.metrics(px);
     f32 line_h = m.line_height() * style.line_spacing;
 
     Laid out;
     f32 widest = 0;
-    i32 budget = style.max_glyphs;
-    u32 visible = 0;
+    struct Order {
+        usize line, cluster, at; // reading order: by line, then character; `at` is its place in out.glyphs
+    };
+    std::vector<Order> reading;
+    std::vector<Effect> effects;
     for (usize li = 0; li < lines.size(); ++li) {
-        const Line& line = lines[li];
-        widest = std::max(widest, line.width);
+        ShapedLine shaped = shaper.shape(lines[li].begin, lines[li].end);
+        widest = std::max(widest, shaped.width);
         f32 x = 0;
-        if (style.align == TextAlign::Center) x = -line.width * 0.5f;
-        else if (style.align == TextAlign::Right) x = -line.width;
+        if (style.align == TextAlign::Center) x = -shaped.width * 0.5f;
+        else if (style.align == TextAlign::Right) x = -shaped.width;
         f32 baseline = static_cast<f32>(li) * line_h + m.ascent;
-        u32 prev = 0;
-        for (usize i = line.begin; i < line.end;) {
-            usize at = i;
-            u32 cp = utf8::next(text, i);
-            if (prev) x += font.kerning(prev, cp, px);
-            const Font::Glyph& g = style.sdf ? font.sdf_glyph(cp) : font.glyph(cp, px);
-            if (g.visible) {
-                if (budget == 0) break;
-                if (budget > 0) --budget;
-                // Bitmap glyphs snap to whole raster pixels so they stay crisp; SDF glyphs don't need to.
-                Vec2 at_px = style.sdf ? Vec2{x + g.offset.x, baseline + g.offset.y}
-                                       : Vec2{std::round(x + g.offset.x), std::round(baseline + g.offset.y)};
-                PlacedGlyph p;
-                p.codepoint = cp;
-                p.index = visible++;
-                p.page = g.page;
-                p.sdf = style.sdf;
-                p.source = g.source;
-                p.position = position + at_px * unit;
-                p.size = g.source.size() * unit;
-                p.color = style.color;
-                if (style.markup) {
-                    const Run& r = run_at(runs, at);
-                    if (r.has_color) p.color = r.color.with_alpha(r.color.a * style.color.a);
-                    if (r.effect == Effect::Wave) p.position.y += std::sin(style.time * 6.0f + static_cast<f32>(p.index) * 0.6f) * style.size * 0.12f;
-                    if (r.effect == Effect::Shake)
-                        p.position += Vec2{jitter(p.index, style.time, 0), jitter(p.index, style.time, 1)} * (style.size * 0.05f);
-                }
-                if (g.color) { // emoji keep their own colors; the text color only fades them
-                    p.color = Color::white().with_alpha(p.color.a);
-                    p.color_glyph = true;
-                }
-                out.glyphs.push_back(p);
+        for (const LineGlyph& lg : shaped.glyphs) {
+            const Font::Glyph& g = shaper.glyph(lg, style.sdf);
+            if (!g.visible) continue;
+            // Bitmap glyphs snap to whole raster pixels so they stay crisp; SDF glyphs don't need to.
+            Vec2 at_px{x + lg.x + g.offset.x, baseline + lg.y + g.offset.y};
+            if (!style.sdf) at_px = {std::round(at_px.x), std::round(at_px.y)};
+            PlacedGlyph p;
+            usize c = lg.cluster;
+            if (lg.slot < 0) p.codepoint = lg.id; // mirrored already if it was
+            else if (c < text.size()) p.codepoint = lg.rtl ? bidi::mirror(utf8::next(text, c)) : utf8::next(text, c);
+            p.glyph_index = lg.slot >= 0 ? lg.id : 0;
+            p.page = g.page;
+            p.sdf = style.sdf;
+            p.source = g.source;
+            p.position = position + at_px * unit;
+            p.size = g.source.size() * unit;
+            p.color = style.color;
+            Effect effect = Effect::None;
+            if (style.markup) {
+                const Run& r = run_at(runs, lg.cluster);
+                if (r.has_color) p.color = r.color.with_alpha(r.color.a * style.color.a);
+                effect = r.effect;
             }
-            x += g.advance;
-            prev = cp;
+            if (g.color) { // emoji keep their own colors; the text color only fades them
+                p.color = Color::white().with_alpha(p.color.a);
+                p.color_glyph = true;
+            }
+            reading.push_back({li, lg.cluster, out.glyphs.size()});
+            out.glyphs.push_back(p);
+            effects.push_back(effect);
         }
     }
+    // Indexes count in reading order (right-to-left text is drawn the other way), for typewriter reveals and effects.
+    std::stable_sort(reading.begin(), reading.end(), [](const Order& a, const Order& b) {
+        return a.line != b.line ? a.line < b.line : a.cluster < b.cluster;
+    });
+    for (usize k = 0; k < reading.size(); ++k) {
+        PlacedGlyph& p = out.glyphs[reading[k].at];
+        p.index = static_cast<u32>(k);
+        if (effects[reading[k].at] == Effect::Wave) p.position.y += std::sin(style.time * 6.0f + static_cast<f32>(p.index) * 0.6f) * style.size * 0.12f;
+        if (effects[reading[k].at] == Effect::Shake)
+            p.position += Vec2{jitter(p.index, style.time, 0), jitter(p.index, style.time, 1)} * (style.size * 0.05f);
+    }
+    if (style.max_glyphs >= 0)
+        std::erase_if(out.glyphs, [&](const PlacedGlyph& p) { return p.index >= static_cast<u32>(style.max_glyphs); });
     out.size = Vec2{widest, line_h * static_cast<f32>(lines.size())} * unit;
     return out;
 }
@@ -529,7 +781,8 @@ Vec2 measure_text(Font& font, std::string_view text, const TextStyle& style) {
     }
     f32 scale = style.sdf ? Font::sdf_size / std::max(style.size, 1e-3f) : std::max(style.raster_scale, 1e-3f);
     f32 px = style.sdf ? Font::sdf_size : style.size * scale;
-    auto lines = break_lines(font, text, px, style.max_width * scale);
+    TextShaper shaper(font, text, px, style.sdf, style.direction);
+    auto lines = break_lines(shaper, style.max_width * scale);
     f32 widest = 0;
     for (const Line& l : lines) widest = std::max(widest, l.width);
     f32 line_h = font.metrics(px).line_height() * style.line_spacing;

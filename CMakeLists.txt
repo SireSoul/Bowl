@@ -13,6 +13,7 @@ option(PH_PACK_ASSETS   "Pack each game's engine and asset folders into archives
 option(PH_TRACY         "Send profiler zones to the Tracy profiler"                  OFF)
 option(PH_BOX2D         "Rigid-body physics through Box2D (physics/rigid_bodies.hpp)" OFF)
 option(PH_OPUS          "Ogg Opus sounds and music (fetches libogg, libopus, opusfile)" OFF)
+option(PH_HARFBUZZ      "Shape text with HarfBuzz: Arabic, Indic and other complex scripts, ligatures" OFF)
 option(PH_BUILD_EDITOR "Build Bowl Editor (needs PH_DEV_TOOLS)"                   ${PROJECT_IS_TOP_LEVEL})
 set(PH_SHADERC_EXECUTABLE "" CACHE FILEPATH
     "Prebuilt host ph-shaderc to use when cross-compiling (iOS, Android, consoles)")

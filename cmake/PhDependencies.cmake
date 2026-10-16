@@ -151,6 +151,20 @@ if(PH_OPUS)
     endforeach()
 endif()
 
+# HarfBuzz: optional text shaping (ph/gfx/text.hpp). Its one-file build (harfbuzz.cc) with its own Unicode data and
+# OpenType code: no FreeType, ICU or GLib.
+if(PH_HARFBUZZ)
+    # SOURCE_SUBDIR names a folder with no CMakeLists.txt: downloaded, but its own build isn't added.
+    ph_fetch(harfbuzz https://github.com/harfbuzz/harfbuzz/releases/download/14.5.1/harfbuzz-14.5.1.tar.xz
+             7e2fa4e8c7c98e8d8140671f5772542afaaa6acccfbd746506886b6d85f7f8d6 SOURCE_SUBDIR src)
+    FetchContent_MakeAvailable(harfbuzz)
+    add_library(ph_harfbuzz STATIC ${harfbuzz_SOURCE_DIR}/src/harfbuzz.cc)
+    target_include_directories(ph_harfbuzz SYSTEM PUBLIC ${harfbuzz_SOURCE_DIR}/src)
+    target_compile_features(ph_harfbuzz PRIVATE cxx_std_17)
+    set_target_properties(ph_harfbuzz PROPERTIES FOLDER third_party)
+    target_compile_options(ph_harfbuzz PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w> $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
+endif()
+
 # doctest: unit tests
 if(PH_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)

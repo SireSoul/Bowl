@@ -3,6 +3,7 @@
 Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
 `cmake --build <build folder> --target ph_api_docs`.
 
+- [ph/gfx/bidi.hpp](#phgfxbidihpp)
 - [ph/gfx/device.hpp](#phgfxdevicehpp)
 - [ph/gfx/gpu_particles.hpp](#phgfxgpu_particleshpp)
 - [ph/gfx/particles.hpp](#phgfxparticleshpp)
@@ -12,6 +13,49 @@ Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change
 - [ph/gfx/sprites.hpp](#phgfxspriteshpp)
 - [ph/gfx/text.hpp](#phgfxtexthpp)
 - [ph/gfx/tilemap.hpp](#phgfxtilemaphpp)
+
+## ph/gfx/bidi.hpp
+
+`#include "ph/gfx/bidi.hpp"` · namespace `ph::gfx::bidi`
+
+```cpp
+enum class Type : u8 { L, R, AL, EN, AN, ES, ET, CS, NSM, B, S, WS, ON };
+Type type_of(u32 codepoint);
+```
+
+```cpp
+enum class Direction : u8 { Auto, LeftToRight, RightToLeft };
+```
+
+### Paragraph
+
+Embedding levels for one paragraph's characters: even runs left to right, odd right to left. Auto takes the
+paragraph's direction from its first letter.
+
+```cpp
+struct Paragraph {
+    u8 level = 0; // 0: left to right, 1: right to left
+    std::vector<u8> levels;
+};
+```
+
+```cpp
+Paragraph resolve(std::span<const u32> codepoints, Direction direction = Direction::Auto);
+```
+
+The order to draw a line's characters in, as indexes into `levels` (a line's slice of a paragraph). Whitespace at
+the end of the line goes to the paragraph's level first, so it stays at the end.
+
+```cpp
+std::vector<u32> visual_order(std::span<const u32> codepoints, std::span<const u8> levels, u8 paragraph_level);
+```
+
+The mirrored form of a bracket-like character, drawn in right-to-left runs: '(' for ')', and so on. Others are
+returned as they are.
+
+```cpp
+u32 mirror(u32 codepoint);
+```
 
 ## ph/gfx/device.hpp
 
@@ -1175,6 +1219,14 @@ A page's pixels (RGBA8, premultiplied, page_size x page_size), for tools and tes
 std::span<const u8> page_pixels(u16 index) const;
 ```
 
+Whether this build shapes text with HarfBuzz (PH_HARFBUZZ): joined Arabic letters, Indic and other complex scripts,
+ligatures and OpenType kerning. Without it, characters are drawn one by one; right-to-left text is still put in
+order (see ph/gfx/bidi.hpp).
+
+```cpp
+bool text_shaping();
+```
+
 ```cpp
 enum class TextAlign : u8 { Left, Center, Right };
 ```
@@ -1186,6 +1238,9 @@ struct TextStyle {
     f32 size = 16;            // font size (ascent to descent) in world units; logical points for UI
     Color color = Color::white();
     TextAlign align = TextAlign::Left;
+    // Which way paragraphs run: from their first letter (Auto), or as set. Right-to-left characters (Hebrew, Arabic) are
+    // put in reading order either way.
+    bidi::Direction direction = bidi::Direction::Auto;
     f32 max_width = 0;        // > 0: wrap words at this width
     f32 line_spacing = 1;     // multiplier on the font's line height
     // How many pixels one world unit covers, so glyphs rasterize at screen resolution. For a UI camera on a high-DPI
@@ -1215,14 +1270,15 @@ One laid-out character, for drawing text your own way.
 
 ```cpp
 struct PlacedGlyph {
-    u32 codepoint = 0;
-    u32 index = 0;      // among the visible characters, from 0
+    u32 codepoint = 0;        // the character drawn (a bracket in right-to-left text is drawn mirrored)
+    u32 glyph_index = 0;      // shaped text: the glyph in its font (a character can be several glyphs, or share one)
+    u32 index = 0;            // among the visible characters, from 0, in reading order
     u16 page = 0;
     bool sdf = false;
     bool color_glyph = false; // an emoji: its color is white with the text's alpha, so it keeps its own colors
-    Rect source;        // in the font page
-    Vec2 position;      // top-left corner in the world
-    Vec2 size;          // in the world
+    Rect source;              // in the font page
+    Vec2 position;            // top-left corner in the world
+    Vec2 size;                // in the world
     Color color;
 };
 ```

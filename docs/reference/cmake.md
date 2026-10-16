@@ -31,6 +31,7 @@ Set them on the configure line (`-DPH_DEV_TOOLS=OFF`) or in your own presets.
 | `PH_TRACY` | `OFF` | Send profiler zones, frames, plots and log lines to the [Tracy](../guides/jobs-and-profiling.md#tracy) profiler |
 | `PH_BOX2D` | `OFF` | Rigid-body physics through Box2D v3 ([collision.md](../guides/collision.md)) |
 | `PH_OPUS` | `OFF` | Ogg Opus sounds and music; fetches libogg, libopus and opusfile ([audio.md](../guides/audio.md#opus)) |
+| `PH_HARFBUZZ` | `OFF` | Shape text with HarfBuzz: joined Arabic, Indic scripts, ligatures ([text.md](../guides/text.md#right-to-left-text-and-shaping)) |
 | `PH_SHADERC_EXECUTABLE` | empty | A prebuilt host `ph-shaderc` for cross-compiling; when set, the shader compiler isn't built |
 | `PH_ECS_MAX_COMPONENTS` | 256 | (A preprocessor define, not a CMake option.) Maximum component types; a multiple of 64 |
 
@@ -175,6 +176,10 @@ Fetched by `cmake/PhDependencies.cmake`, each pinned to a release archive and it
 | [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross) | vulkan-sdk-1.4.341.0 | SPIR-V to MSL and HLSL (shader compiler only) | Apache-2.0 |
 | [Dear ImGui](https://github.com/ocornut/imgui) | 1.92.8 | The dev overlay (dev builds only) | MIT |
 | [doctest](https://github.com/doctest/doctest) | 2.5.2 | Unit tests (tests only) | MIT |
+| [Tracy](https://github.com/wolfpld/tracy) | 0.12.2 | Profiler client (`PH_TRACY` only) | BSD-3-Clause |
+| [Box2D](https://github.com/erincatto/box2d) | 3.1.1 | Rigid bodies (`PH_BOX2D` only) | MIT |
+| [libogg](https://xiph.org/ogg/), [libopus](https://opus-codec.org), [opusfile](https://opus-codec.org) | 1.3.5, 1.5.2, 0.12 | Opus sounds (`PH_OPUS` only) | BSD-3-Clause |
+| [HarfBuzz](https://github.com/harfbuzz/harfbuzz) | 14.5.1 | Text shaping (`PH_HARFBUZZ` only) | MIT ("Old MIT") |
 
 An installed SDL3 (3.2 or newer) is used instead of building it when `PH_FETCH_SDL` is off.
 

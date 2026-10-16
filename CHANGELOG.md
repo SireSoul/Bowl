@@ -6,6 +6,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Right-to-left text: paragraphs mixing Hebrew or Arabic with left-to-right text are drawn in reading order, with
+  mirrored brackets (`ph/gfx/bidi.hpp`, `TextStyle::direction`); typewriter reveals follow reading order.
+- Text shaping with HarfBuzz (`PH_HARFBUZZ`, `gfx::text_shaping()`): joined Arabic, Devanagari and other complex
+  scripts, ligatures and OpenType kerning. `PlacedGlyph::glyph_index`.
 - Color emoji: fonts with `sbix`, `CBDT`/`CBLC` or `COLR`/`CPAL` (v0) tables draw their characters in color
   (`Font::Glyph::color`, `PlacedGlyph::color_glyph`); `Font::page_pixels`.
 - API reference: `docs/reference/api`, one page per module made from the headers' comments by `ph-apidoc`
