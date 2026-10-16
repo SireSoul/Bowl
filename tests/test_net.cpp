@@ -4,8 +4,10 @@
 
 #include <doctest/doctest.h>
 
+#include <chrono>
 #include <deque>
 #include <string>
+#include <thread>
 
 using namespace bowl;
 using namespace bowl::net;
@@ -15,12 +17,21 @@ namespace {
 std::vector<u8> bytes_of(std::string_view s) { return {s.begin(), s.end()}; }
 std::string text_of(const std::vector<u8>& b) { return {b.begin(), b.end()}; }
 
-// Runs both hosts on a made-up clock until `done` says so or `seconds` pass.
+// Runs both hosts on a made-up clock until `done` says so or `seconds` pass. The packets go through real sockets,
+// though, and a busy machine (a CI runner) can take longer to deliver them than the made-up clock takes to run out, so
+// then the hosts keep reading, with the clock held still, for up to a real second.
 template <class Done> bool pump(Host& a, Host& b, f64& now, f64 seconds, Done done) {
     for (f64 end = now + seconds; now < end; now += 0.005) {
         a.update(now);
         b.update(now);
         if (done()) return true;
+    }
+    for (auto give_up = std::chrono::steady_clock::now() + std::chrono::seconds(1);
+         std::chrono::steady_clock::now() < give_up;) {
+        a.update(now);
+        b.update(now);
+        if (done()) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     return false;
 }
