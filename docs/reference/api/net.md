@@ -6,6 +6,7 @@ Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: chan
 - [bowl/net/host.hpp](#bowlnethosthpp)
 - [bowl/net/lockstep.hpp](#bowlnetlockstephpp)
 - [bowl/net/rendezvous.hpp](#bowlnetrendezvoushpp)
+- [bowl/net/replication.hpp](#bowlnetreplicationhpp)
 - [bowl/net/rollback.hpp](#bowlnetrollbackhpp)
 - [bowl/net/socket.hpp](#bowlnetsockethpp)
 
@@ -72,11 +73,35 @@ struct HostSettings {
 };
 ```
 
+### RoomInfo
+
+How a hosted room shows in the rendezvous server's list (host_room). Unlisted rooms are only found by name.
+
+```cpp
+struct RoomInfo {
+    bool listed = false;   // anyone can see it with list_rooms() and land in it with quick_match()
+    std::string label;     // what the list shows: the host's name, the game mode... (up to 64 bytes)
+    u8 max_players = 0;    // counting the host; 0: max_peers + 1
+};
+```
+
+### RoomListing
+
+A listed room, from list_rooms().
+
+```cpp
+struct RoomListing {
+    std::string room, label;
+    u8 players = 0, max_players = 0;
+};
+```
+
 ### Event
 
 ```cpp
 struct Event {
-    enum class Type : u8 { Connected, Disconnected, Message };
+    // RoomsListed: an answer to list_rooms() arrived (peer 0); listed_rooms() has it.
+    enum class Type : u8 { Connected, Disconnected, Message, RoomsListed };
     Type type = Type::Message;
     PeerId peer = 0;
     Delivery delivery = Delivery::Reliable;
@@ -139,7 +164,7 @@ server only ever passes on packets it can't read. Room names are up to 64 bytes;
 random code) unless the room is meant to be public.
 
 ```cpp
-void host_room(const Address& rendezvous, std::string_view room);
+void host_room(const Address& rendezvous, std::string_view room, const RoomInfo& info = {});
 void stop_hosting_room();
 ```
 
@@ -147,6 +172,18 @@ Like connect(): Connected follows, or Disconnected if nobody hosts the room or n
 
 ```cpp
 PeerId join_room(const Address& rendezvous, std::string_view room, Route route = Route::Auto);
+```
+
+Lobbies. Listed rooms (RoomInfo::listed) of this game (the same `protocol`) with space, fullest first:
+list_rooms() asks for them (a RoomsListed event follows, then listed_rooms() has up to a packet's worth, from
+`from` on, and listed_total() says how many there are); quick_match() joins the fullest one that has space, like
+join_room, or ends in Disconnected when none has. The host's player count reaches the server once a second.
+
+```cpp
+void list_rooms(const Address& rendezvous, u16 from = 0);
+const std::vector<RoomListing>& listed_rooms() const;
+u16 listed_total() const;
+PeerId quick_match(const Address& rendezvous, Route route = Route::Auto);
 ```
 
 False if the peer isn't connected or the message is too big for its delivery.
@@ -330,6 +367,139 @@ out to use the clock.
 ```cpp
 void update(f64 now = -1);
 RendezvousStats stats() const;
+```
+
+## bowl/net/replication.hpp
+
+`#include "bowl/net/replication.hpp"` · namespace `bowl::net`
+
+### Messages
+
+Plain structs as messages. Each type is reflected (BOWL_REFLECT) and registered on both ends with on&lt;T>(); it goes as
+its fields (serialization, as in saves: strings, vectors, nested structs and so on all work), named by its reflected
+name, so a Windows host and a Linux player agree. Messages starts every message it sends with one byte (`tag`), so
+a game can send its own bytes alongside as long as they don't start with it.
+
+```cpp
+class Messages
+```
+
+```cpp
+static constexpr u8 tag = 0xB1;
+```
+
+```cpp
+template <reflect::Reflected T> void on(std::function<void(PeerId, const T&)> handler);
+template <reflect::Reflected T> bool send(Host& host, PeerId peer, const T& message, Delivery delivery = Delivery::Reliable);
+template <reflect::Reflected T> void broadcast(Host& host, const T& message, Delivery delivery = Delivery::Reliable);
+```
+
+Every Message event goes through here: true if it was one of these (its handler, if any, has run).
+
+```cpp
+bool handle(const Event& event);
+```
+
+### Replicated
+
+Marks an entity the host shares with players. The Replicator gives it its network id; on players, the Replica's
+entities have it too, with the same id.
+
+```cpp
+struct Replicated {
+    u32 id = 0;
+};
+```
+
+```cpp
+BOWL_COMPONENT(Replicated, id)
+```
+
+How a replicated component travels. OnChange: reliably, when its value changes (health, a bag, a name: anything
+that must arrive). Continuous: unreliably and often, newest wins (positions and anything else that moves).
+
+```cpp
+enum class Sync : u8 { OnChange, Continuous };
+```
+
+### ReplicationSettings
+
+```cpp
+struct ReplicationSettings {
+    u32 continuous_messages = 12; // unreliable messages (up to 1 KB each) per player per update; the rest wait a turn
+    u32 resend_every = 10;        // updates after which an unchanged Continuous value goes again (it may have been lost)
+};
+```
+
+### Replicator
+
+The host's side: shares every entity with a Replicated component, and the components registered with replicate(),
+with each connected peer. Entity fields inside components travel too, remapped on the other end, when the entity
+they point at is replicated (others arrive as nothing). Call update() once a tick, after the simulation.
+
+```cpp
+class Replicator : NonCopyable
+```
+
+```cpp
+explicit Replicator(ecs::World& world, ReplicationSettings settings = {});
+~Replicator();
+```
+
+```cpp
+template <reflect::Reflected C> void replicate(Sync sync = Sync::OnChange);
+```
+
+Which entities a peer is shown (all, without one): for example, the ones on the map that player is on. An entity
+that stops being relevant is taken away from that player, and sent again in full if it becomes relevant again.
+
+```cpp
+void relevant(std::function<bool(PeerId, ecs::Entity)> filter);
+void update(Host& host);
+```
+
+```cpp
+u32 net_id(ecs::Entity e) const;          // 0 if it isn't replicated (yet)
+ecs::Entity entity(u32 net_id) const;     // the null entity if none
+```
+
+### Replica
+
+A player's side: builds, updates and removes the host's replicated entities in this world, from the Replicator's
+messages, with the same component registrations as the host. Entities it makes have Replicated with the host's id.
+
+```cpp
+class Replica : NonCopyable
+```
+
+```cpp
+static constexpr u8 reliable_tag = 0xB2, continuous_tag = 0xB3;
+```
+
+```cpp
+explicit Replica(ecs::World& world);
+~Replica();
+```
+
+```cpp
+template <reflect::Reflected C> void replicate(Sync sync = Sync::OnChange);
+```
+
+Every Message event goes through here: true if it was replication (and has been applied).
+
+```cpp
+bool handle(const Event& event);
+```
+
+Removes every entity it made (after leaving a game).
+
+```cpp
+void clear();
+```
+
+```cpp
+ecs::Entity entity(u32 net_id) const; // the null entity if none
+usize size() const;
 ```
 
 ## bowl/net/rollback.hpp

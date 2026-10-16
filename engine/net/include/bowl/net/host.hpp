@@ -59,8 +59,22 @@ struct HostSettings {
     bool simulated_unreachable = false;
 };
 
+// How a hosted room shows in the rendezvous server's list (host_room). Unlisted rooms are only found by name.
+struct RoomInfo {
+    bool listed = false;   // anyone can see it with list_rooms() and land in it with quick_match()
+    std::string label;     // what the list shows: the host's name, the game mode... (up to 64 bytes)
+    u8 max_players = 0;    // counting the host; 0: max_peers + 1
+};
+
+// A listed room, from list_rooms().
+struct RoomListing {
+    std::string room, label;
+    u8 players = 0, max_players = 0;
+};
+
 struct Event {
-    enum class Type : u8 { Connected, Disconnected, Message };
+    // RoomsListed: an answer to list_rooms() arrived (peer 0); listed_rooms() has it.
+    enum class Type : u8 { Connected, Disconnected, Message, RoomsListed };
     Type type = Type::Message;
     PeerId peer = 0;
     Delivery delivery = Delivery::Reliable;
@@ -99,10 +113,19 @@ public:
     // through the server's relay if not. The connection is the same as connect()'s, encrypted end to end, so the
     // server only ever passes on packets it can't read. Room names are up to 64 bytes; make them hard to guess (a
     // random code) unless the room is meant to be public.
-    void host_room(const Address& rendezvous, std::string_view room);
+    void host_room(const Address& rendezvous, std::string_view room, const RoomInfo& info = {});
     void stop_hosting_room();
     // Like connect(): Connected follows, or Disconnected if nobody hosts the room or nobody answers in time.
     PeerId join_room(const Address& rendezvous, std::string_view room, Route route = Route::Auto);
+
+    // Lobbies. Listed rooms (RoomInfo::listed) of this game (the same `protocol`) with space, fullest first:
+    // list_rooms() asks for them (a RoomsListed event follows, then listed_rooms() has up to a packet's worth, from
+    // `from` on, and listed_total() says how many there are); quick_match() joins the fullest one that has space, like
+    // join_room, or ends in Disconnected when none has. The host's player count reaches the server once a second.
+    void list_rooms(const Address& rendezvous, u16 from = 0);
+    const std::vector<RoomListing>& listed_rooms() const { return listed_; }
+    u16 listed_total() const { return listed_total_; }
+    PeerId quick_match(const Address& rendezvous, Route route = Route::Auto);
     // False if the peer isn't connected or the message is too big for its delivery.
     bool send(PeerId peer, std::span<const u8> data, Delivery delivery = Delivery::Reliable);
     void broadcast(std::span<const u8> data, Delivery delivery = Delivery::Reliable);
@@ -142,7 +165,12 @@ private:
     PeerId next_id_ = 1;
     Address room_server_; // host_room
     std::string room_;
+    RoomInfo room_info_;
     f64 room_announced_ = -1e9;
+    Address list_server_; // list_rooms
+    u64 list_nonce_ = 0;
+    std::vector<RoomListing> listed_;
+    u16 listed_total_ = 0;
     u64 random_ = 0x9E3779B97F4A7C15ull;
     f64 now_ = 0;
 };

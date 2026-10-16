@@ -57,15 +57,22 @@ struct Reader {
 };
 
 // Rendezvous packets: u32 magic, u8 kind, then by kind:
-//   HostRoom   u32 game protocol, room          host to server, every second: "I take players for this room"
+//   HostRoom   u32 game protocol, room, then optionally u8 listed, u8 players, u8 max players, label
+//                                               host to server, every second: "I take players for this room"
 //   JoinRoom   u32 game protocol, room, u64 nonce, u8 route (0: auto, 1: relay)   player to server, until answered
 //   Introduce  u64 nonce (0 to the host), u64 session, u8 1 + address, or u8 0   server to both: who the other is
 //              (the player always hears; the host only for the auto route, and the relay route sends no address)
 //   NoRoom     u64 nonce                        server to player: nobody hosts that room
 //   Relay      u64 session, packet              both ways, through the server, when they can't reach each other
-// Rooms are text up to 64 bytes; addresses are written by Address::write.
+//   ListRooms  u32 game protocol, u64 nonce, u16 from    anyone to server: which listed rooms are open
+//   RoomList   u64 nonce, u16 total, u8 count, then per room: room, label, u8 players, u8 max players
+//   MatchRoom  u32 game protocol, u64 nonce, u8 route    player to server: join any listed room with space
+//              (answered like JoinRoom: Introduce, or NoRoom when none has space)
+// Rooms and labels are text up to 64 bytes; addresses are written by Address::write.
 constexpr u32 rendezvous_magic = 0x5244564E;
-enum RendezvousKind : u8 { HostRoom = 1, JoinRoom = 2, Introduce = 3, NoRoom = 4, Relay = 5 };
+enum RendezvousKind : u8 {
+    HostRoom = 1, JoinRoom = 2, Introduce = 3, NoRoom = 4, Relay = 5, ListRooms = 6, RoomList = 7, MatchRoom = 8
+};
 constexpr usize max_room = 64;
 
 } // namespace bowl::net::wire

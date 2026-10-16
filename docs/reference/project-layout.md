@@ -26,7 +26,7 @@ engine/
   audio/                  mixer, sounds, music
   physics/                collision
   ui/                     game UI
-  net/                    encrypted UDP connections, rooms and the rendezvous server, lockstep, rollback
+  net/                    encrypted UDP connections, rooms, lobbies, replication, lockstep, rollback
   app/                    Engine, Game, scenes, the main loop, dev tools, hot reload host
 tools/
   shaderc/                bowl-shaderc: library and command-line tool

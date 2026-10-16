@@ -16,6 +16,7 @@ add_executable(bowl_tests
     test_net.cpp
     test_particles.cpp
     test_reflect.cpp
+    test_replication.cpp
     test_scene.cpp
     test_settings.cpp
     test_schedule.cpp

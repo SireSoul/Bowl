@@ -539,6 +539,11 @@ bool is_object() const;
 bool as_bool(bool fallback = false) const;
 f64 as_number(f64 fallback = 0) const;
 f32 as_float(f32 fallback = 0) const;
+```
+
+The number's whole part, clamped to i64's range (any number a file holds converts; NaN gives the fallback).
+
+```cpp
 i64 as_int(i64 fallback = 0) const;
 std::string_view as_string(std::string_view fallback = {}) const;
 ```

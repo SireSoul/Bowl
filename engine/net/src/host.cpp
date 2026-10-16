@@ -71,6 +71,7 @@ struct Host::Peer {
     std::string room;
     Route route = Route::Auto;
     u64 join_nonce = 0, room_session = 0; // the rendezvous server's name for our introduction
+    bool match = false;                    // quick_match: any listed room with space
     f64 direct_until = 0;
     u64 client_salt = 0, server_salt = 0;
     bool outgoing = false; // we connected to them
@@ -172,10 +173,31 @@ PeerId Host::connect(const Address& to) {
     return id;
 }
 
-void Host::host_room(const Address& rendezvous, std::string_view room) {
+void Host::host_room(const Address& rendezvous, std::string_view room, const RoomInfo& info) {
     room_server_ = rendezvous;
     room_ = std::string(room.substr(0, wire::max_room));
+    room_info_ = info;
+    room_info_.label = info.label.substr(0, wire::max_room);
     room_announced_ = -1e9; // say so at the next update
+}
+
+void Host::list_rooms(const Address& rendezvous, u16 from) {
+    if (!running()) return;
+    list_server_ = rendezvous;
+    list_nonce_ = nonzero_random();
+    Writer w;
+    w.u32_(wire::rendezvous_magic);
+    w.u8_(wire::ListRooms);
+    w.u32_(settings_.protocol);
+    w.u64_(list_nonce_);
+    w.u16_(from);
+    socket_.send(rendezvous, w.out);
+}
+
+PeerId Host::quick_match(const Address& rendezvous, Route route) {
+    PeerId id = join_room(rendezvous, "", route);
+    if (id) peers_[id]->match = true;
+    return id;
 }
 
 void Host::stop_hosting_room() { room_.clear(); }
@@ -194,6 +216,7 @@ PeerId Host::join_room(const Address& rendezvous, std::string_view room, Route r
 
 bool Host::is_rendezvous(const Address& address) const {
     if (!room_.empty() && address == room_server_) return true;
+    if (list_nonce_ && address == list_server_) return true;
     for (const auto& [id, p] : peers_)
         if (p->join_nonce && p->rendezvous == address) return true;
     return false;
@@ -323,9 +346,9 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         if (now - p.last_sent < 0.25) return;
         Writer w;
         w.u32_(wire::rendezvous_magic);
-        w.u8_(wire::JoinRoom);
+        w.u8_(p.match ? wire::MatchRoom : wire::JoinRoom);
         w.u32_(settings_.protocol);
-        w.text(p.room);
+        if (!p.match) w.text(p.room);
         w.u64_(p.join_nonce);
         w.u8_(p.route == Route::Relay ? 1 : 0);
         p.last_sent = now;
@@ -410,6 +433,26 @@ void Host::handle_rendezvous(const Address& from, std::span<const u8> packet, f6
     }
     u64 nonce = r.u64_();
     if (!r.ok) return;
+    if (kind == wire::RoomList) { // an answer to list_rooms()
+        if (nonce != list_nonce_ || !(from == list_server_)) return;
+        u16 total = r.u16_();
+        u8 count = r.u8_();
+        std::vector<RoomListing> rooms;
+        for (u8 i = 0; i < count && r.ok; ++i) {
+            RoomListing listing;
+            listing.room = std::string(r.text());
+            listing.label = std::string(r.text());
+            listing.players = r.u8_();
+            listing.max_players = r.u8_();
+            rooms.push_back(std::move(listing));
+        }
+        if (!r.ok) return;
+        listed_ = std::move(rooms);
+        listed_total_ = total;
+        list_nonce_ = 0; // answered: anything more from it is old
+        events_.push_back({Event::Type::RoomsListed, 0, Delivery::Reliable, {}});
+        return;
+    }
     if (kind == wire::Introduce && nonce == 0) { // to us as a room's host: a player is coming
         u64 session = r.u64_();
         bool has_address = r.u8_() != 0;
@@ -656,6 +699,13 @@ void Host::update(f64 now) {
         w.u8_(wire::HostRoom);
         w.u32_(settings_.protocol);
         w.text(room_);
+        usize players = 1; // the host
+        for (const auto& [id, p] : peers_) players += !p->outgoing && p->state == Peer::State::Connected;
+        u32 max_players = room_info_.max_players ? room_info_.max_players : settings_.max_peers + 1;
+        w.u8_(room_info_.listed ? 1 : 0);
+        w.u8_(static_cast<u8>(std::min<usize>(players, 255)));
+        w.u8_(static_cast<u8>(std::min<u32>(max_players, 255)));
+        w.text(room_info_.label);
         socket_.send(room_server_, w.out);
         room_announced_ = now_;
     }

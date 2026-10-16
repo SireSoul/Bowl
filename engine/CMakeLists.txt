@@ -131,8 +131,9 @@ bowl_module(net
         net/src/crypto.cpp
         net/src/host.cpp
         net/src/rendezvous.cpp
+        net/src/replication.cpp
         net/src/socket.cpp
-    PUBLIC_DEPS bowl_core
+    PUBLIC_DEPS bowl_core bowl_ecs
     PRIVATE_DEPS bowl_monocypher)
 if(WIN32)
     target_link_libraries(bowl_net PRIVATE ws2_32 bcrypt) # bcrypt: the system's secure random numbers

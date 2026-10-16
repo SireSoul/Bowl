@@ -10,6 +10,7 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace bowl::net {
 
@@ -22,6 +23,10 @@ struct Rendezvous::Impl {
     struct Room {
         Address host;
         f64 seen = 0;
+        bool listed = false; // offered to anyone who asks (ListRooms, MatchRoom)
+        u8 players = 0, max_players = 0;
+        std::string label;
+        bool open() const { return listed && (max_players == 0 || players < max_players); }
     };
     std::map<std::pair<u32, std::string>, Room> rooms; // by game protocol and name
     struct Session {
@@ -65,19 +70,61 @@ struct Rendezvous::Impl {
             u32 protocol = r.u32_();
             std::string_view name = r.text();
             if (!r.ok || name.empty() || name.size() > wire::max_room) return;
+            Room room{from, now};
+            if (!r.done()) { // a listing: older hosts don't send one
+                room.listed = r.u8_() != 0;
+                room.players = r.u8_();
+                room.max_players = r.u8_();
+                room.label = std::string(r.text().substr(0, wire::max_room));
+                if (!r.ok) return;
+            }
             auto key = std::make_pair(protocol, std::string(name));
             auto it = rooms.find(key);
             if (it == rooms.end()) {
                 if (rooms.size() >= settings.max_rooms) return;
-                rooms[key] = {from, now};
+                rooms[key] = room;
             } else if (it->second.host == from || now - it->second.seen > settings.room_timeout) {
-                it->second = {from, now}; // the same host again, or a new one for a room whose host went quiet
+                it->second = room; // the same host again, or a new one for a room whose host went quiet
             } // else: someone else hosts it; the first host keeps it
             return;
         }
-        if (kind == wire::JoinRoom) {
+        if (kind == wire::ListRooms) {
             u32 protocol = r.u32_();
-            std::string_view name = r.text();
+            u64 nonce = r.u64_();
+            u16 from_index = r.u16_();
+            if (!r.ok) return;
+            std::vector<const std::pair<const std::pair<u32, std::string>, Room>*> open;
+            for (const auto& entry : rooms)
+                if (entry.first.first == protocol && entry.second.open() && now - entry.second.seen <= settings.room_timeout)
+                    open.push_back(&entry);
+            std::sort(open.begin(), open.end(), [](auto* a, auto* b) { // fullest first, then by name
+                return a->second.players != b->second.players ? a->second.players > b->second.players
+                                                              : a->first.second < b->first.second;
+            });
+            Writer w;
+            w.u32_(wire::rendezvous_magic);
+            w.u8_(wire::RoomList);
+            w.u64_(nonce);
+            w.u16_(static_cast<u16>(std::min<usize>(open.size(), 0xFFFF)));
+            usize count_at = w.out.size();
+            w.u8_(0);
+            u8 count = 0;
+            for (usize i = from_index; i < open.size() && count < 255; ++i) {
+                const auto& [key, room] = *open[i];
+                if (w.out.size() + 2 + key.second.size() + room.label.size() + 2 > 1100) break; // one packet's worth
+                w.text(key.second);
+                w.text(room.label);
+                w.u8_(room.players);
+                w.u8_(room.max_players);
+                ++count;
+            }
+            w.out[count_at] = count;
+            socket.send(from, w.out);
+            return;
+        }
+        if (kind == wire::JoinRoom || kind == wire::MatchRoom) {
+            u32 protocol = r.u32_();
+            std::string_view name = kind == wire::JoinRoom ? r.text() : std::string_view();
             u64 nonce = r.u64_();
             bool relay_only = r.u8_() != 0;
             if (!r.ok || nonce == 0) return;
@@ -86,8 +133,17 @@ struct Rendezvous::Impl {
                 if (s != sessions.end() && s->second.player == from) introduce(s->first, s->second);
                 return;
             }
-            auto room = rooms.find(std::make_pair(protocol, std::string(name)));
-            if (room == rooms.end() || now - room->second.seen > settings.room_timeout) {
+            Room* room = nullptr;
+            if (kind == wire::JoinRoom) {
+                auto it = rooms.find(std::make_pair(protocol, std::string(name)));
+                if (it != rooms.end() && now - it->second.seen <= settings.room_timeout) room = &it->second;
+            } else { // the fullest listed room that still has space
+                for (auto& [key, candidate] : rooms)
+                    if (key.first == protocol && candidate.open() && now - candidate.seen <= settings.room_timeout &&
+                        (!room || candidate.players > room->players))
+                        room = &candidate;
+            }
+            if (!room) {
                 Writer w;
                 w.u32_(wire::rendezvous_magic);
                 w.u8_(wire::NoRoom);
@@ -100,13 +156,14 @@ struct Rendezvous::Impl {
             while (id == 0 || sessions.contains(id)) id = crypto::random_u64();
             Session s;
             s.player = from;
-            s.host = room->second.host;
+            s.host = room->host;
             s.nonce = nonce;
             s.auto_route = !relay_only;
             s.used = s.refilled = now;
             s.to_host = s.to_player = settings.relay_bytes_per_second;
             sessions[id] = s;
             by_nonce[nonce] = id;
+            if (room->players < 255) ++room->players; // until the host's next word: several matches at once spread out
             ++stats.introductions;
             introduce(id, s);
             return;

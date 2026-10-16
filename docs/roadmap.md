@@ -57,8 +57,8 @@ would otherwise be for.
 
 ## M6: together
 - ~~Networking: reliable UDP transport, lockstep and rollback helpers built on the deterministic ECS, encryption,
-  rooms through a rendezvous server with NAT punch-through and a relay~~ (done). Later: state replication, lobbies
-  and matchmaking
+  rooms through a rendezvous server with NAT punch-through and a relay, lobbies and quick match, replication and typed
+  messages for host-run games~~ (done). Later: client-side prediction for replicated games
 - ~~Deterministic entity ids for entities spawned in parallel systems~~ (done)
 
 ## Docs and tooling

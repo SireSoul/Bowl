@@ -296,6 +296,109 @@ TEST_CASE("net: rooms: joining a room nobody hosts ends quickly") {
     CHECK(rooms.now - before < 1); // the server says so: no waiting for a timeout
 }
 
+TEST_CASE("net: lobbies: listed rooms show in the list, fullest first; unlisted and other games' rooms don't") {
+    Rendezvous rendezvous;
+    REQUIRE(rendezvous.start({.port = 0}));
+    Address server = Address::loopback(rendezvous.port());
+    Host busy, quiet, secret, other_game, guest, browser;
+    REQUIRE(busy.start());
+    REQUIRE(quiet.start());
+    REQUIRE(secret.start());
+    REQUIRE(other_game.start({.protocol = 7}));
+    REQUIRE(guest.start());
+    REQUIRE(browser.start());
+    busy.host_room(server, "room-busy", {.listed = true, .label = "Farm co-op", .max_players = 4});
+    quiet.host_room(server, "room-quiet", {.listed = true, .label = "Quiet valley"});
+    secret.host_room(server, "room-secret"); // unlisted: found only by name
+    other_game.host_room(server, "room-other", {.listed = true});
+    f64 now = 0;
+    auto update = [&](f64 t) {
+        rendezvous.update(t), busy.update(t), quiet.update(t), secret.update(t), other_game.update(t), guest.update(t),
+            browser.update(t);
+    };
+    bool guest_in = false;
+    guest.join_room(server, "room-busy");
+    REQUIRE(run(now, 3, update, [&] {
+        while (auto e = guest.receive()) guest_in = guest_in || e->type == Event::Type::Connected;
+        while (busy.receive()) {}
+        return guest_in;
+    }));
+    wait(now, 1.1, update); // busy tells the server it has two players now
+
+    bool listed = false;
+    browser.list_rooms(server);
+    REQUIRE(run(now, 2, update, [&] {
+        while (auto e = browser.receive()) listed = listed || e->type == Event::Type::RoomsListed;
+        return listed;
+    }));
+    REQUIRE(browser.listed_rooms().size() == 2);
+    CHECK(browser.listed_total() == 2);
+    const RoomListing& first = browser.listed_rooms()[0];
+    CHECK(first.room == "room-busy");
+    CHECK(first.label == "Farm co-op");
+    CHECK(first.players == 2);
+    CHECK(first.max_players == 4);
+    CHECK(browser.listed_rooms()[1].room == "room-quiet");
+    CHECK(browser.listed_rooms()[1].players == 1);
+    CHECK(browser.listed_rooms()[1].max_players == 33); // max_peers + 1
+}
+
+TEST_CASE("net: lobbies: quick match joins the fullest listed room with space, and ends when none has any") {
+    Rendezvous rendezvous;
+    REQUIRE(rendezvous.start({.port = 0}));
+    Address server = Address::loopback(rendezvous.port());
+    Host full, roomy, emptyish, player, late;
+    REQUIRE(full.start());
+    REQUIRE(roomy.start());
+    REQUIRE(emptyish.start());
+    REQUIRE(player.start());
+    REQUIRE(late.start());
+    full.host_room(server, "full", {.listed = true, .max_players = 1});    // just the host: no space
+    roomy.host_room(server, "roomy", {.listed = true, .max_players = 8});
+    emptyish.host_room(server, "emptyish", {.listed = true, .max_players = 8});
+    f64 now = 0;
+    auto update = [&](f64 t) {
+        rendezvous.update(t), full.update(t), roomy.update(t), emptyish.update(t), player.update(t), late.update(t);
+    };
+    wait(now, 0.1, update);         // the hosts tell the server about their rooms
+    late.join_room(server, "roomy"); // roomy gets a player, so it's the fullest room with space
+    bool first_in = false;
+    REQUIRE(run(now, 3, update, [&] {
+        while (auto e = late.receive()) first_in = first_in || e->type == Event::Type::Connected;
+        return first_in;
+    }));
+    wait(now, 1.1, update);
+
+    PeerId matched = player.quick_match(server);
+    int roomy_joined = 0, emptyish_joined = 0;
+    bool player_in = false;
+    REQUIRE(run(now, 3, update, [&] {
+        while (auto e = roomy.receive()) roomy_joined += e->type == Event::Type::Connected;
+        while (auto e = emptyish.receive()) emptyish_joined += e->type == Event::Type::Connected;
+        while (auto e = player.receive()) player_in = player_in || (e->type == Event::Type::Connected && e->peer == matched);
+        return player_in;
+    }));
+    CHECK(roomy_joined == 1); // the player matched into roomy (late joined it before)
+    CHECK(emptyish_joined == 0);
+
+    // A server where the only listed room is full: quick match ends at once.
+    Rendezvous fresh;
+    REQUIRE(fresh.start({.port = 0}));
+    Address fresh_server = Address::loopback(fresh.port());
+    full.host_room(fresh_server, "full", {.listed = true, .max_players = 1});
+    Host nobody;
+    REQUIRE(nobody.start());
+    wait(now, 0.1, [&](f64 t) { fresh.update(t), full.update(t); });
+    PeerId none = nobody.quick_match(fresh_server);
+    bool ended = false;
+    f64 before = now;
+    CHECK(run(now, 3, [&](f64 t) { fresh.update(t), full.update(t), nobody.update(t); }, [&] {
+        while (auto e = nobody.receive()) ended = ended || (e->type == Event::Type::Disconnected && e->peer == none);
+        return ended;
+    }));
+    CHECK(now - before < 1); // the server says so: no waiting for a timeout
+}
+
 TEST_CASE("net: reliable messages arrive once and in order through a bad network") {
     HostSettings bad{.simulated_loss = 0.3f, .simulated_latency = 0.03f, .simulated_jitter = 0.04f};
     Host server, client;

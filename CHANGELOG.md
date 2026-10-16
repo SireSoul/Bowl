@@ -6,6 +6,13 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Replication for host-run games (`net::Replicator` on the host, `net::Replica` on players, `net::Replicated`,
+  `net::Sync`): entities and their registered components reach each player, `OnChange` ones reliably when they change,
+  `Continuous` ones unreliably with the newest winning; entity references are remapped, and `relevant()` picks what each
+  player is shown.
+- Typed messages (`net::Messages`): reflected structs sent and handled by type, the same across compilers.
+- Lobbies: `RoomInfo` (listed rooms with a label and player counts), `Host::list_rooms` with the `RoomsListed` event,
+  and `Host::quick_match` into the fullest listed room with space.
 - Fuzzers for everything that reads data a stranger could control (`tests/fuzz`, `BOWL_FUZZ`, the `fuzz` preset):
   network packets for `net::Host` and `net::Rendezvous`, `Address::read`, JSON text and binary, `json::TextDocument`,
   saved worlds and prefabs, XML, Tiled maps, Aseprite sheets, asset archives, fonts and pictures. libFuzzer with

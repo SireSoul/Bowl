@@ -1337,6 +1337,14 @@ inline constexpr u32 tile_flip_d = 0x20000000u; // anti-diagonal (transpose)
 inline constexpr u32 tile_gid_mask = 0x0FFFFFFFu;
 ```
 
+The most cells a tile layer can have (4096 x 4096, 64 MB). A map with a bigger one fails to load, so a broken or
+hostile map file can't make a game ask for gigabytes.
+
+```cpp
+inline constexpr u64 max_layer_cells = u64{1};
+<< 24;
+```
+
 ### TileFrame
 
 ```cpp

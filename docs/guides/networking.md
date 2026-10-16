@@ -1,8 +1,9 @@
 # Networking
 
-`bowl_net` connects games over UDP. `net::Host` makes connections and carries messages; `net::Lockstep` and
-`net::Rollback` keep a simulation in step across machines. Everything runs on your thread, inside calls you make:
-there are no network threads and no callbacks.
+`bowl_net` connects games over UDP. `net::Host` makes connections and carries messages. For a game where one machine
+runs the world, as in Stardew Valley's co-op, `net::Messages` carries what players do and `net::Replicator` shows them
+the world; `net::Lockstep` and `net::Rollback` instead keep the same simulation in step on every machine. Everything
+runs on your thread, inside calls you make: there are no network threads, and callbacks run only inside `handle()`.
 
 ## Connections
 
@@ -95,6 +96,24 @@ a private game. Your game can also run the server itself: `net::Rendezvous` is t
 To test the relay on one machine, `HostSettings::simulated_unreachable` makes a host act as if no one can reach it
 directly, so joining it has to take the relay.
 
+### Lobbies
+
+A room can be listed, for players who want to join anyone rather than a friend:
+
+```cpp
+host.host_room(server, room_code, {.listed = true, .label = "Spring co-op", .max_players = 4});
+
+browser.list_rooms(server);                      // a RoomsListed event follows
+for (const net::RoomListing& r : browser.listed_rooms()) { ... r.room, r.label, r.players, r.max_players ... }
+
+net::PeerId peer = player.quick_match(server);  // into the fullest listed room with space, like join_room
+```
+
+Only rooms of the same game (`protocol`) with space are listed, fullest first, a packet's worth at a time
+(`list_rooms(server, from)` for the next ones; `listed_total()` says how many). `quick_match` ends in `Disconnected` when
+none has space. The host's player count reaches the server once a second, so two players matching in the same moment
+can both pick a room with one place; the second is turned away like any player over `max_peers`.
+
 ## Messages
 
 ```cpp
@@ -125,6 +144,69 @@ server.start({.port = 27015, .simulated_loss = 0.1f, .simulated_latency = 0.05f,
 ```
 
 This loses 10% of the packets the host sends, and holds the rest back 50–70 ms. Turn it on on both sides.
+
+## Typed messages
+
+Plain structs as messages, so the host can take "a player gave a gift" as a `Gift` rather than as bytes:
+
+```cpp
+struct Gift { i32 item = 0; std::string to; };
+BOWL_REFLECT(Gift, item, to)
+
+net::Messages messages;                                              // on both sides
+messages.on<Gift>([&](net::PeerId from, const Gift& g) { ... });    // the host applies it, as that player
+messages.send(player, to_host, Gift{.item = 7, .to = "calla"});      // a player sends one
+
+while (auto e = host.receive())
+    if (!messages.handle(*e)) { ... }                                // false: not one of Messages'
+```
+
+A message goes as its reflected fields, the way saves write them (strings, vectors, nested structs all work), named by
+its name in `BOWL_REFLECT`, so builds made with different compilers agree. Register each type on both sides. Every
+message `Messages` sends starts with the byte `Messages::tag`; the game can send its own bytes alongside, as long as they
+don't start with it.
+
+## Replication
+
+In a host-run game the host's world is the real one, and each player is shown it. `net::Replicator` does the showing,
+and `net::Replica` builds what it's shown in the player's world:
+
+```cpp
+// The host
+net::Replicator replicator(world);
+replicator.replicate<ecs::Transform2D>(net::Sync::Continuous); // moves all the time: newest wins
+replicator.replicate<Crop>();                                  // changes now and then: must arrive
+world.create(net::Replicated{}, ecs::Transform2D{...}, Crop{...});
+// every tick, after the simulation
+replicator.update(host);
+
+// A player, with the same registrations
+net::Replica replica(world);
+replica.replicate<ecs::Transform2D>(net::Sync::Continuous);
+replica.replicate<Crop>();
+while (auto e = client.receive())
+    if (!replica.handle(*e) && !messages.handle(*e)) { ... }
+```
+
+Entities with a `net::Replicated` component are shared, with the components registered on both sides (they need
+`BOWL_COMPONENT` or `BOWL_REFLECT`). The Replicator gives each one a network id, kept in its `Replicated`; the player's
+copy has the same id (`replica.entity(id)`, `replicator.net_id(entity)`). What reaches a player:
+
+- An entity when it's first shared, with all its components; its removal when it's destroyed or loses `Replicated`.
+- `Sync::OnChange` components (the default) reliably, whenever their value changes, and their removal.
+- `Sync::Continuous` components unreliably every tick they change, newest wins; one that stays the same is sent again
+  every 10 updates in case the last one was lost. A tick sends at most `continuous_messages` (12) messages to a player,
+  taking turns when there's more.
+- Entity fields inside components arrive as the player's own entities, when the entity they point at is shared with
+  that player too (otherwise as null).
+
+`replicator.relevant([](net::PeerId peer, ecs::Entity e) { ... })` decides what each player is shown, for example only
+what's on the map that player is on. An entity that stops being relevant is taken away from that player, and arrives in
+full again if it becomes relevant. `replica.clear()` removes everything after leaving a game.
+
+The player's copies are the host's to change: a player that changes one locally (to move its own character before the
+host confirms it, say) has its change overwritten by the next update. What a player *does* goes to the host as a typed
+message, and the host changes the world.
 
 ## Lockstep
 
@@ -209,9 +291,7 @@ To catch a desync, hash the state of a confirmed tick now and then, and compare 
 
 ## What it doesn't do
 
-`bowl_net` doesn't do lobbies or matchmaking: listing rooms, or putting strangers together, is the game's (or a
-service's) job; rooms join players who share a name. Over the internet, players need a reachable host (an open port, or
-a server with a public address), or a service such as Steam networking.
-
-Multiplayer that sends state instead of inputs (a server runs the game and sends what changed) is built from `Host`
-messages and the game's own serialization. There's no replication system for it yet.
+`bowl_net` doesn't do skill-based matchmaking (quick match fills the fullest room) or accounts and friends lists; those
+are the game's, or a service's, such as Steam. Replication has no client-side prediction yet: a player's own character
+waits a round trip for the host, which is fine for co-op at home-network latencies but not for fast action games, where
+rollback fits better.

@@ -64,8 +64,8 @@ load their worlds without a pile of boilerplate.
   hash, `move_and_slide`, colliders and trigger events as components
 - Optional Box2D v3 rigid bodies, with joints, springs, motors and contact events
 - Networking: encrypted `net::Host` connections over UDP with reliable and unreliable messages and a simulated bad
-  network; rooms through a rendezvous server, with NAT punch-through and a relay (`bowl-rendezvous`); lockstep and
-  rollback helpers built on the deterministic ECS
+  network; rooms through a rendezvous server, with NAT punch-through, a relay and lobbies (`bowl-rendezvous`);
+  replication and typed messages for host-run co-op; lockstep and rollback helpers built on the deterministic ECS
 - Localization with fallbacks, placeholders and plurals
 - Player settings stored in the OS's per-user folder
 
