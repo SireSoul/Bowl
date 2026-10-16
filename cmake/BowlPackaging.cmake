@@ -111,23 +111,26 @@ Terminal=false
 Categories=Game;
 ")
     endforeach()
-    install(FILES "${dir}/local.desktop" DESTINATION ${target} RENAME "${target}.desktop")
+    install(FILES "${dir}/local.desktop" DESTINATION ${target} RENAME "${target}.desktop" COMPONENT ${target})
     if(has_icon)
-        install(FILES "${dir}/${target}.png" DESTINATION ${target})
+        install(FILES "${dir}/${target}.png" DESTINATION ${target} COMPONENT ${target})
     endif()
     if(BOWL_LINUX_SHARE)
-        install(FILES "${dir}/share.desktop" DESTINATION share/applications RENAME "${bundle_id}.desktop")
+        install(FILES "${dir}/share.desktop" DESTINATION share/applications RENAME "${bundle_id}.desktop"
+                COMPONENT ${target})
         if(has_icon)
-            install(FILES "${dir}/${target}.png" DESTINATION share/icons/hicolor/256x256/apps RENAME "${bundle_id}.png")
+            install(FILES "${dir}/${target}.png" DESTINATION share/icons/hicolor/256x256/apps RENAME "${bundle_id}.png"
+                    COMPONENT ${target})
         endif()
         # Where Flatpak and distro packages keep license files.
         foreach(file IN LISTS BOWL_LICENSE_FILES)
             get_filename_component(name "${file}" NAME)
-            install(FILES "${file}" DESTINATION share/licenses/${bundle_id} RENAME "bowl-${name}.txt")
+            install(FILES "${file}" DESTINATION share/licenses/${bundle_id} RENAME "bowl-${name}.txt" COMPONENT ${target})
         endforeach()
         # bin/<game> runs the copy that has its asset folders beside it.
         install(CODE "file(MAKE_DIRECTORY \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin\")
-file(CREATE_LINK \"../${target}/${target}\" \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/${target}\" SYMBOLIC)")
+file(CREATE_LINK \"../${target}/${target}\" \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/${target}\" SYMBOLIC)"
+            COMPONENT ${target})
     endif()
 endfunction()
 
@@ -147,14 +150,14 @@ function(_bowl_sign_installed target bundle)
 if(result)
     message(FATAL_ERROR
         \"codesign couldn't sign ${target}.app (BOWL_MACOS_SIGN_IDENTITY: ${BOWL_MACOS_SIGN_IDENTITY})\")
-endif()")
+endif()" COMPONENT ${target})
     elseif(WIN32 AND BOWL_WINDOWS_SIGN_COMMAND)
         _bowl_quote(command ${BOWL_WINDOWS_SIGN_COMMAND})
         install(CODE "execute_process(COMMAND ${command} \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/${target}/${target}.exe\"
     RESULT_VARIABLE result)
 if(result)
     message(FATAL_ERROR \"couldn't sign ${target}.exe with BOWL_WINDOWS_SIGN_COMMAND\")
-endif()")
+endif()" COMPONENT ${target})
     endif()
 endfunction()
 
@@ -194,6 +197,8 @@ function(bowl_package target)
     set(CPACK_PACKAGE_INSTALL_DIRECTORY "${name}")
     set(CPACK_PACKAGE_FILE_NAME "${file_name}-${version}-${CMAKE_SYSTEM_NAME}")
     set(CPACK_PACKAGE_CHECKSUM SHA256)
+    # Only this game's component, even when the project builds other games or tools.
+    set(CPACK_INSTALL_CMAKE_PROJECTS "${CMAKE_BINARY_DIR};${PROJECT_NAME};${target};/")
     if(ARG_LICENSE)
         get_filename_component(CPACK_RESOURCE_FILE_LICENSE "${ARG_LICENSE}" ABSOLUTE)
     endif()
@@ -225,7 +230,7 @@ function(bowl_package target)
         set(CPACK_GENERATOR TGZ)
         add_custom_target(${target}_appimage
             COMMAND ${CMAKE_COMMAND} -DBUILD_DIR=${CMAKE_BINARY_DIR} -DCONFIG=$<CONFIG> -DTARGET=${target}
-                    -DAPPDIR=${CMAKE_BINARY_DIR}/${target}.AppDir
+                    -DAPPDIR=${CMAKE_BINARY_DIR}/${target}.AppDir -DCOMPONENT=${target}
                     -DOUTPUT=${CMAKE_BINARY_DIR}/${file_name}-${version}-${CMAKE_SYSTEM_PROCESSOR}.AppImage
                     -P ${BOWL_CMAKE_DIR}/BowlAppImage.cmake
             DEPENDS ${target}
@@ -244,8 +249,9 @@ function(bowl_package target)
       "buildsystem": "cmake-ninja",
       "config-opts": ["-DCMAKE_BUILD_TYPE=Release", "-DBOWL_DEV_TOOLS=OFF", "-DBOWL_FETCH_SDL=ON",
                       "-DBOWL_LINUX_SHARE=ON", "-DBOWL_BUILD_TESTS=OFF", "-DBOWL_BUILD_EDITOR=OFF"],
+      "builddir": true,
       "build-options": { "build-args": ["--share=network"] },
-      "sources": [{ "type": "dir", "path": "@CMAKE_SOURCE_DIR@" }]
+      "sources": [{ "type": "dir", "path": "@CMAKE_SOURCE_DIR@", "skip": ["build", ".git"] }]
     }
   ]
 }

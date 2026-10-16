@@ -113,6 +113,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- The isometric sample has installers (`bowl_package`), which the Package workflow builds and runs on every
+  platform. CI dependency downloads retry when they stall, and jobs stop after 45 minutes.
 - Bowl is under the Apache License 2.0 (`LICENSE`, `NOTICE`).
 - **Breaking**: the `ph` prefix is now `bowl` everywhere: the `bowl` namespace and `bowl/...` include paths,
   `BOWL_` macros and CMake options, `bowl_add_game` and the other CMake functions, the `bowl-shaderc`, `bowl-atlas`,
@@ -141,6 +143,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 - Comments throughout the code were rewritten to say plainly what the code does, and outdated ones corrected.
 
 ### Fixed
+- Installers, disk images and AppImages from `bowl_package` carried every game the project installs; now only the
+  packaged game (each game installs into a component named after it). The Flatpak manifest skips `build/` and `.git`
+  and builds out of the source folder.
+- Fonts made only of pictures (no outlines), such as Noto Color Emoji, load.
+- Class-type properties in `.tmx` maps no longer read freed memory.
 - Game-code hot reload on Windows: each loaded copy of the game library gets its own `.pdb`, so a profiler or
   debugger holding the previous one no longer stops the next build from linking (LNK1201).
 - Engine components (sprites, animators, colliders) registered first by a game library no longer count as the

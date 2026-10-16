@@ -166,7 +166,11 @@ cd build/release && cpack
 | Windows | `MyGame-1.2.0-Windows.exe`, an installer with a Start menu entry and an uninstaller, when [NSIS](https://nsis.sourceforge.io) is installed. Also a `.zip` |
 | Linux | `MyGame-1.2.0-Linux.tar.gz` |
 
-Each comes with a `.sha256` file. `cpack` installs and signs the game the same way `cmake --install` does.
+Each comes with a `.sha256` file. `cpack` installs and signs the game the same way `cmake --install` does, but only
+the game given to `bowl_package`: each game's files are in an install component named after it, so other games or
+tools in the same project stay out of its installers (`cmake --install <build> --component <game>` does the same).
+The isometric sample has installers, and the Package workflow in `.github/workflows` builds them and runs what they
+install on Windows, macOS, Linux (AppImage and Flatpak) and the iOS simulator.
 
 ### AppImage
 

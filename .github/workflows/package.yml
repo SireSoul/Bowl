@@ -1,0 +1,237 @@
+name: Package
+
+# Builds the isometric sample's installers and runs what they install, the way a player would get the game: the
+# Windows installer, the macOS disk image, the Linux AppImage and Flatpak, and the iOS app in a simulator.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Assets, not timings, are what these runs check: no sound device on the runners.
+  SDL_AUDIO_DRIVER: dummy
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: NSIS
+        shell: pwsh
+        run: |
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\NSIS\makensis.exe")) {
+            choco install nsis -y --no-progress
+          }
+
+      - name: Configure
+        run: cmake --preset release -DBOWL_FETCH_SDL=ON
+
+      - name: Build
+        run: cmake --build --preset release --parallel 4
+
+      - name: Installers
+        working-directory: build/release
+        run: cpack -C Release
+
+      # Install silently, run the installed game on WARP (Direct3D 12 in software), then uninstall.
+      - name: Install, run, uninstall
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem build/release -Filter "*-Windows.exe" | Select-Object -First 1
+          if (-not $installer) { Write-Error "no NSIS installer was made"; exit 1 }
+          $dir = "C:\BowlIsometric"
+          Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/D=$dir" -Wait
+          $exe = "$dir\isometric\isometric.exe"
+          if (-not (Test-Path $exe)) { Get-ChildItem -Recurse $dir | Select-Object FullName; Write-Error "not installed"; exit 1 }
+          foreach ($f in "bowl-LICENSE.txt", "bowl-NOTICE.txt") {
+            if (-not (Test-Path "$dir\isometric\$f")) { Write-Error "$f missing from the install"; exit 1 }
+          }
+          & $exe --driver direct3d12 --frames 30 --screenshot "$PWD\windows-installed.png"
+          if (-not (Test-Path "windows-installed.png")) { Write-Error "the installed game didn't run"; exit 1 }
+          Start-Process -FilePath "$dir\Uninstall.exe" -ArgumentList "/S", "_?=$dir" -Wait
+          if (Test-Path $exe) { Write-Error "the uninstaller left the game behind"; exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            build/release/*-Windows.exe
+            build/release/*-Windows.zip
+            build/release/*.sha256
+            windows-installed.png
+
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake --preset release
+
+      - name: Build
+        run: cmake --build --preset release --parallel 4
+
+      - name: Disk image
+        working-directory: build/release
+        run: cpack -C Release
+
+      # Open the disk image and run the app straight from it.
+      - name: Open and run
+        run: |
+          dmg=$(ls build/release/*-Darwin.dmg | head -1)
+          hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/dmg" "$dmg"
+          app=$(ls -d "$RUNNER_TEMP"/dmg/*.app | head -1)
+          ls "$RUNNER_TEMP/dmg"
+          for f in bowl-LICENSE.txt bowl-NOTICE.txt; do test -f "$app/Contents/Resources/$f" || { echo "$f missing"; exit 1; }; done
+          codesign --verify --deep "$app"
+          "$app"/Contents/MacOS/* --frames 30 --screenshot "$PWD/macos-dmg.png"
+          hdiutil detach "$RUNNER_TEMP/dmg"
+          test -f macos-dmg.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: |
+            build/release/*-Darwin.dmg
+            build/release/*-Darwin.zip
+            build/release/*.sha256
+            macos-dmg.png
+
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      # AppImages normally mount themselves with FUSE; runners don't have it, so they unpack and run instead.
+      APPIMAGE_EXTRACT_AND_RUN: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxss-dev libxfixes-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols libegl1-mesa-dev \
+            libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev \
+            xvfb libvulkan1 mesa-vulkan-drivers
+
+      - name: appimagetool
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
+          sha256sum "$RUNNER_TEMP/appimagetool"
+          chmod +x "$RUNNER_TEMP/appimagetool"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      - name: Configure
+        run: cmake --preset release
+
+      - name: Build
+        run: cmake --build --preset release --parallel 4
+
+      - name: Installers
+        run: |
+          cmake --build build/release --target isometric_appimage
+          cd build/release && cpack -C Release
+
+      # Run the AppImage in a virtual X display, on Vulkan in software (lavapipe).
+      - name: Run the AppImage
+        run: |
+          image=$(ls build/release/*.AppImage | head -1)
+          SDL_VIDEO_DRIVER=x11 xvfb-run -a -s "-screen 0 1280x720x24" \
+            "$image" --driver vulkan --frames 30 --screenshot "$PWD/linux-appimage.png"
+          test -f linux-appimage.png
+          tar -tzf build/release/*-Linux.tar.gz | grep -q bowl-NOTICE.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            build/release/*.AppImage
+            build/release/*-Linux.tar.gz
+            build/release/*.sha256
+            linux-appimage.png
+
+  flatpak:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder xvfb libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libxss-dev libxfixes-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols \
+            libegl1-mesa-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      # Configuring writes the manifest (build/release/com.bowl.isometric.flatpak.json).
+      - name: Manifest
+        run: cmake --preset release
+
+      - name: Build and install the Flatpak
+        run: |
+          flatpak-builder --user --install-deps-from=flathub --install --force-clean --disable-rofiles-fuse \
+            build/flatpak build/release/com.bowl.isometric.flatpak.json
+          flatpak run --command=sh com.bowl.isometric -c \
+            'ls /app/bin/isometric /app/share/licenses/com.bowl.isometric/bowl-LICENSE.txt /app/share/licenses/com.bowl.isometric/bowl-NOTICE.txt'
+
+      - name: Run the Flatpak
+        run: |
+          flatpak install --user -y --noninteractive flathub org.freedesktop.Platform.GL.default//24.08
+          xvfb-run -a -s "-screen 0 1280x720x24" flatpak run --filesystem="$PWD" --env=SDL_VIDEO_DRIVER=x11 \
+            --env=SDL_AUDIO_DRIVER=dummy com.bowl.isometric --driver vulkan --frames 30 --screenshot "$PWD/flatpak.png"
+          test -f flatpak.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flatpak
+          path: flatpak.png
+
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host tools
+        run: |
+          cmake --preset host-tools
+          cmake --build --preset host-tools --parallel 4
+
+      - name: Configure
+        run: cmake --preset ios
+
+      - name: Build for the simulator
+        run: cmake --build --preset ios-simulator --target isometric
+
+      # Boot an iPhone simulator, install the app and run it until it quits after its frames.
+      - name: Run in the simulator
+        run: |
+          app=$(find build/ios -type d -path "*iphonesimulator*/isometric.app" | head -1)
+          test -n "$app" || { echo "no isometric.app"; find build/ios -name "*.app"; exit 1; }
+          id=$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$app/Info.plist")
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devices = json.load(sys.stdin)["devices"]
+          print(next(d["udid"] for runtime, ds in devices.items() if "iOS" in runtime for d in ds if d["name"].startswith("iPhone")))')
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" "$app"
+          xcrun simctl launch --console-pty "$udid" "$id" --frames 120 --screenshot "$PWD/ios-simulator.png"
+          test -f ios-simulator.png
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios
+          path: ios-simulator.png
+          if-no-files-found: warn
