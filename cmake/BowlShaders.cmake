@@ -139,6 +139,7 @@ endfunction()
 # Links the engine and lays out the runtime folder next to the executable:
 #   <exe dir>/engine/...  engine assets (compiled shaders)
 #   <exe dir>/assets/...  the game's assets, with its shaders compiled
+#   <exe dir>/bowl-LICENSE.txt, bowl-NOTICE.txt  Bowl's license and notice, which every copy of the game carries
 # Dev builds read assets straight from the source folders instead, so edits hot-reload.
 # With BOWL_MACOS_BUNDLES (on in the release preset) a macOS game is a .app with these folders in Contents/Resources.
 # `cmake --install <build dir> --prefix <folder>` lays out a shippable copy of every game (signed, see
@@ -228,6 +229,12 @@ function(bowl_add_game target)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${BOWL_ENGINE_ASSET_BUILD_DIR}"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${BOWL_ENGINE_ASSET_SOURCE_DIR}" "${dest}/engine"
         COMMAND ${CMAKE_COMMAND} -E copy_directory "${BOWL_ENGINE_ASSET_BUILD_DIR}" "${dest}/engine")
+    # Bowl's license and notice travel with every copy of the game (Apache License 2.0). They sit beside the asset
+    # folders, so packing leaves them readable.
+    foreach(file IN LISTS BOWL_LICENSE_FILES)
+        get_filename_component(name "${file}" NAME)
+        list(APPEND commands COMMAND ${CMAKE_COMMAND} -E copy_if_different "${file}" "${dest}/bowl-${name}.txt")
+    endforeach()
     set(shader_outputs "")
     if(ARG_ASSETS)
         get_filename_component(assets_abs "${ARG_ASSETS}" ABSOLUTE)
@@ -273,6 +280,10 @@ function(bowl_add_game target)
             else()
                 install(DIRECTORY "${dest}/${folder}" DESTINATION ${target})
             endif()
+        endforeach()
+        foreach(file IN LISTS BOWL_LICENSE_FILES)
+            get_filename_component(name "${file}" NAME)
+            install(FILES "${file}" DESTINATION ${target} RENAME "bowl-${name}.txt")
         endforeach()
         if(NOT APPLE AND NOT WIN32)
             if(ARG_ICON)
