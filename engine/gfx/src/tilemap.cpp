@@ -348,7 +348,8 @@ json::Value xml_properties(const xml::Element& e) {
         else if (type == "class") {
             json::Value fields;
             fields.make_object();
-            for (const json::Value& f : xml_properties(p).array()) fields.set(f["name"].as_string(), f["value"]);
+            json::Value members = xml_properties(p); // kept alive: the loop below points into it
+            for (const json::Value& f : members.array()) fields.set(f["name"].as_string(), f["value"]);
             prop.set("value", std::move(fields));
         } else prop.set("value", value);
         list.push(std::move(prop));

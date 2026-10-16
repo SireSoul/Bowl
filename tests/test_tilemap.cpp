@@ -234,6 +234,12 @@ TEST_CASE("tilemap: .tmx maps read like .tmj ones") {
   <property name="speed" type="float" value="1.5"/>
   <property name="note">two
 lines</property>
+  <property name="weather" type="class" propertytype="Weather">
+   <properties>
+    <property name="rain" type="bool" value="true"/>
+    <property name="wind" type="float" value="2.5"/>
+   </properties>
+  </property>
  </properties>
  <tileset firstgid="1" source="../tilesets/terrain.tsx"/>
  <tileset firstgid="9" name="props" tilewidth="32" tileheight="48" tilecount="1" columns="0">
@@ -273,6 +279,8 @@ lines</property>
     CHECK(map.properties["music"].as_string() == "town.ogg");
     CHECK(map.properties["speed"].as_float() == doctest::Approx(1.5f));
     CHECK(map.properties["note"].as_string() == "two\nlines");
+    CHECK(map.properties["weather"]["rain"].as_bool());
+    CHECK(map.properties["weather"]["wind"].as_float() == doctest::Approx(2.5f));
     CHECK(map.background.a == doctest::Approx(0x80 / 255.0f));
 
     REQUIRE(map.tilesets.size() == 2);
