@@ -168,6 +168,11 @@ The [tutorial](docs/tutorial.md) builds a complete small game from here, one fea
 | <img src="docs/images/isometric-day.jpg" width="400" alt="Isometric sample"> | **`isometric`**: a y-sorted isometric map to walk around, with collision, a night mode (lights, bloom, fireflies, a torch whose light the pillars block), a pause menu and a dialogue box. Flags: `--night`, `--menu`, `--dialogue`. |
 | <img src="docs/images/sprites.png" width="400" alt="Sprites sample"> | **`sprites`**: an ECS stress test with thousands of bouncing sprites, a custom shader, animated sprite sheets, audio and a custom dev tool window. Built with game-code hot reload. Flags: `--gpu-particles` (200,000 particles on the GPU), `--film` (a color-grading LUT, grain and chromatic aberration). |
 
+To try one without building anything, each [release](https://github.com/SireSoul/Bowl/releases) has the `isometric`
+sample ready to run: an installer for Windows, a disk image for macOS, and an AppImage for Linux. They aren't signed
+by a paid developer account, so Windows asks before running it ("More info", then "Run anyway") and macOS wants it
+opened from the Finder's right-click menu the first time.
+
 ## Documentation
 
 Start at [docs/README.md](docs/README.md), the full index. The main entry points:
@@ -214,6 +219,14 @@ docs/        the documentation
 
 Early, but everything listed above builds, passes its tests and runs. The API will keep changing while the first
 game is built on it; [CHANGELOG.md](CHANGELOG.md) records what changed.
+
+## Made with Bowl
+
+Made a game with Bowl? It's free to use for any game, and its license asks for one thing in return: credit. The build
+puts Bowl's license and notice files next to your game for you (`bowl-LICENSE.txt` and `bowl-NOTICE.txt`, see the
+[packaging guide](docs/guides/packaging.md)); a line in your credits or store page, such as "Made with Bowl", is
+appreciated too. If you'd like your game listed here, [open an issue](https://github.com/SireSoul/Bowl/issues/new)
+with a link and a screenshot.
 
 ## Contributing
 

@@ -5,6 +5,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-16
+
 ### Added
 - Networking rooms (`Host::host_room`, `join_room`, `net::Route`): players meet through a rendezvous server
   (`net::Rendezvous`, the `bowl-rendezvous` tool), connect straight to each other through home routers (NAT
@@ -165,7 +167,9 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   now replaces the old one.
 - The `bowl_tests` executable no longer links every module twice (a macOS linker warning).
 
-## [0.1.0] - 2026-10-14
+## 0.1.0 - 2026-10-14
+
+The engine before its first public release; there is no download for it.
 
 The first version: everything needed to start making a game.
 
@@ -197,5 +201,5 @@ The first version: everything needed to start making a game.
 - **Samples:** `isometric` and `sprites`.
 - **CI:** Windows, macOS and Linux, `dev` and `release`, tests, and a Direct3D 12 render on Windows.
 
-[Unreleased]: https://github.com/SireSoul/Bowl/compare/main...develop
-[0.1.0]: https://github.com/SireSoul/Bowl/tree/main
+[Unreleased]: https://github.com/SireSoul/Bowl/compare/v0.2.0...develop
+[0.2.0]: https://github.com/SireSoul/Bowl/releases/tag/v0.2.0
