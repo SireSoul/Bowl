@@ -43,6 +43,8 @@ dist/
     my_game(.exe)
     engine.bowlpak   engine shaders and the default font
     assets.bowlpak   your assets, with compiled shaders
+    bowl-LICENSE.txt Bowl's license and notice, which every copy of the game carries
+    bowl-NOTICE.txt
 ```
 
 **macOS**: one self-contained application bundle per game.
@@ -54,6 +56,8 @@ dist/
       MacOS/my_game
       Resources/engine.bowlpak
       Resources/assets.bowlpak
+      Resources/bowl-LICENSE.txt
+      Resources/bowl-NOTICE.txt
       Info.plist
 ```
 
@@ -62,7 +66,10 @@ The bundle's identifier defaults to `com.bowl.<target>`; set yours with
 in your `CMakeLists.txt`.
 
 Without `BOWL_PACK_ASSETS` (the default outside the `release` preset), `engine/` and `assets/` are folders of loose files
-instead of archives; the engine reads either (see [Assets](assets.md#archives)).
+instead of archives; the engine reads either (see [Assets](assets.md#archives)). `bowl-LICENSE.txt` and
+`bowl-NOTICE.txt` stay loose either way, so players can read them. Build folders get them too, next to the executable
+(in `Resources/` of a macOS bundle, at the top of an iOS app), and every installer and AppImage carries the installed
+copy.
 
 Zip the folder (or the `.app`) and it runs on another machine of the same OS and architecture. Or let
 [`bowl_package`](#installers) make installers.
@@ -178,8 +185,8 @@ than the one it was built on.
 ### Flatpak
 
 `bowl_package` writes `build/release/<bundle id>.flatpak.json`, a manifest for `flatpak-builder`. It builds the game from
-your source folder with the freedesktop runtime, and installs the desktop file and icon where Flatpak looks
-(`BOWL_LINUX_SHARE`):
+your source folder with the freedesktop runtime, and installs the desktop file, the icon and Bowl's license files
+where Flatpak looks (`BOWL_LINUX_SHARE`; the license files go in `share/licenses/<bundle id>/`):
 
 ```bash
 flatpak-builder --user --install --force-clean build/flatpak build/release/com.yourstudio.mygame.flatpak.json
@@ -222,9 +229,11 @@ real Deck before shipping: performance, suspend and resume, and the on-screen ke
 - **Version.** Set `project(my_game VERSION 1.2.0 ...)`; it goes into the macOS bundle.
 - **Logging.** Release builds log at `Info` by default; consider `Warn` in `AppConfig::log_level`, or add a log sink
   that writes a file players can send you.
-- **Bowl's license.** Ship Bowl's `LICENSE` and `NOTICE` files with your game, for example next to the executable
-  or in its credits; the Apache License 2.0 asks for both. Do the same for the licenses of the libraries your build
-  uses (the README's License section lists them).
+- **Bowl's license.** The Apache License 2.0 asks every copy of your game to carry Bowl's `LICENSE` and `NOTICE`,
+  and the build does it: each game gets `bowl-LICENSE.txt` and `bowl-NOTICE.txt` next to its executable (in
+  `Resources/` of a macOS bundle), loose even when assets are packed, and installs, installers, AppImages and Flatpaks
+  include them (see [Installing](#installing)). Still yours to do: mark engine files you changed, and ship the
+  licenses of the libraries your build uses (the README's License section lists them).
 - **Check a clean machine.** Run the installed copy, not the build folder: it proves every asset was installed.
 
 ## Not done yet

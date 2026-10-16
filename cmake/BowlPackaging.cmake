@@ -9,6 +9,10 @@ set(BOWL_IOS_TEAM "" CACHE STRING "iOS: Apple development team ID that signs app
 option(BOWL_LINUX_SHARE "Linux: also install the desktop file and icon under share/, and the game under bin/ (Flatpak, distro packages)" OFF)
 
 set(BOWL_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
+# Bowl's LICENSE and NOTICE, which the Apache License 2.0 asks every copy of a game to carry. bowl_add_game puts them
+# beside each game as bowl-LICENSE.txt and bowl-NOTICE.txt.
+get_filename_component(_bowl_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+set(BOWL_LICENSE_FILES "${_bowl_root}/LICENSE" "${_bowl_root}/NOTICE" CACHE INTERNAL "")
 
 # Quotes each item so it survives being written into install(CODE).
 function(_bowl_quote out_var)
@@ -116,6 +120,11 @@ Categories=Game;
         if(has_icon)
             install(FILES "${dir}/${target}.png" DESTINATION share/icons/hicolor/256x256/apps RENAME "${bundle_id}.png")
         endif()
+        # Where Flatpak and distro packages keep license files.
+        foreach(file IN LISTS BOWL_LICENSE_FILES)
+            get_filename_component(name "${file}" NAME)
+            install(FILES "${file}" DESTINATION share/licenses/${bundle_id} RENAME "bowl-${name}.txt")
+        endforeach()
         # bin/<game> runs the copy that has its asset folders beside it.
         install(CODE "file(MAKE_DIRECTORY \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin\")
 file(CREATE_LINK \"../${target}/${target}\" \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/${target}\" SYMBOLIC)")

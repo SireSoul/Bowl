@@ -27,6 +27,9 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   with `BOWL_WINDOWS_SIGN_COMMAND`, Windows executables; `cmake/BowlNotarize.cmake` notarizes and staples. `bowl_package`
   makes installers with `cpack` (DMG, NSIS, ZIP, TGZ), an AppImage (`<game>_appimage`) and a Flatpak manifest
   (`BOWL_LINUX_SHARE`).
+- Every game made with `bowl_add_game` carries Bowl's license: `bowl-LICENSE.txt` and `bowl-NOTICE.txt` next to the
+  executable (in `Resources/` of a macOS bundle, at the top of an iOS app), loose when assets are packed, and in
+  installs, `cpack` installers, AppImages and Flatpaks (also `share/licenses/<bundle id>/` with `BOWL_LINUX_SHARE`).
 - Steam Deck: `bowl::is_steam_deck()`, fullscreen there by default (`AppConfig::fullscreen_on_steam_deck`), and
   `--deck` to preview a game in a 1280 x 800 window. `Input::last_device()` for keyboard or gamepad prompts.
 - `gfx::decode_png`.
