@@ -189,6 +189,13 @@ void Rendezvous::update(f64 now) {
     if (m.now - m.last_cleanup >= 1) m.cleanup();
 }
 
+void Rendezvous::handle(const Address& from, std::span<const u8> packet, f64 now) {
+    Impl& m = *impl_;
+    m.now = now;
+    m.handle(from, packet);
+    if (m.now - m.last_cleanup >= 1) m.cleanup();
+}
+
 RendezvousStats Rendezvous::stats() const {
     RendezvousStats s = impl_->stats;
     s.rooms = impl_->rooms.size();

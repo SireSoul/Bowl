@@ -7,6 +7,11 @@ add_library(bowl::icon ALIAS bowl_icon)
 target_include_directories(bowl_icon PUBLIC include)
 target_link_libraries(bowl_icon PUBLIC bowl_core PRIVATE bowl_stb)
 bowl_configure_target(bowl_icon)
+if(BOWL_FUZZ)
+    # stb_image_resize2 reads its sRGB table through a pointer set before the table's start, and UBSan's bounds check
+    # stops at that even though every read lands inside it. This is a build tool, reading the developer's own pictures.
+    set_source_files_properties(src/icon.cpp PROPERTIES COMPILE_OPTIONS -fno-sanitize=bounds)
+endif()
 set_target_properties(bowl_icon PROPERTIES FOLDER tools)
 
 add_executable(bowl-icon src/main.cpp)

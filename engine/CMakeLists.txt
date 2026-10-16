@@ -74,13 +74,19 @@ bowl_module(gfx
         gfx/src/sprite.cpp
         gfx/src/sprite_sheet.cpp
         gfx/src/sprites.cpp
+        gfx/src/stb_image.cpp
         gfx/src/text.cpp
         gfx/src/tilemap.cpp
+        gfx/src/truetype.cpp
     PUBLIC_DEPS bowl_core bowl_ecs SDL3::SDL3
     PRIVATE_DEPS bowl_stb)
 if(BOWL_DEV_TOOLS)
     target_link_libraries(bowl_gfx PRIVATE bowl_shaderc)
     target_compile_definitions(bowl_gfx PRIVATE BOWL_RUNTIME_SHADER_COMPILER=1)
+endif()
+# stb_image's JPEG decoder lets int arithmetic wrap on corrupt data; make that defined (see stb_image.cpp).
+if(NOT MSVC)
+    set_source_files_properties(gfx/src/stb_image.cpp PROPERTIES COMPILE_OPTIONS -fwrapv)
 endif()
 if(WIN32)
     target_link_libraries(bowl_gfx PRIVATE d3dcompiler) # HLSL -> DXBC for the D3D12 backend

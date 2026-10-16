@@ -1,14 +1,16 @@
 #include "bowl/core/file.hpp"
 #include "bowl/core/utf8.hpp"
 #include "bowl/gfx/text.hpp"
-#include "bowl/icon/icon.hpp"
+#include "tiny_font.hpp"
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 
 using namespace bowl;
+using namespace bowl::testing;
 
 TEST_CASE("utf8: decode and encode") {
     std::string s = "a\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80"; // a é € 😀
@@ -151,86 +153,6 @@ TEST_CASE("text: fallback fonts") {
 
 namespace {
 
-// A tiny TrueType font made in memory: 'A' is glyph 1 (a square), U+1F600 is glyph 2 (a color glyph, if a color
-// table is given), glyph 3 is a small square COLR layers use.
-struct TinyFont {
-    std::vector<std::pair<std::string, std::vector<u8>>> tables;
-
-    static void be16(std::vector<u8>& out, u32 v) { out.push_back(static_cast<u8>(v >> 8)), out.push_back(static_cast<u8>(v)); }
-    static void be32(std::vector<u8>& out, u32 v) { be16(out, v >> 16), be16(out, v & 0xFFFF); }
-
-    static std::vector<u8> square(i16 x0, i16 y0, i16 x1, i16 y1) {
-        std::vector<u8> g;
-        be16(g, 1); // one contour
-        be16(g, static_cast<u16>(x0)), be16(g, static_cast<u16>(y0)), be16(g, static_cast<u16>(x1)), be16(g, static_cast<u16>(y1));
-        be16(g, 3); // last point
-        be16(g, 0); // no instructions
-        for (int i = 0; i < 4; ++i) g.push_back(1); // on-curve, 16-bit deltas
-        for (i32 dx : {i32{x0}, x1 - x0, 0, x0 - x1}) be16(g, static_cast<u16>(dx));
-        for (i32 dy : {i32{y0}, 0, y1 - y0, 0}) be16(g, static_cast<u16>(dy));
-        return g;
-    }
-
-    TinyFont() {
-        std::vector<u8> head(54, 0);
-        head[1] = 1;                                    // version 1.0
-        head[12] = 0x5F, head[13] = 0x0F, head[14] = 0x3C, head[15] = 0xF5; // magic
-        head[18] = 1000 >> 8, head[19] = 1000 & 0xFF;   // units per em
-        tables.push_back({"head", head});
-        std::vector<u8> hhea(36, 0);
-        hhea[1] = 1;
-        hhea[4] = 800 >> 8, hhea[5] = 800 & 0xFF; // ascent
-        u16 descent = static_cast<u16>(-200);
-        hhea[6] = static_cast<u8>(descent >> 8), hhea[7] = static_cast<u8>(descent);
-        hhea[35] = 4; // horizontal metrics for 4 glyphs
-        tables.push_back({"hhea", hhea});
-        std::vector<u8> maxp;
-        be32(maxp, 0x00005000), be16(maxp, 4);
-        tables.push_back({"maxp", maxp});
-        std::vector<u8> hmtx;
-        for (int i = 0; i < 4; ++i) be16(hmtx, 1000), be16(hmtx, 0);
-        tables.push_back({"hmtx", hmtx});
-        std::vector<u8> cmap;
-        be16(cmap, 0), be16(cmap, 1), be16(cmap, 3), be16(cmap, 10), be32(cmap, 12);
-        be16(cmap, 12), be16(cmap, 0), be32(cmap, 16 + 2 * 12), be32(cmap, 0), be32(cmap, 2);
-        be32(cmap, 'A'), be32(cmap, 'A'), be32(cmap, 1);
-        be32(cmap, 0x1F600), be32(cmap, 0x1F600), be32(cmap, 2);
-        tables.push_back({"cmap", cmap});
-        std::vector<std::vector<u8>> glyphs = {{}, square(100, 0, 900, 800), square(100, 0, 900, 800), square(400, 300, 600, 500)};
-        std::vector<u8> glyf, loca;
-        for (auto& g : glyphs) {
-            if (g.size() % 2) g.push_back(0);
-            be16(loca, static_cast<u32>(glyf.size() / 2));
-            glyf.insert(glyf.end(), g.begin(), g.end());
-        }
-        be16(loca, static_cast<u32>(glyf.size() / 2));
-        tables.push_back({"loca", loca});
-        tables.push_back({"glyf", glyf});
-    }
-
-    std::vector<u8> build() const {
-        std::vector<u8> out;
-        be32(out, 0x00010000), be16(out, static_cast<u32>(tables.size())), be16(out, 0), be16(out, 0), be16(out, 0);
-        u32 offset = 12 + 16 * static_cast<u32>(tables.size());
-        std::vector<u8> data;
-        for (const auto& [tag, bytes] : tables) {
-            out.insert(out.end(), tag.begin(), tag.end());
-            be32(out, 0), be32(out, offset + static_cast<u32>(data.size())), be32(out, static_cast<u32>(bytes.size()));
-            data.insert(data.end(), bytes.begin(), bytes.end());
-            while (data.size() % 4) data.push_back(0);
-        }
-        out.insert(out.end(), data.begin(), data.end());
-        return out;
-    }
-};
-
-// A size x size PNG of one color.
-std::vector<u8> png_of(u32 size, u8 r, u8 g, u8 b) {
-    icon::Image image{size, size, {}};
-    for (u32 i = 0; i < size * size; ++i) image.rgba.insert(image.rgba.end(), {r, g, b, 255});
-    return icon::encode_png(image);
-}
-
 // The premultiplied pixel at a point inside a glyph.
 std::array<u8, 4> pixel(const gfx::Font& font, const gfx::Font::Glyph& g, f32 fx, f32 fy) {
     auto page = font.page_pixels(g.page);
@@ -243,16 +165,7 @@ std::array<u8, 4> pixel(const gfx::Font& font, const gfx::Font::Glyph& g, f32 fx
 
 TEST_CASE("text: COLR emoji are layers in palette colors") {
     TinyFont tiny;
-    std::vector<u8> colr, cpal;
-    TinyFont::be16(colr, 0), TinyFont::be16(colr, 1), TinyFont::be32(colr, 14), TinyFont::be32(colr, 20), TinyFont::be16(colr, 2);
-    TinyFont::be16(colr, 2), TinyFont::be16(colr, 0), TinyFont::be16(colr, 2); // glyph 2: layers 0 and 1
-    TinyFont::be16(colr, 1), TinyFont::be16(colr, 0);                          // the big square, red
-    TinyFont::be16(colr, 3), TinyFont::be16(colr, 1);                          // the small one, blue
-    TinyFont::be16(cpal, 0), TinyFont::be16(cpal, 2), TinyFont::be16(cpal, 1), TinyFont::be16(cpal, 2);
-    TinyFont::be32(cpal, 14), TinyFont::be16(cpal, 0);
-    cpal.insert(cpal.end(), {0, 0, 255, 255, 255, 0, 0, 255}); // BGRA: red, blue
-    tiny.tables.push_back({"COLR", colr});
-    tiny.tables.push_back({"CPAL", cpal});
+    add_colr(tiny);
     auto font = gfx::Font::from_memory(nullptr, tiny.build(), "tiny colr");
     REQUIRE(font);
 
@@ -280,25 +193,6 @@ TEST_CASE("text: COLR emoji are layers in palette colors") {
     CHECK(placed[1].color.a == 0.5f);
 }
 
-// Gives the tiny font's 😀 (glyph 2) a 20 x 20 CBDT picture of one color, drawn 16 px above the baseline.
-void add_cbdt(TinyFont& tiny, const std::vector<u8>& png) {
-    std::vector<u8> cblc, cbdt;
-    TinyFont::be16(cblc, 3), TinyFont::be16(cblc, 0), TinyFont::be32(cblc, 1);
-    TinyFont::be32(cblc, 56), TinyFont::be32(cblc, 16), TinyFont::be32(cblc, 1), TinyFont::be32(cblc, 0);
-    cblc.insert(cblc.end(), 24, 0); // line metrics
-    TinyFont::be16(cblc, 2), TinyFont::be16(cblc, 2);
-    cblc.insert(cblc.end(), {20, 20, 32, 1}); // ppem x, y, bit depth, flags
-    TinyFont::be16(cblc, 2), TinyFont::be16(cblc, 2), TinyFont::be32(cblc, 8); // glyphs 2..2, subtable after this
-    TinyFont::be16(cblc, 1), TinyFont::be16(cblc, 17), TinyFont::be32(cblc, 0); // index format 1, image format 17
-    TinyFont::be32(cblc, 4), TinyFont::be32(cblc, 4 + 5 + 4 + static_cast<u32>(png.size()));
-    TinyFont::be16(cbdt, 3), TinyFont::be16(cbdt, 0);
-    cbdt.insert(cbdt.end(), {20, 20, 0, 16, 20}); // height, width, bearing x, bearing y, advance
-    TinyFont::be32(cbdt, static_cast<u32>(png.size()));
-    cbdt.insert(cbdt.end(), png.begin(), png.end());
-    tiny.tables.push_back({"CBLC", cblc});
-    tiny.tables.push_back({"CBDT", cbdt});
-}
-
 TEST_CASE("text: CBDT emoji are pictures, scaled to the text size") {
     TinyFont tiny;
     add_cbdt(tiny, png_of(20, 0, 200, 0));
@@ -320,17 +214,7 @@ TEST_CASE("text: CBDT emoji are pictures, scaled to the text size") {
 
 TEST_CASE("text: sbix emoji, and fonts without color tables") {
     TinyFont tiny;
-    std::vector<u8> png = png_of(20, 250, 120, 0);
-    std::vector<u8> sbix;
-    TinyFont::be16(sbix, 1), TinyFont::be16(sbix, 1), TinyFont::be32(sbix, 1), TinyFont::be32(sbix, 12);
-    TinyFont::be16(sbix, 20), TinyFont::be16(sbix, 72); // the strike: 20 ppem
-    u32 data = 4 + 4 * 5;                                // after the 5 glyph offsets
-    u32 glyph2 = 8 + static_cast<u32>(png.size());
-    for (u32 offset : {data, data, data, data + glyph2, data + glyph2}) TinyFont::be32(sbix, offset);
-    TinyFont::be16(sbix, 0), TinyFont::be16(sbix, static_cast<u16>(-4)); // origin: the picture's bottom 4 px below
-    sbix.insert(sbix.end(), {'p', 'n', 'g', ' '});
-    sbix.insert(sbix.end(), png.begin(), png.end());
-    tiny.tables.push_back({"sbix", sbix});
+    add_sbix(tiny, png_of(20, 250, 120, 0));
     auto font = gfx::Font::from_memory(nullptr, tiny.build(), "tiny sbix");
     REQUIRE(font);
     const auto& g = font->glyph(0x1F600, 20);
@@ -364,6 +248,73 @@ TEST_CASE("text: fonts with only pictures load, like Noto Color Emoji") {
     const auto& a = font->glyph('A', 20); // in the character map, but there's no picture or outline to draw
     CHECK_FALSE(a.visible);
     CHECK(a.advance == doctest::Approx(20.0f));
+}
+
+// Found by fuzzing (tests/fuzz): stb_truetype checks nothing it reads, so fonts are checked before it sees them.
+TEST_CASE("text: broken fonts are refused, and broken glyphs draw nothing") {
+    // Too short to hold a font header: stb read past the end.
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, {}, "empty"));
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, {0, 1, 0, 0}, "header only"));
+    // A glyph whose box had its corners swapped made stb allocate a negative size for its distance field.
+    auto fuzzed = read_file_bytes(std::filesystem::path(BOWL_TEST_DATA_DIR) / "fuzz" / "font_upside_down_box.ttf");
+    REQUIRE(fuzzed);
+    if (auto font = gfx::Font::from_memory(nullptr, std::move(*fuzzed), "fuzzed")) font->sdf_glyph('A');
+    auto table = [](TinyFont& tiny, std::string_view tag) -> std::vector<u8>& {
+        for (auto& [t, bytes] : tiny.tables)
+            if (t == tag) return bytes;
+        FAIL("no table");
+        return tiny.tables[0].second;
+    };
+    TinyFont upside_down; // 'A' is glyph 1, first in glyf: swap its xMin and xMax
+    std::vector<u8>& glyf = table(upside_down, "glyf");
+    std::swap_ranges(glyf.begin() + 2, glyf.begin() + 4, glyf.begin() + 6);
+    auto font = gfx::Font::from_memory(nullptr, upside_down.build(), "upside down");
+    REQUIRE(font);
+    CHECK_FALSE(font->sdf_glyph('A').visible);
+    CHECK(font->sdf_glyph('A').advance > 0);
+
+    // A composite glyph made of itself: stb went round until the stack ran out.
+    TinyFont loop;
+    std::vector<u8>& looped = table(loop, "glyf");
+    const u8 composite[] = {0xFF, 0xFF, 0, 0, 0, 0, 3, 0x84, 3, 0x20, // -1 contours: a composite, and its box
+                            0, 2, 0, 1, 0, 0};                         // one part: offsets as bytes, glyph 1 (itself)
+    std::copy(std::begin(composite), std::end(composite), looped.begin());
+    font = gfx::Font::from_memory(nullptr, loop.build(), "loop");
+    REQUIRE(font);
+    CHECK_FALSE(font->glyph('A', 20).visible);
+    CHECK(font->glyph('A', 20).advance == doctest::Approx(20.0f)); // still spaced as hmtx says
+
+    // A big glyph of 20000 points: its distance field took stb seconds. It's left out instead.
+    TinyFont intricate;
+    std::vector<u8> zigzag;
+    constexpr u32 points = 20000;
+    TinyFont::be16(zigzag, 1);                                                 // one contour
+    for (u32 v : {0u, 0u, 1000u, 1000u}) TinyFont::be16(zigzag, v);           // its box
+    TinyFont::be16(zigzag, points - 1), TinyFont::be16(zigzag, 0);             // last point, no instructions
+    zigzag.insert(zigzag.end(), points, 1);                                    // on the curve, 16-bit deltas
+    for (int axis = 0; axis < 2; ++axis) // back and forth between (0, 0) and (1000, 1000)
+        for (u32 i = 0; i < points; ++i) TinyFont::be16(zigzag, i == 0 ? 0 : i % 2 ? 1000 : static_cast<u16>(-1000));
+    std::vector<u8>& outlines = table(intricate, "glyf");
+    std::vector<u8>& loca = table(intricate, "loca");
+    u32 at = static_cast<u32>(outlines.size());
+    outlines.insert(outlines.end(), zigzag.begin(), zigzag.end());
+    // Glyph 1 ('A') now starts at the end of the old data, and glyphs 2 and 3 are empty.
+    for (u32 g = 1; g < 5; ++g) {
+        u32 v = (g == 1 ? at : static_cast<u32>(outlines.size())) / 2;
+        loca[2 * g] = static_cast<u8>(v >> 8), loca[2 * g + 1] = static_cast<u8>(v);
+    }
+    font = gfx::Font::from_memory(nullptr, intricate.build(), "intricate");
+    REQUIRE(font);
+    CHECK(font->glyph('A', 20).visible); // drawn as usual
+    CHECK_FALSE(font->sdf_glyph('A').visible);
+
+    // A table that runs past the end of the file is as good as missing, and hmtx too short for every glyph is refused.
+    TinyFont short_metrics;
+    table(short_metrics, "hmtx").resize(6);
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, short_metrics.build(), "short hmtx"));
+    std::vector<u8> cut = TinyFont().build();
+    cut.resize(cut.size() - 40);
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, cut, "cut short"));
 }
 
 TEST_CASE("text: the system's emoji font, where there is one") {

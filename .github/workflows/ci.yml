@@ -103,3 +103,52 @@ jobs:
           name: d3d12-${{ matrix.preset }}
           path: d3d12-${{ matrix.preset }}.png
           if-no-files-found: warn
+
+  # Each fuzzer (tests/fuzz) for 20 seconds on top of what earlier runs found, which the cache carries over. Short, so
+  # it catches a parser change that breaks on a known input or falls over within seconds; long runs are for
+  # tests/fuzz/run.sh on a machine of your own (CONTRIBUTING.md).
+  fuzz:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux packages (SDL3 is built from source; libFuzzer comes with Clang's runtime libraries)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang-18 libclang-rt-18-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev libwayland-dev libxkbcommon-dev \
+            wayland-protocols libegl1-mesa-dev libasound2-dev libpulse-dev libdbus-1-dev libudev-dev
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: ubuntu-24.04-fuzz
+          max-size: 500M
+
+      - name: Corpus from earlier runs
+        uses: actions/cache@v4
+        with:
+          path: build/fuzz/fuzz/corpus
+          key: fuzz-corpus-${{ github.run_id }}
+          restore-keys: fuzz-corpus-
+
+      - name: Configure and build the fuzzers
+        run: |
+          cmake --preset fuzz -G Ninja -DCMAKE_C_COMPILER=clang-18 -DCMAKE_CXX_COMPILER=clang++-18 \
+            -DBOWL_DEV_TOOLS=OFF -DBOWL_BUILD_TESTS=OFF -DBOWL_FETCH_SDL=ON -DBOWL_WARNINGS_AS_ERRORS=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build/fuzz --target bowl_fuzz --parallel 4
+
+      - name: Fuzz
+        run: tests/fuzz/run.sh build/fuzz 20
+
+      - name: Upload what was found
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes
+          path: |
+            build/fuzz/fuzz/crashes
+            build/fuzz/fuzz/*.log
+          if-no-files-found: ignore

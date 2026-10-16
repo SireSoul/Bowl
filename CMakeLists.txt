@@ -15,6 +15,7 @@ option(BOWL_BOX2D         "Rigid-body physics through Box2D (physics/rigid_bodie
 option(BOWL_OPUS          "Ogg Opus sounds and music (fetches libogg, libopus, opusfile)" OFF)
 option(BOWL_HARFBUZZ      "Shape text with HarfBuzz: Arabic, Indic and other complex scripts, ligatures" OFF)
 option(BOWL_BUILD_EDITOR "Build Bowl Editor (needs BOWL_DEV_TOOLS)"                   ${PROJECT_IS_TOP_LEVEL})
+option(BOWL_FUZZ          "Build the fuzzers in tests/fuzz (Clang with libFuzzer; adds AddressSanitizer and UBSan)" OFF)
 set(BOWL_SHADERC_EXECUTABLE "" CACHE FILEPATH
     "Prebuilt host bowl-shaderc to use when cross-compiling (iOS, Android, consoles)")
 # Cross-compiling: the build runs bowl-shaderc, bowl-icon and bowl-pack, so they come from a build for this machine (the
@@ -41,6 +42,9 @@ include(BowlCompiler)
 include(BowlDependencies)
 include(BowlShaders)
 include(BowlPackaging)
+if(BOWL_FUZZ)
+    include(BowlFuzz) # sanitizers for everything below
+endif()
 
 add_subdirectory(tools/shaderc)
 add_subdirectory(engine)
@@ -57,6 +61,9 @@ endif()
 if(BOWL_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
+endif()
+if(BOWL_FUZZ)
+    add_subdirectory(tests/fuzz)
 endif()
 
 if(BOWL_BUILD_SAMPLES)

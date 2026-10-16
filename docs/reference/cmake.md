@@ -32,6 +32,7 @@ Set them on the configure line (`-DBOWL_DEV_TOOLS=OFF`) or in your own presets.
 | `BOWL_BOX2D` | `OFF` | Rigid-body physics through Box2D v3 ([collision.md](../guides/collision.md)) |
 | `BOWL_OPUS` | `OFF` | Ogg Opus sounds and music; fetches libogg, libopus and opusfile ([audio.md](../guides/audio.md#opus)) |
 | `BOWL_HARFBUZZ` | `OFF` | Shape text with HarfBuzz: joined Arabic, Indic scripts, ligatures ([text.md](../guides/text.md#right-to-left-text-and-shaping)) |
+| `BOWL_FUZZ` | `OFF` | Build the fuzzers in `tests/fuzz` and everything with AddressSanitizer and UBSan; needs Clang with libFuzzer ([CONTRIBUTING](../../CONTRIBUTING.md#fuzzing)) |
 | `BOWL_HOST_TOOLS` | empty | Cross-compiling: a folder with `bowl-shaderc`, `bowl-icon` and `bowl-pack` built for this machine (the `host-tools` preset makes `build/host-tools/bin`); the build uses them instead of building its own |
 | `BOWL_SHADERC_EXECUTABLE` | empty | A prebuilt host `bowl-shaderc` for cross-compiling; when set, the shader compiler isn't built (`BOWL_HOST_TOOLS` sets it) |
 | `BOWL_IOS_TEAM` | empty | iOS: the Apple development team that signs apps for devices; empty signs ad hoc, for the simulator |
@@ -47,6 +48,7 @@ From `CMakePresets.json`. Each configure preset has a matching build preset; `de
 | `debug` | `Debug` | `BOWL_DEV_TOOLS=ON` |
 | `release` | `Release` | `BOWL_DEV_TOOLS=OFF`, `BOWL_FETCH_SDL=ON`, `BOWL_MACOS_BUNDLES=ON`, `BOWL_PACK_ASSETS=ON` |
 | `host-tools` | `Release` | Only the tools cross builds run; its build preset makes `bowl-shaderc`, `bowl-icon` and `bowl-pack` |
+| `fuzz` | `RelWithDebInfo` | `BOWL_FUZZ=ON`, Clang, no samples or editor; `ctest --preset fuzz` runs the tests and each fuzzer's seeds under the sanitizers |
 | `ios` | (Xcode) | The Xcode generator, `CMAKE_SYSTEM_NAME=iOS`, iOS 17, `BOWL_PACK_ASSETS=ON`, `BOWL_HOST_TOOLS=build/host-tools/bin`. Build presets `ios-simulator` and `ios-device` |
 
 All presets build into `build/<preset>` and export `compile_commands.json`. The tools a build makes (`bowl-shaderc`,

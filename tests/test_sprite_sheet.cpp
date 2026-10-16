@@ -211,3 +211,17 @@ TEST_CASE("atlas: packs, trims and writes a sheet SpriteSheet can read") {
     CHECK_FALSE(atlas::pack(images, {.max_size = 8}, error)); // too small
     CHECK_FALSE(error.empty());
 }
+
+// Found by fuzzing (tests/fuzz): reading a tag that starts at frame 1.11111e36 was undefined behavior.
+TEST_CASE("sprite sheet: frame numbers out of any range still load") {
+    auto doc = json::parse(R"({ "frames": [ { "frame": { "x": 0, "y": 0, "w": 8, "h": 8 }, "duration": 100 } ],
+        "meta": { "frameTags": [ { "name": "far", "from": 1.11111e36, "to": -1e36 } ],
+                  "slices": [ { "name": "s", "keys": [ { "frame": 1e40, "bounds": { "x": 0, "y": 0, "w": 1, "h": 1 } } ] } ] } })");
+    REQUIRE(doc);
+    SpriteSheet sheet;
+    std::string image, err;
+    REQUIRE(SpriteSheet::parse_aseprite(doc.value, sheet, image, err));
+    REQUIRE(sheet.animations.size() == 1);
+    CHECK(sheet.animations[0].from == 0); // only one frame to start at
+    CHECK(sheet.animations[0].to == 0);
+}

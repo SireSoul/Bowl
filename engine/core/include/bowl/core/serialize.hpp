@@ -5,8 +5,10 @@
 #include "bowl/core/reflect.hpp"
 
 #include <array>
+#include <cmath>
 #include <cstring>
 #include <format>
+#include <limits>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -113,6 +115,14 @@ template <class T> bool from_json(const json::Value& j, T& v, Context& ctx) {
     } else if constexpr (std::is_enum_v<T>) {
         if (!j.is_number()) return false;
         v = static_cast<T>(j.as_int());
+        return true;
+    } else if constexpr (std::is_integral_v<T>) {
+        if (!j.is_number() || std::isnan(j.as_number())) return false;
+        // Clamped to the field's range: a file can hold any number, and converting one that doesn't fit is undefined.
+        f64 n = j.as_number();
+        if (n <= static_cast<f64>(std::numeric_limits<T>::min())) v = std::numeric_limits<T>::min();
+        else if (n >= static_cast<f64>(std::numeric_limits<T>::max())) v = std::numeric_limits<T>::max();
+        else v = static_cast<T>(n);
         return true;
     } else if constexpr (std::is_arithmetic_v<T>) {
         if (!j.is_number()) return false;

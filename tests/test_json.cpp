@@ -3,6 +3,9 @@
 
 #include <doctest/doctest.h>
 
+#include <cmath>
+#include <limits>
+
 using namespace bowl;
 
 TEST_CASE("json: parse values and navigate forgivingly") {
@@ -121,4 +124,61 @@ TEST_CASE("json text: edits keep comments, spacing and order") {
     CHECK_FALSE(doc.load("{ broken"));
     CHECK(doc.error());
     CHECK(doc.text() == "{ broken"); // kept, so it can be fixed
+}
+
+// Found by fuzzing (tests/fuzz): converting a number to an integer type that can't hold it is undefined behavior.
+TEST_CASE("json: as_int clamps numbers too big for an integer") {
+    auto r = json::parse("[1.11111e36, -1e300, 12.7, -12.7]");
+    REQUIRE(r);
+    CHECK(r.value[0].as_int() == std::numeric_limits<i64>::max());
+    CHECK(r.value[1].as_int() == std::numeric_limits<i64>::min());
+    CHECK(r.value[2].as_int() == 12);
+    CHECK(r.value[3].as_int() == -12);
+    CHECK(json::Value(std::nan("")).as_int(7) == 7); // binary documents can hold NaN
+}
+
+// Found by fuzzing: erasing an item on the opening bracket's line took the bracket with it, and erasing one whose
+// comma starts the next line left the comma behind. Either way the document stopped being JSON.
+TEST_CASE("json text: erasing keeps the brackets and the commas right") {
+    json::TextDocument doc;
+    REQUIRE(doc.load("{ \"a\": 1, // note\n  \"b\": 2\n}"));
+    REQUIRE(doc.erase({"a"}));
+    CHECK(doc.valid());
+    CHECK(doc.text() == "{\n  \"b\": 2\n}");
+
+    REQUIRE(doc.load("{  \"key\": 76 \t  \n , \"ky\": 31, // {{{ \"hpe:\n}\n"));
+    REQUIRE(doc.erase({"key"}));
+    CHECK(doc.valid());
+    CHECK(doc.value()["ky"].as_int() == 31);
+    CHECK_FALSE(doc.value().contains("key"));
+}
+
+// Binary documents claim counts before their contents: a small file mustn't be able to make the reader ask for gigabytes.
+TEST_CASE("json: binary documents can't decode to far more than their size") {
+    auto varint = [](std::vector<u8>& out, u64 n) {
+        for (; n >= 0x80; n >>= 7) out.push_back(static_cast<u8>(n | 0x80));
+        out.push_back(static_cast<u8>(n));
+    };
+    // One 100 KB string used 200000 times: 20 GB of copies from 500 KB.
+    std::vector<u8> repeated = {'B', 'W', 'J', 'B', 1};
+    varint(repeated, 1);
+    varint(repeated, 100000);
+    repeated.insert(repeated.end(), 100000, 'x');
+    repeated.push_back(7); // array
+    varint(repeated, 200000);
+    for (int i = 0; i < 200000; ++i) repeated.insert(repeated.end(), {6, 0}); // string 0
+    auto r = json::decode_binary(repeated);
+    REQUIRE_FALSE(r);
+    CHECK(r.error->message.find("strings") != std::string::npos);
+
+    // 500 arrays inside each other, each claiming the rest of the file, then a megabyte of nulls: each level used to
+    // be sized to its count before its items were read, 20 GB in all.
+    std::vector<u8> nested = {'B', 'W', 'J', 'B', 1, 0};
+    constexpr usize nulls = 1 << 20;
+    for (int depth = 0; depth < 500; ++depth) {
+        nested.push_back(7);
+        varint(nested, nulls);
+    }
+    nested.resize(nested.size() + nulls, 0);
+    CHECK_FALSE(json::decode_binary(nested)); // the outer arrays run out of items
 }

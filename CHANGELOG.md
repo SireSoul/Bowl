@@ -5,9 +5,38 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+### Added
+- Fuzzers for everything that reads data a stranger could control (`tests/fuzz`, `BOWL_FUZZ`, the `fuzz` preset):
+  network packets for `net::Host` and `net::Rendezvous`, `Address::read`, JSON text and binary, `json::TextDocument`,
+  saved worlds and prefabs, XML, Tiled maps, Aseprite sheets, asset archives, fonts and pictures. libFuzzer with
+  AddressSanitizer and UBSan; `tests/fuzz/run.sh` runs them, and CI runs each for 20 seconds on Linux. See
+  [CONTRIBUTING](CONTRIBUTING.md#fuzzing).
+
+### Changed
+- Fonts are checked before stb_truetype reads them (it checks nothing itself): a font whose tables run past the end of
+  the file, or whose metrics can't be right, fails to load, and a glyph whose outline would make stb read outside the
+  font, recurse forever or work for seconds draws as nothing. Character lookup and kerning are read with bounds checks.
+- Textures, window icons and other pictures are limited to 16384 pixels a side.
+- Tile layers are limited to `gfx::max_layer_cells` (16M cells, 4096 x 4096), and a layer whose data holds fewer cells
+  than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
+
 ### Fixed
 - The log's window line shows the size the window got (full screen on a phone, for example), not the size asked
   for.
+- Infinite Tiled maps with chunks at positions near the edge of 32-bit range wrote outside the layer's memory.
+- A Tiled layer claiming a huge size was allocated before its data was read (a small map file could ask for
+  gigabytes); so was each level of a nested binary JSON document, and a binary document could copy one long string
+  over and over. All now fail to load instead.
+- A font with an empty or too short file, a composite glyph made of itself, a contour starting off the curve on a
+  glyph's last point (Times on macOS has one), or a glyph box with its corners swapped made stb_truetype read out of
+  bounds, run out of stack or allocate a negative size.
+- Numbers too big for the integer they're read into were undefined behavior: `json::Value::as_int` now clamps (NaN gives
+  the fallback), saved fields are clamped to their type, and tile gids, Aseprite frame numbers and far-off
+  `Tilemap::cell_at` points no longer overflow.
+- A BMP 0 pixels high decoded as an empty picture, and a header claiming a huge picture made stb allocate gigabytes
+  from a few bytes; JPEGs with corrupt coefficients overflowed `int` in stb_image's decoder.
+- `json::TextDocument::erase` left invalid JSON for an item on the opening bracket's line or one whose comma starts the
+  next line.
 
 ## [0.2.0] - 2026-10-16
 

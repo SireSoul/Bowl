@@ -7,7 +7,7 @@ namespace {
 // Finds where each value sits in the text. The text is already known to parse, so this only has to track positions.
 class Scanner {
 public:
-    explicit Scanner(std::string_view s) : s_(s) {}
+    explicit Scanner(std::string_view s, usize at = 0) : s_(s), at_(at) {}
 
     template <class NodeT> bool value(NodeT& n, int depth) {
         if (depth > 512) return false;
@@ -202,11 +202,14 @@ bool TextDocument::erase(const Path& path) {
     if (index + 1 < parent->children.size()) {
         usize next = parent->children[index + 1].key_start;
         usize line_end = text_.find('\n', n->end);
-        if (line_end < next) {
+        Scanner after(text_, n->end);
+        after.skip();
+        usize comma = after.at(); // between this item and the next
+        if (line_end < next && comma < line_end) {
             // Items on their own lines: the item's whole line goes (with a comment at its end), and nothing else, so
-            // comments above the next item stay.
+            // comments above the next item stay. An item on the bracket's line takes only what follows the bracket.
             usize line = text_.rfind('\n', start == 0 ? 0 : start - 1);
-            start = line == std::string::npos ? 0 : line;
+            start = line == std::string::npos || line < parent->open ? parent->open + 1 : line;
             end = line_end;
         } else {
             end = next; // inline: up to the next item, taking the comma and the space
