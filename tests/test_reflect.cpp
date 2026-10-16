@@ -5,6 +5,7 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <limits>
 
 using namespace bowl;
 using namespace bowl::ecs;
@@ -38,6 +39,13 @@ struct Asleep {}; // tag: savable without reflection
 struct Cache { // not reflected: never saved
     int scratch = 0;
 };
+
+struct Counters {
+    u8 small = 0;
+    u64 big = 0;
+    i32 level = 0;
+};
+BOWL_REFLECT(Counters, small, big, level)
 
 } // namespace game
 
@@ -97,6 +105,21 @@ TEST_CASE("serialize: values round-trip and missing fields keep defaults") {
     CHECK_FALSE(serial::from_json(json::parse(R"({"level": "high"})").value, wrong, ctx));
     CHECK(wrong.level == 1);
     CHECK_FALSE(ctx.warnings.empty());
+}
+
+// Found by fuzzing (tests/fuzz): a save holding -12341 for a u64 field, or 1e30 for an i32, was undefined behavior to
+// load.
+TEST_CASE("serialize: numbers that don't fit a field are clamped to it") {
+    Counters c;
+    serial::Context ctx;
+    REQUIRE(serial::from_json(json::parse(R"({"small": 300, "big": -12341, "level": 1e30})").value, c, ctx));
+    CHECK(c.small == 255);
+    CHECK(c.big == 0);
+    CHECK(c.level == std::numeric_limits<i32>::max());
+    REQUIRE(serial::from_json(json::parse(R"({"small": -1, "big": 1e300, "level": -1e30})").value, c, ctx));
+    CHECK(c.small == 0);
+    CHECK(c.big == std::numeric_limits<u64>::max());
+    CHECK(c.level == std::numeric_limits<i32>::min());
 }
 
 TEST_CASE("world io: entities, references, tags and unsavable components round-trip") {

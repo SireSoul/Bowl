@@ -2,6 +2,7 @@
 #include "bowl/core/reflect.hpp"
 #include "bowl/ecs/world_io.hpp"
 #include "bowl/gfx/device.hpp"
+#include "bowl/gfx/renderer.hpp"
 #include "bowl/gfx/sprite.hpp"
 
 #include <doctest/doctest.h>
@@ -142,4 +143,20 @@ TEST_CASE("shader cache: stores code by key and refuses mismatches") {
     CHECK_FALSE(gfx::load_cached_shader(dir, 43));
     CHECK_FALSE(gfx::load_cached_shader({}, 42)); // no cache folder: nothing cached
     std::filesystem::remove_all(dir, ec);
+}
+
+// Found by fuzzing (tests/fuzz): pictures players can swap in, decoded the way textures and window icons are.
+TEST_CASE("pictures: empty, absurdly big and corrupt ones are refused safely") {
+    auto data = [](const char* name) {
+        auto bytes = read_file_bytes(fs::path(BOWL_TEST_DATA_DIR) / "fuzz" / name);
+        REQUIRE(bytes);
+        return *bytes;
+    };
+    u32 w = 0, h = 0;
+    std::vector<u8> rgba;
+    CHECK_FALSE(gfx::decode_png(data("bmp_zero_height.bmp"), w, h, rgba)); // 0 pixels high: no texture to make
+    // 25 bytes whose header claims about 24000 x 23000 pixels: refused instead of allocating gigabytes.
+    CHECK_FALSE(gfx::decode_png(data("tga_huge_header.tga"), w, h, rgba));
+    // Coefficients that overflow int in the JPEG decoder (undefined behavior before stb_image.cpp got -fwrapv).
+    if (gfx::decode_png(data("jpeg_idct_overflow.jpg"), w, h, rgba)) CHECK(rgba.size() == usize{w} * h * 4);
 }

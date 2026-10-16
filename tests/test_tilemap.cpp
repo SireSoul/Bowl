@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <cstdlib>
 #include <format>
 #include <map>
@@ -444,4 +445,59 @@ TEST_CASE("tilemap: Wang sets as data, and terrain drawn from corners") {
     MapLayer again;
     fill_from_corners(again, map.tilesets[0], *shore, corners, 2, 1);
     CHECK(again.at(1, 0) == plain); // same corners, same choice
+}
+
+// Found by fuzzing (tests/fuzz).
+TEST_CASE("tilemap: layers bigger than their data or than memory fail to load, without trying") {
+    // Gids past 2^32 were undefined behavior to read.
+    Tilemap map = load(R"({ "orientation": "orthogonal", "width": 2, "height": 1, "tilewidth": 8, "tileheight": 8,
+        "layers": [ { "type": "tilelayer", "name": "g", "width": 2, "height": 1, "data": [1073741824000, -5] } ] })");
+    REQUIRE(map.layer("g"));
+    CHECK(map.layer("g")->cells.size() == 2);
+
+    // A layer claiming a million by a million cells was allocated before its data was looked at.
+    std::string error;
+    load(R"({ "orientation": "orthogonal", "width": 4, "height": 4, "tilewidth": 8, "tileheight": 8,
+        "layers": [ { "type": "tilelayer", "name": "g", "width": 1000000, "height": 1000000, "data": [] } ] })", &error);
+    CHECK(error.find("more than") != std::string::npos);
+    load(R"({ "orientation": "orthogonal", "width": 4, "height": 4, "tilewidth": 8, "tileheight": 8,
+        "layers": [ { "type": "tilelayer", "name": "g", "width": 4, "height": 4, "data": [1, 2] } ] })", &error);
+    CHECK(error.find("shorter") != std::string::npos);
+    // Compressed data inflates to exactly the layer, not to whatever it asks.
+    load(std::format(R"({{ "orientation": "orthogonal", "width": 2, "height": 1, "tilewidth": 8, "tileheight": 8,
+        "layers": [ {{ "type": "tilelayer", "name": "g", "width": 2, "height": 1, "encoding": "base64",
+                       "compression": "zlib", "data": "{}" }} ] }})",
+                     zlib_base64({1, 2, 3, 4, 5, 6, 7, 8})),
+         &error);
+    CHECK(error.find("zlib") != std::string::npos);
+
+    // Chunks whose corners overflowed 32 bits were written outside the layer, and chunks far apart made a layer of
+    // billions of cells.
+    load(R"({ "orientation": "orthogonal", "width": 0, "height": 0, "tilewidth": 8, "tileheight": 8, "infinite": true,
+        "layers": [ { "type": "tilelayer", "name": "g", "chunks": [
+            { "x": 2147483647, "y": 0, "width": 2, "height": 1, "data": [1, 2] },
+            { "x": 0, "y": 0, "width": 1, "height": 1, "data": [3] } ] } ] })", &error);
+    CHECK(error.find("out of range") != std::string::npos);
+    load(R"({ "orientation": "orthogonal", "width": 0, "height": 0, "tilewidth": 8, "tileheight": 8, "infinite": true,
+        "layers": [ { "type": "tilelayer", "name": "g", "chunks": [
+            { "x": 0, "y": 0, "width": 1, "height": 1, "data": [1] },
+            { "x": 100000000, "y": 100000000, "width": 1, "height": 1, "data": [2] } ] } ] })", &error);
+    CHECK(error.find("more than a layer") != std::string::npos);
+}
+
+// Found by fuzzing: a point far outside a map (from a map whose sizes reach past 2^31 pixels) was converted to a cell
+// number it didn't fit, which is undefined.
+TEST_CASE("tilemap: points far off the map give far-off cells") {
+    Tilemap map = load(R"({ "orientation": "orthogonal", "width": 4, "height": 4, "tilewidth": 16, "tileheight": 16,
+        "tilesets": [], "layers": [] })");
+    CHECK(map.cell_at({1e30f, -1e30f}) == std::pair<i32, i32>{1 << 28, -(1 << 28)});
+    CHECK(map.cell_at({std::nanf(""), 20}) == std::pair<i32, i32>{0, 1});
+    Tilemap hex = load(R"({"orientation": "hexagonal", "staggeraxis": "y", "staggerindex": "odd", "hexsidelength": 12,
+        "width": 4, "height": 4, "tilewidth": 32, "tileheight": 28, "tilesets": [], "layers": []})");
+    hex.cell_at({3e38f, 3e38f});
+    hex.cell_at({-3e38f, -3e38f});
+    hex.cell_to_world(3e38f, -3e38f);
+    Tilemap diamonds = load(R"({"orientation": "staggered", "staggeraxis": "x", "staggerindex": "even",
+        "width": 4, "height": 4, "tilewidth": 32, "tileheight": 28, "tilesets": [], "layers": []})");
+    diamonds.cell_at({3e38f, -3e38f});
 }

@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <format>
+#include <limits>
 #include <unordered_map>
 
 namespace bowl::json {
@@ -18,6 +19,15 @@ const Value null_value;
 const Array empty_array;
 const Object empty_object;
 } // namespace
+
+i64 Value::as_int(i64 fallback) const {
+    if (!is_number()) return fallback;
+    f64 n = std::get<f64>(data_);
+    if (std::isnan(n)) return fallback;
+    if (n >= 9223372036854775808.0) return std::numeric_limits<i64>::max(); // 2^63
+    if (n <= -9223372036854775808.0) return std::numeric_limits<i64>::min();
+    return static_cast<i64>(n);
+}
 
 usize Value::size() const {
     if (is_array()) return std::get<Array>(data_).size();
@@ -453,7 +463,7 @@ private:
 
 class BinaryReader {
 public:
-    explicit BinaryReader(std::span<const u8> data) : d_(data) {}
+    explicit BinaryReader(std::span<const u8> data) : d_(data), copy_budget_(64 * u64{data.size()} + (1 << 20)) {}
 
     ParseResult run() {
         ParseResult out;
@@ -497,6 +507,10 @@ private:
     bool string_ref(std::string& s) {
         u64 i = 0;
         if (!varint(i) || i >= strings_.size()) return error("bad string index");
+        // Each use is a copy, so a long string used over and over could make a small file decode to gigabytes. No
+        // document written by encode_binary comes near this.
+        if (strings_[i].size() > copy_budget_) return error("strings add up to more than the file could hold");
+        copy_budget_ -= strings_[i].size();
         s = strings_[i];
         return true;
     }
@@ -537,22 +551,24 @@ private:
             v = std::move(s);
             return true;
         }
+        // Arrays and objects grow as their items arrive rather than being sized to their count first: every level of
+        // a nested document could claim the rest of the file, and a few hundred levels of that is gigabytes.
         case ArrayTag: {
             u64 n = 0;
             if (!varint(n) || n > d_.size() - at_) return error("bad array");
             Array& a = v.make_array();
-            a.resize(n);
-            for (Value& item : a)
-                if (!value(item, depth + 1)) return false;
+            for (u64 i = 0; i < n; ++i)
+                if (!value(a.emplace_back(), depth + 1)) return false;
             return true;
         }
         case ObjectTag: {
             u64 n = 0;
             if (!varint(n) || n > d_.size() - at_) return error("bad object");
             Object& o = v.make_object();
-            o.resize(n);
-            for (auto& [k, item] : o)
+            for (u64 i = 0; i < n; ++i) {
+                auto& [k, item] = o.emplace_back();
                 if (!string_ref(k) || !value(item, depth + 1)) return false;
+            }
             return true;
         }
         default: return error("unknown value tag");
@@ -563,6 +579,7 @@ private:
     usize at_ = 0;
     std::vector<std::string> strings_;
     std::string error_;
+    u64 copy_budget_; // bytes of strings the document may still copy out of the table
 };
 
 } // namespace

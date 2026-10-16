@@ -1,6 +1,7 @@
 #include "bowl/gfx/text.hpp"
 
 #include "color_glyphs.hpp"
+#include "truetype.hpp"
 #include "bowl/core/log.hpp"
 #if BOWL_HARFBUZZ
 #include <hb.h>
@@ -14,23 +15,11 @@
 #include <optional>
 #include <span>
 
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#pragma GCC diagnostic ignored "-Wshadow"
-#pragma GCC diagnostic ignored "-Wsign-compare"
-#endif
-#define STB_TRUETYPE_IMPLEMENTATION
-#include <stb_truetype.h>
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
-
 namespace bowl::gfx {
 
 struct Font::Impl {
     std::vector<u8> data;
-    stbtt_fontinfo info{};
+    truetype::Font tt; // stb_truetype, behind checks: see truetype.hpp
     color::Tables colors; // emoji
 #if BOWL_HARFBUZZ
     hb_font_t* hb = nullptr; // shaping, in font units
@@ -53,50 +42,16 @@ void* Font::hb_font(int slot) const {
 }
 
 struct Font::Face {
-    const stbtt_fontinfo* info = nullptr;
     int index = 0; // 0: the font's "missing" glyph
     const Impl* impl = nullptr;
 };
 
 namespace {
 
-// stbtt_InitFont needs outlines (glyf or CFF), and fonts made only of pictures, such as Noto Color Emoji (CBDT), have
-// none. This sets one up the way stbtt_InitFont would, for character lookup, metrics and kerning. numGlyphs 0 makes
-// every outline lookup come back empty instead of reading a glyf table that isn't there; the pictures come from the
-// font's color tables.
-bool init_bitmap_only_font(stbtt_fontinfo& info, const unsigned char* bytes, int start) {
-    auto* data = const_cast<unsigned char*>(bytes); // stb keeps a non-const pointer but only reads through it
-    auto table = [&](const char* tag) { return stbtt__find_table(data, static_cast<stbtt_uint32>(start), tag); };
-    stbtt_uint32 cmap = table("cmap");
-    info = {};
-    info.data = data;
-    info.fontstart = start;
-    info.cff = stbtt__new_buf(nullptr, 0);
-    info.head = static_cast<int>(table("head"));
-    info.hhea = static_cast<int>(table("hhea"));
-    info.hmtx = static_cast<int>(table("hmtx"));
-    info.kern = static_cast<int>(table("kern"));
-    info.gpos = static_cast<int>(table("GPOS"));
-    if (!cmap || !info.head || !info.hhea || !info.hmtx) return false;
-    info.numGlyphs = 0;
-    info.svg = -1;
-    for (stbtt_int32 i = 0, n = ttUSHORT(data + cmap + 2); i < n; ++i) { // a Unicode character map, as stb picks
-        stbtt_uint32 record = cmap + 4 + 8 * static_cast<stbtt_uint32>(i);
-        stbtt_uint16 platform = ttUSHORT(data + record), encoding = ttUSHORT(data + record + 2);
-        bool unicode = platform == STBTT_PLATFORM_ID_UNICODE ||
-                       (platform == STBTT_PLATFORM_ID_MICROSOFT &&
-                        (encoding == STBTT_MS_EID_UNICODE_BMP || encoding == STBTT_MS_EID_UNICODE_FULL));
-        if (unicode) info.index_map = static_cast<int>(cmap + ttULONG(data + record + 4));
-    }
-    if (!info.index_map) return false;
-    info.indexToLocFormat = ttUSHORT(data + info.head + 50);
-    return true;
-}
-
 // A color glyph's picture at `scale` (emoji): a PNG from sbix or CBDT, or COLR layers drawn in their palette colors.
 // Nothing for a plain glyph.
-std::optional<color::Bitmap> color_picture(const stbtt_fontinfo* info, std::span<const u8> data, const color::Tables& tables,
-                                           int index, f32 scale) {
+std::optional<color::Bitmap> color_picture(const truetype::Font& tt, std::span<const u8> data,
+                                           const color::Tables& tables, int index, f32 scale) {
     if (!tables.any()) return std::nullopt;
     if (auto b = color::bitmap_glyph(data, tables, static_cast<u32>(index), scale * static_cast<f32>(tables.units_per_em)))
         return b;
@@ -105,11 +60,13 @@ std::optional<color::Bitmap> color_picture(const stbtt_fontinfo* info, std::span
     int ux0 = INT_MAX, uy0 = INT_MAX, ux1 = INT_MIN, uy1 = INT_MIN;
     for (const auto& [glyph, c] : layers) {
         int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-        stbtt_GetGlyphBitmapBox(info, static_cast<int>(glyph), scale, scale, &x0, &y0, &x1, &y1);
+        tt.bitmap_box(static_cast<int>(glyph), scale, x0, y0, x1, y1);
         if (x1 <= x0 || y1 <= y0) continue;
         ux0 = std::min(ux0, x0), uy0 = std::min(uy0, y0), ux1 = std::max(ux1, x1), uy1 = std::max(uy1, y1);
     }
-    if (ux1 <= ux0 || uy1 <= uy0) return std::nullopt;
+    // Bigger than an atlas page can't be drawn anyway (and layers far apart would make a huge picture).
+    if (ux1 <= ux0 || uy1 <= uy0 || i64{ux1} - ux0 > Font::page_size || i64{uy1} - uy0 > Font::page_size)
+        return std::nullopt;
     color::Bitmap b;
     b.width = static_cast<u32>(ux1 - ux0);
     b.height = static_cast<u32>(uy1 - uy0);
@@ -117,11 +74,11 @@ std::optional<color::Bitmap> color_picture(const stbtt_fontinfo* info, std::span
     b.offset = {static_cast<f32>(ux0), static_cast<f32>(uy0)};
     for (const auto& [glyph, c] : layers) { // bottom layer first, each painted over the last
         int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-        stbtt_GetGlyphBitmapBox(info, static_cast<int>(glyph), scale, scale, &x0, &y0, &x1, &y1);
+        tt.bitmap_box(static_cast<int>(glyph), scale, x0, y0, x1, y1);
         int w = x1 - x0, h = y1 - y0;
         if (w <= 0 || h <= 0) continue;
         std::vector<u8> alpha(static_cast<usize>(w) * static_cast<usize>(h));
-        stbtt_MakeGlyphBitmap(info, alpha.data(), w, h, w, scale, scale, static_cast<int>(glyph));
+        tt.make_bitmap(alpha.data(), w, h, w, scale, static_cast<int>(glyph));
         Color paint = c.value_or(Color::white()); // the text color layer: white, tinted when drawn
         for (int row = 0; row < h; ++row)
             for (int col = 0; col < w; ++col) {
@@ -142,23 +99,22 @@ std::unique_ptr<Font> Font::from_memory(GpuDevice* device, std::vector<u8> ttf, 
     auto font = std::unique_ptr<Font>(new Font());
     font->impl_ = std::make_unique<Impl>();
     font->impl_->data = std::move(ttf);
-    const unsigned char* data = font->impl_->data.data();
-    int offset = stbtt_GetFontOffsetForIndex(data, 0);
-    if (offset < 0) {
+    std::span<const u8> bytes = font->impl_->data;
+    auto start = truetype::font_start(bytes);
+    if (!start) {
         error("font '{}': not a TrueType/OpenType font", name);
         return nullptr;
     }
-    font->impl_->colors = color::find_tables(font->impl_->data, static_cast<u32>(offset));
+    font->impl_->colors = color::find_tables(bytes, *start);
     const color::Tables& colors = font->impl_->colors;
     bool bitmap_glyphs = colors.sbix || (colors.cblc && colors.cbdt);
-    if (!stbtt_InitFont(&font->impl_->info, data, offset) &&
-        !(bitmap_glyphs && init_bitmap_only_font(font->impl_->info, data, offset))) {
-        error("font '{}': not a TrueType/OpenType font", name);
+    if (!font->impl_->tt.load(bytes, *start, bitmap_glyphs)) {
+        error("font '{}': not a TrueType/OpenType font, or a broken one", name);
         return nullptr;
     }
 #if BOWL_HARFBUZZ
     // HarfBuzz reads the same bytes (which the Impl keeps alive), the first font of a collection as stb does.
-    hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(data), static_cast<unsigned>(font->impl_->data.size()),
+    hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(bytes.data()), static_cast<unsigned>(bytes.size()),
                                      HB_MEMORY_MODE_READONLY, nullptr, nullptr);
     hb_face_t* face = hb_face_create(blob, 0);
     font->impl_->hb = hb_font_create(face);
@@ -185,20 +141,19 @@ void Font::set_fallbacks(std::vector<Asset<Font>> fonts) {
 }
 
 Font::Face Font::face_for(u32 codepoint) const {
-    if (int i = stbtt_FindGlyphIndex(&impl_->info, static_cast<int>(codepoint)); i != 0) return {&impl_->info, i, impl_.get()};
+    if (int i = impl_->tt.glyph_for(codepoint); i != 0) return {i, impl_.get()};
     for (const Asset<Font>& f : fallbacks_)
         if (f && f.get() != this)
-            if (int i = stbtt_FindGlyphIndex(&f->impl_->info, static_cast<int>(codepoint)); i != 0)
-                return {&f->impl_->info, i, f->impl_.get()};
-    return {&impl_->info, 0, impl_.get()};
+            if (int i = f->impl_->tt.glyph_for(codepoint); i != 0) return {i, f->impl_.get()};
+    return {0, impl_.get()};
 }
 
 bool Font::has_glyph(u32 codepoint) const { return face_for(codepoint).index != 0; }
 
 Font::Metrics Font::metrics(f32 pixel_size) const {
     int ascent = 0, descent = 0, gap = 0;
-    stbtt_GetFontVMetrics(&impl_->info, &ascent, &descent, &gap);
-    f32 scale = stbtt_ScaleForPixelHeight(&impl_->info, static_cast<f32>(size_px(pixel_size)));
+    impl_->tt.vertical_metrics(ascent, descent, gap);
+    f32 scale = impl_->tt.scale_for_pixel_height(static_cast<f32>(size_px(pixel_size)));
     return {ascent * scale, descent * scale, gap * scale};
 }
 
@@ -206,15 +161,15 @@ f32 Font::advance(u32 codepoint, f32 pixel_size) const {
     Face face = face_for(codepoint);
     if (face.index == 0 && codepoint != ' ') face = face_for('?');
     int advance = 0, lsb = 0;
-    stbtt_GetGlyphHMetrics(face.info, face.index, &advance, &lsb);
-    return advance * stbtt_ScaleForPixelHeight(face.info, static_cast<f32>(size_px(pixel_size)));
+    face.impl->tt.horizontal_metrics(face.index, advance, lsb);
+    return advance * face.impl->tt.scale_for_pixel_height(static_cast<f32>(size_px(pixel_size)));
 }
 
 f32 Font::kerning(u32 left, u32 right, f32 pixel_size) const {
     Face a = face_for(left), b = face_for(right);
-    if (a.info != b.info) return 0; // kerning only means something within one font
-    f32 scale = stbtt_ScaleForPixelHeight(a.info, static_cast<f32>(size_px(pixel_size)));
-    return stbtt_GetGlyphKernAdvance(a.info, a.index, b.index) * scale;
+    if (a.impl != b.impl) return 0; // kerning only means something within one font
+    f32 scale = a.impl->tt.scale_for_pixel_height(static_cast<f32>(size_px(pixel_size)));
+    return static_cast<f32>(a.impl->tt.kerning(a.index, b.index)) * scale;
 }
 
 bool Font::place(std::vector<Page>& pages, u32 w, u32 h, u16& page, u32& x, u32& y) {
@@ -258,35 +213,36 @@ const Font::Glyph& Font::glyph_at(int slot, u32 index, f32 pixel_size) {
     u64 key = (static_cast<u64>(px) << 40) | (static_cast<u64>(slot & 0xFF) << 32) | index;
     if (auto it = index_glyphs_.find(key); it != index_glyphs_.end()) return it->second;
     const Impl* impl = slot == 0 ? impl_.get() : fallbacks_[static_cast<usize>(slot - 1)]->impl_.get();
-    Glyph g = rasterize({&impl->info, static_cast<int>(index), impl}, px);
+    Glyph g = rasterize({static_cast<int>(index), impl}, px);
     return index_glyphs_[key] = g;
 }
 
 int Font::slot_for(u32 codepoint) const {
-    if (stbtt_FindGlyphIndex(&impl_->info, static_cast<int>(codepoint)) != 0) return 0;
+    if (impl_->tt.glyph_for(codepoint) != 0) return 0;
     for (usize i = 0; i < fallbacks_.size(); ++i)
-        if (fallbacks_[i] && fallbacks_[i].get() != this && stbtt_FindGlyphIndex(&fallbacks_[i]->impl_->info, static_cast<int>(codepoint)) != 0)
+        if (fallbacks_[i] && fallbacks_[i].get() != this && fallbacks_[i]->impl_->tt.glyph_for(codepoint) != 0)
             return static_cast<int>(i + 1);
     return -1;
 }
 
 f32 Font::slot_scale(int slot, f32 pixel_size) const {
     const Impl* impl = slot <= 0 ? impl_.get() : fallbacks_[static_cast<usize>(slot - 1)]->impl_.get();
-    return stbtt_ScaleForPixelHeight(&impl->info, static_cast<f32>(size_px(pixel_size)));
+    return impl->tt.scale_for_pixel_height(static_cast<f32>(size_px(pixel_size)));
 }
 
 Font::Glyph Font::rasterize(const Face& face, u32 px) {
-    f32 scale = stbtt_ScaleForPixelHeight(face.info, static_cast<f32>(px));
+    const truetype::Font& tt = face.impl->tt;
+    f32 scale = tt.scale_for_pixel_height(static_cast<f32>(px));
     int advance = 0, lsb = 0;
-    stbtt_GetGlyphHMetrics(face.info, face.index, &advance, &lsb);
+    tt.horizontal_metrics(face.index, advance, lsb);
     int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-    stbtt_GetGlyphBitmapBox(face.info, face.index, scale, scale, &x0, &y0, &x1, &y1);
+    tt.bitmap_box(face.index, scale, x0, y0, x1, y1);
 
     Glyph g;
     g.advance = advance * scale;
     g.offset = {static_cast<f32>(x0), static_cast<f32>(y0)};
     u32 ax = 0, ay = 0;
-    if (auto picture = color_picture(face.info, face.impl->data, face.impl->colors, face.index, scale)) {
+    if (auto picture = color_picture(tt, face.impl->data, face.impl->colors, face.index, scale)) {
         if (place(pages_, picture->width, picture->height, g.page, ax, ay)) {
             std::vector<u8>& pixels = pages_[g.page].pixels;
             for (u32 row = 0; row < picture->height; ++row)
@@ -303,8 +259,7 @@ Font::Glyph Font::rasterize(const Face& face, u32 px) {
     u32 w = static_cast<u32>(std::max(0, x1 - x0)), h = static_cast<u32>(std::max(0, y1 - y0));
     if (w > 0 && h > 0 && place(pages_, w, h, g.page, ax, ay)) {
         std::vector<u8> alpha(w * h);
-        stbtt_MakeGlyphBitmap(face.info, alpha.data(), static_cast<int>(w), static_cast<int>(h), static_cast<int>(w),
-                              scale, scale, face.index);
+        tt.make_bitmap(alpha.data(), static_cast<int>(w), static_cast<int>(h), static_cast<int>(w), scale, face.index);
         std::vector<u8>& pixels = pages_[g.page].pixels;
         for (u32 row = 0; row < h; ++row)
             for (u32 col = 0; col < w; ++col) {
@@ -325,15 +280,21 @@ const Font::Glyph& Font::sdf_glyph(u32 codepoint) {
         Glyph missing = sdf_glyph('?');
         return sdf_glyphs_[codepoint] = missing;
     }
-    f32 scale = stbtt_ScaleForPixelHeight(face.info, sdf_size);
+    const truetype::Font& tt = face.impl->tt;
+    f32 scale = tt.scale_for_pixel_height(sdf_size);
     int advance = 0, lsb = 0;
-    stbtt_GetGlyphHMetrics(face.info, face.index, &advance, &lsb);
+    tt.horizontal_metrics(face.index, advance, lsb);
     Glyph g;
     g.advance = advance * scale;
     int w = 0, h = 0, xoff = 0, yoff = 0;
-    // Distances: 128 on the outline, falling to 0 sdf_spread pixels outside and rising to 255 inside.
-    unsigned char* field = stbtt_GetGlyphSDF(face.info, scale, face.index, sdf_spread, 128,
-                                             128.0f / static_cast<f32>(sdf_spread), &w, &h, &xoff, &yoff);
+    // Distances: 128 on the outline, falling to 0 sdf_spread pixels outside and rising to 255 inside. A glyph too big
+    // for an atlas page isn't drawn, so its field (which takes as long as its area times its outline) isn't made.
+    int x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+    tt.bitmap_box(face.index, scale, x0, y0, x1, y1);
+    u8* field = nullptr;
+    if (x1 > x0 && y1 > y0 && i64{x1} - x0 + 2 * sdf_spread + 2 <= page_size &&
+        i64{y1} - y0 + 2 * sdf_spread + 2 <= page_size) // a box the font has upside down makes stb's size negative
+        field = tt.sdf(scale, face.index, sdf_spread, 128, 128.0f / static_cast<f32>(sdf_spread), w, h, xoff, yoff);
     u32 ax = 0, ay = 0;
     if (field && w > 0 && h > 0 && place(sdf_pages_, static_cast<u32>(w), static_cast<u32>(h), g.page, ax, ay)) {
         std::vector<u8>& pixels = sdf_pages_[g.page].pixels;

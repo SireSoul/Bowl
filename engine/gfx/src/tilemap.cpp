@@ -5,11 +5,12 @@
 #include "bowl/core/xml.hpp"
 
 #define STBI_NO_STDIO
-#include <stb_image.h> // declarations only: stbi_zlib_decode_* (implemented in loaders.cpp)
+#include <stb_image.h> // declarations only: stbi_zlib_decode_* (implemented in stb_image.cpp)
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <format>
@@ -45,6 +46,12 @@ std::string normalize_path(std::string_view path) {
 
 namespace {
 
+// A cell coordinate from a point, as an int. Points beyond any map (and the NaN a tile 0 pixels wide gives) clamp to a
+// range no map reaches, where converting them as they are would be undefined; staggered maps then double it.
+constexpr f32 cell_limit = 1 << 28;
+i32 cell_floor(f32 v) { return std::isnan(v) ? 0 : static_cast<i32>(std::clamp(std::floor(v), -cell_limit, cell_limit)); }
+i32 cell_ceil(f32 v) { return std::isnan(v) ? 0 : static_cast<i32>(std::clamp(std::ceil(v), -cell_limit, cell_limit)); }
+
 std::string dir_of(std::string_view path) {
     usize slash = path.rfind('/');
     return slash == std::string_view::npos ? std::string() : std::string(path.substr(0, slash + 1));
@@ -76,9 +83,11 @@ std::optional<std::vector<u8>> base64_decode(std::string_view s) {
     return out;
 }
 
-std::optional<std::vector<u8>> inflate(std::span<const u8> data, bool gzip) {
-    int len = 0;
-    char* raw = nullptr;
+// Exactly `size` bytes of zlib or gzip data: a stream that inflates to more fails, rather than to whatever it asks.
+std::optional<std::vector<u8>> inflate(std::span<const u8> data, bool gzip, usize size) {
+    std::vector<u8> out(size);
+    auto into = reinterpret_cast<char*>(out.data());
+    int len = -1;
     if (gzip) {
         // gzip: 10-byte header (+ optional fields), raw deflate, 8-byte trailer.
         if (data.size() < 18 || data[0] != 0x1F || data[1] != 0x8B || data[2] != 8) return std::nullopt;
@@ -89,23 +98,32 @@ std::optional<std::vector<u8>> inflate(std::span<const u8> data, bool gzip) {
         if (flags & 16) while (at < data.size() && data[at++]) {} // FCOMMENT
         if (flags & 2) at += 2;                                   // FHCRC
         if (at + 8 > data.size()) return std::nullopt;
-        raw = stbi_zlib_decode_noheader_malloc(reinterpret_cast<const char*>(data.data() + at),
-                                               static_cast<int>(data.size() - at - 8), &len);
+        len = stbi_zlib_decode_noheader_buffer(into, static_cast<int>(size), reinterpret_cast<const char*>(data.data() + at),
+                                               static_cast<int>(data.size() - at - 8));
     } else {
-        raw = stbi_zlib_decode_malloc(reinterpret_cast<const char*>(data.data()), static_cast<int>(data.size()), &len);
+        len = stbi_zlib_decode_buffer(into, static_cast<int>(size), reinterpret_cast<const char*>(data.data()),
+                                      static_cast<int>(data.size()));
     }
-    if (!raw) return std::nullopt;
-    std::vector<u8> out(raw, raw + len);
-    std::free(raw);
+    if (len < 0 || static_cast<usize>(len) != size) return std::nullopt;
     return out;
 }
 
 // Tile data: a JSON array of gids, or base64 (optionally zlib/gzip) little-endian u32s.
-bool decode_cells(const json::Value& data, std::string_view encoding, std::string_view compression, usize count,
+// Nothing is allocated until the data is known to hold every cell, so a layer that claims to be huge can't ask for
+// gigabytes.
+bool decode_cells(const json::Value& data, std::string_view encoding, std::string_view compression, u64 count,
                   std::vector<u32>& out, std::string& error) {
-    out.assign(count, 0);
+    if (count > max_layer_cells) {
+        error = std::format("a layer of {} cells is more than the {} a layer can have", count, max_layer_cells);
+        return false;
+    }
     if (data.is_array()) {
-        for (usize i = 0; i < count && i < data.size(); ++i) out[i] = static_cast<u32>(data[i].as_number());
+        if (data.size() < count) {
+            error = "layer data is shorter than the layer";
+            return false;
+        }
+        out.resize(count);
+        for (usize i = 0; i < count; ++i) out[i] = static_cast<u32>(data[i].as_int());
         return true;
     }
     if (encoding != "base64") {
@@ -118,7 +136,7 @@ bool decode_cells(const json::Value& data, std::string_view encoding, std::strin
         return false;
     }
     if (compression == "zlib" || compression == "gzip") {
-        bytes = inflate(*bytes, compression == "gzip");
+        bytes = inflate(*bytes, compression == "gzip", count * 4);
         if (!bytes) {
             error = std::format("bad {} layer data", compression);
             return false;
@@ -131,6 +149,7 @@ bool decode_cells(const json::Value& data, std::string_view encoding, std::strin
         error = "layer data is shorter than the layer";
         return false;
     }
+    out.resize(count);
     for (usize i = 0; i < count; ++i)
         out[i] = u32((*bytes)[i * 4]) | u32((*bytes)[i * 4 + 1]) << 8 | u32((*bytes)[i * 4 + 2]) << 16 |
                  u32((*bytes)[i * 4 + 3]) << 24;
@@ -217,7 +236,7 @@ MapObject parse_object(const json::Value& o) {
     obj.properties = properties_of(o);
     if (o.contains("gid")) {
         obj.shape = MapObject::Shape::Tile;
-        obj.gid = static_cast<u32>(o["gid"].as_number());
+        obj.gid = static_cast<u32>(o["gid"].as_int());
     } else if (o["point"].as_bool()) {
         obj.shape = MapObject::Shape::Point;
     } else if (o["ellipse"].as_bool()) {
@@ -268,36 +287,46 @@ bool parse_layers(const json::Value& list, const LayerContext& parent, std::stri
             std::string_view encoding = l["encoding"].as_string("csv");
             std::string_view compression = l["compression"].as_string();
             if (l.contains("chunks")) { // infinite map: merge chunks into one rectangle
-                i32 x0 = INT32_MAX, y0 = INT32_MAX, x1 = INT32_MIN, y1 = INT32_MIN;
+                // In 64 bits, and checked: chunks whose corners don't fit in 32 bits, or that cover more cells than a
+                // layer holds, aren't a map Tiled made.
+                i64 x0 = INT64_MAX, y0 = INT64_MAX, x1 = INT64_MIN, y1 = INT64_MIN;
                 for (const json::Value& c : l["chunks"].array()) {
-                    i32 cx = static_cast<i32>(c["x"].as_int()), cy = static_cast<i32>(c["y"].as_int());
+                    i64 cx = c["x"].as_int(), cy = c["y"].as_int(), cw = c["width"].as_int(), ch = c["height"].as_int();
+                    if (cx < INT32_MIN || cy < INT32_MIN || cw < 0 || ch < 0 || cw > INT32_MAX || ch > INT32_MAX ||
+                        cx + cw > INT32_MAX || cy + ch > INT32_MAX) {
+                        error = std::format("layer '{}' has a chunk out of range", layer.name);
+                        return false;
+                    }
                     x0 = std::min(x0, cx);
                     y0 = std::min(y0, cy);
-                    x1 = std::max(x1, cx + static_cast<i32>(c["width"].as_int()));
-                    y1 = std::max(y1, cy + static_cast<i32>(c["height"].as_int()));
+                    x1 = std::max(x1, cx + cw);
+                    y1 = std::max(y1, cy + ch);
                 }
                 if (x0 <= x1 && y0 <= y1) {
-                    layer.origin_x = x0;
-                    layer.origin_y = y0;
+                    if (static_cast<u64>(x1 - x0) * static_cast<u64>(y1 - y0) > max_layer_cells) {
+                        error = std::format("layer '{}' spans {} x {} cells, more than a layer can have", layer.name,
+                                            x1 - x0, y1 - y0);
+                        return false;
+                    }
+                    layer.origin_x = static_cast<i32>(x0);
+                    layer.origin_y = static_cast<i32>(y0);
                     layer.width = static_cast<u32>(x1 - x0);
                     layer.height = static_cast<u32>(y1 - y0);
                     layer.cells.assign(static_cast<usize>(layer.width) * layer.height, 0);
                     for (const json::Value& c : l["chunks"].array()) {
                         u32 cw = static_cast<u32>(c["width"].as_int()), ch = static_cast<u32>(c["height"].as_int());
                         std::vector<u32> cells;
-                        if (!decode_cells(c["data"], encoding, compression, static_cast<usize>(cw) * ch, cells, error)) return false;
-                        i32 cx = static_cast<i32>(c["x"].as_int()) - x0, cy = static_cast<i32>(c["y"].as_int()) - y0;
-                        for (u32 y = 0; y < ch; ++y)
-                            for (u32 x = 0; x < cw; ++x)
-                                layer.cells[static_cast<usize>(cy + static_cast<i32>(y)) * layer.width +
-                                            static_cast<usize>(cx + static_cast<i32>(x))] = cells[y * cw + x];
+                        if (!decode_cells(c["data"], encoding, compression, u64{cw} * ch, cells, error)) return false;
+                        usize cx = static_cast<usize>(c["x"].as_int() - x0), cy = static_cast<usize>(c["y"].as_int() - y0);
+                        for (usize y = 0; y < ch; ++y)
+                            for (usize x = 0; x < cw; ++x)
+                                layer.cells[(cy + y) * layer.width + cx + x] = cells[y * cw + x];
                     }
                 }
             } else {
                 layer.width = static_cast<u32>(l["width"].as_int());
                 layer.height = static_cast<u32>(l["height"].as_int());
-                if (!decode_cells(l["data"], encoding, compression, static_cast<usize>(layer.width) * layer.height,
-                                  layer.cells, error))
+                if (!decode_cells(l["data"], encoding, compression, u64{layer.width} * layer.height, layer.cells, error))
                     return false;
             }
         } else if (type == "objectgroup") {
@@ -769,7 +798,7 @@ bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
         // A tile template's gid is in its own tileset's numbering: move it onto the map's copy of that tileset.
         if (merged.contains("gid") && t["tileset"].contains("source")) {
             std::string source = normalize_path(dir_of(path) + std::string(t["tileset"]["source"].as_string()));
-            u32 gid = static_cast<u32>(merged["gid"].as_number());
+            u32 gid = static_cast<u32>(merged["gid"].as_int());
             u32 local = (gid & tile_gid_mask) - static_cast<u32>(t["tileset"]["firstgid"].as_int(1));
             for (const Tileset& ts : out.tilesets)
                 if (ts.source == source) merged.set("gid", static_cast<f64>((ts.first_gid + local) | (gid & ~tile_gid_mask)));
@@ -871,8 +900,8 @@ struct HexGrid {
     Vec2 to_world(f32 x, f32 y) const {
         if (stagger_x)
             return {x * static_cast<f32>(column_w),
-                    y * static_cast<f32>(th + side_y) + (shifted(static_cast<i32>(std::floor(x))) ? row_h : 0)};
-        return {x * static_cast<f32>(tw + side_x) + (shifted(static_cast<i32>(std::floor(y))) ? column_w : 0),
+                    y * static_cast<f32>(th + side_y) + (shifted(cell_floor(x)) ? row_h : 0)};
+        return {x * static_cast<f32>(tw + side_x) + (shifted(cell_floor(y)) ? column_w : 0),
                 y * static_cast<f32>(row_h)};
     }
 
@@ -890,9 +919,9 @@ struct HexGrid {
         f32 x = p.x, y = p.y;
         if (stagger_x) x -= even ? static_cast<f32>(offset_x) : 0.0f;
         else y -= even ? static_cast<f32>(offset_y) : 0.0f;
-        i32 rx = static_cast<i32>(std::floor(x / static_cast<f32>(tw)));
-        i32 ry = static_cast<i32>(std::floor(y / static_cast<f32>(th)));
-        f32 rel_x = x - static_cast<f32>(rx * tw), rel_y = y - static_cast<f32>(ry * th);
+        i32 rx = cell_floor(x / static_cast<f32>(tw));
+        i32 ry = cell_floor(y / static_cast<f32>(th));
+        f32 rel_x = x - static_cast<f32>(rx) * static_cast<f32>(tw), rel_y = y - static_cast<f32>(ry) * static_cast<f32>(th);
         i32& axis = stagger_x ? rx : ry;
         axis *= 2;
         if (even) ++axis;
@@ -911,7 +940,7 @@ struct HexGrid {
         if (stagger_x) x -= static_cast<f32>(even ? tw : offset_x);
         else y -= static_cast<f32>(even ? th : offset_y);
         f32 cw2 = static_cast<f32>(column_w * 2), rh2 = static_cast<f32>(row_h * 2);
-        i32 rx = static_cast<i32>(std::floor(x / cw2)), ry = static_cast<i32>(std::floor(y / rh2));
+        i32 rx = cell_floor(x / cw2), ry = cell_floor(y / rh2);
         Vec2 rel{x - static_cast<f32>(rx) * cw2, y - static_cast<f32>(ry) * rh2};
         i32& axis = stagger_x ? rx : ry;
         axis *= 2;
@@ -979,7 +1008,7 @@ std::pair<i32, i32> Tilemap::cell_at(Vec2 w) const {
     if (orientation == Orientation::Staggered) return HexGrid(*this).diamond_at(w);
     if (orientation == Orientation::Hexagonal) return HexGrid(*this).hexagon_at(w);
     Vec2 c = world_to_cell(w);
-    return {static_cast<i32>(std::floor(c.x)), static_cast<i32>(std::floor(c.y))};
+    return {cell_floor(c.x), cell_floor(c.y)};
 }
 
 Vec2 Tilemap::pixel_size() const {
@@ -1170,10 +1199,10 @@ struct MapDraw {
             max_y = std::max(max_y, c.y);
         }
         i32 margin = staggered_layout(map) ? 1 : 0; // whole cells, so one more around the edge
-        return {std::max(layer.origin_x, static_cast<i32>(std::floor(min_x)) - margin),
-                std::max(layer.origin_y, static_cast<i32>(std::floor(min_y)) - margin),
-                std::min(layer.origin_x + static_cast<i32>(layer.width) - 1, static_cast<i32>(std::ceil(max_x)) + margin),
-                std::min(layer.origin_y + static_cast<i32>(layer.height) - 1, static_cast<i32>(std::ceil(max_y)) + margin)};
+        return {std::max(layer.origin_x, cell_floor(min_x) - margin),
+                std::max(layer.origin_y, cell_floor(min_y) - margin),
+                std::min(layer.origin_x + static_cast<i32>(layer.width) - 1, cell_ceil(max_x) + margin),
+                std::min(layer.origin_y + static_cast<i32>(layer.height) - 1, cell_ceil(max_y) + margin)};
     }
 
     // Cells in the order Tiled draws them: row by row, and in maps staggered along x, the raised columns of each row

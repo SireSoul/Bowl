@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 
@@ -247,6 +248,73 @@ TEST_CASE("text: fonts with only pictures load, like Noto Color Emoji") {
     const auto& a = font->glyph('A', 20); // in the character map, but there's no picture or outline to draw
     CHECK_FALSE(a.visible);
     CHECK(a.advance == doctest::Approx(20.0f));
+}
+
+// Found by fuzzing (tests/fuzz): stb_truetype checks nothing it reads, so fonts are checked before it sees them.
+TEST_CASE("text: broken fonts are refused, and broken glyphs draw nothing") {
+    // Too short to hold a font header: stb read past the end.
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, {}, "empty"));
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, {0, 1, 0, 0}, "header only"));
+    // A glyph whose box had its corners swapped made stb allocate a negative size for its distance field.
+    auto fuzzed = read_file_bytes(std::filesystem::path(BOWL_TEST_DATA_DIR) / "fuzz" / "font_upside_down_box.ttf");
+    REQUIRE(fuzzed);
+    if (auto font = gfx::Font::from_memory(nullptr, std::move(*fuzzed), "fuzzed")) font->sdf_glyph('A');
+    auto table = [](TinyFont& tiny, std::string_view tag) -> std::vector<u8>& {
+        for (auto& [t, bytes] : tiny.tables)
+            if (t == tag) return bytes;
+        FAIL("no table");
+        return tiny.tables[0].second;
+    };
+    TinyFont upside_down; // 'A' is glyph 1, first in glyf: swap its xMin and xMax
+    std::vector<u8>& glyf = table(upside_down, "glyf");
+    std::swap_ranges(glyf.begin() + 2, glyf.begin() + 4, glyf.begin() + 6);
+    auto font = gfx::Font::from_memory(nullptr, upside_down.build(), "upside down");
+    REQUIRE(font);
+    CHECK_FALSE(font->sdf_glyph('A').visible);
+    CHECK(font->sdf_glyph('A').advance > 0);
+
+    // A composite glyph made of itself: stb went round until the stack ran out.
+    TinyFont loop;
+    std::vector<u8>& looped = table(loop, "glyf");
+    const u8 composite[] = {0xFF, 0xFF, 0, 0, 0, 0, 3, 0x84, 3, 0x20, // -1 contours: a composite, and its box
+                            0, 2, 0, 1, 0, 0};                         // one part: offsets as bytes, glyph 1 (itself)
+    std::copy(std::begin(composite), std::end(composite), looped.begin());
+    font = gfx::Font::from_memory(nullptr, loop.build(), "loop");
+    REQUIRE(font);
+    CHECK_FALSE(font->glyph('A', 20).visible);
+    CHECK(font->glyph('A', 20).advance == doctest::Approx(20.0f)); // still spaced as hmtx says
+
+    // A big glyph of 20000 points: its distance field took stb seconds. It's left out instead.
+    TinyFont intricate;
+    std::vector<u8> zigzag;
+    constexpr u32 points = 20000;
+    TinyFont::be16(zigzag, 1);                                                 // one contour
+    for (u32 v : {0u, 0u, 1000u, 1000u}) TinyFont::be16(zigzag, v);           // its box
+    TinyFont::be16(zigzag, points - 1), TinyFont::be16(zigzag, 0);             // last point, no instructions
+    zigzag.insert(zigzag.end(), points, 1);                                    // on the curve, 16-bit deltas
+    for (int axis = 0; axis < 2; ++axis) // back and forth between (0, 0) and (1000, 1000)
+        for (u32 i = 0; i < points; ++i) TinyFont::be16(zigzag, i == 0 ? 0 : i % 2 ? 1000 : static_cast<u16>(-1000));
+    std::vector<u8>& outlines = table(intricate, "glyf");
+    std::vector<u8>& loca = table(intricate, "loca");
+    u32 at = static_cast<u32>(outlines.size());
+    outlines.insert(outlines.end(), zigzag.begin(), zigzag.end());
+    // Glyph 1 ('A') now starts at the end of the old data, and glyphs 2 and 3 are empty.
+    for (u32 g = 1; g < 5; ++g) {
+        u32 v = (g == 1 ? at : static_cast<u32>(outlines.size())) / 2;
+        loca[2 * g] = static_cast<u8>(v >> 8), loca[2 * g + 1] = static_cast<u8>(v);
+    }
+    font = gfx::Font::from_memory(nullptr, intricate.build(), "intricate");
+    REQUIRE(font);
+    CHECK(font->glyph('A', 20).visible); // drawn as usual
+    CHECK_FALSE(font->sdf_glyph('A').visible);
+
+    // A table that runs past the end of the file is as good as missing, and hmtx too short for every glyph is refused.
+    TinyFont short_metrics;
+    table(short_metrics, "hmtx").resize(6);
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, short_metrics.build(), "short hmtx"));
+    std::vector<u8> cut = TinyFont().build();
+    cut.resize(cut.size() - 40);
+    CHECK_FALSE(gfx::Font::from_memory(nullptr, cut, "cut short"));
 }
 
 TEST_CASE("text: the system's emoji font, where there is one") {

@@ -45,7 +45,8 @@ public:
     bool as_bool(bool fallback = false) const { return is_bool() ? std::get<bool>(data_) : fallback; }
     f64 as_number(f64 fallback = 0) const { return is_number() ? std::get<f64>(data_) : fallback; }
     f32 as_float(f32 fallback = 0) const { return static_cast<f32>(as_number(fallback)); }
-    i64 as_int(i64 fallback = 0) const { return is_number() ? static_cast<i64>(std::get<f64>(data_)) : fallback; }
+    // The number's whole part, clamped to i64's range (any number a file holds converts; NaN gives the fallback).
+    i64 as_int(i64 fallback = 0) const;
     std::string_view as_string(std::string_view fallback = {}) const {
         return is_string() ? std::string_view(std::get<std::string>(data_)) : fallback;
     }

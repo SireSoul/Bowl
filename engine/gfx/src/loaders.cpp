@@ -5,22 +5,10 @@
 #include "bowl/shaderc/shaderc.hpp"
 #endif
 
-#define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_STDIO
-#define STBI_FAILURE_USERMSG
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#pragma GCC diagnostic ignored "-Wshadow"
-#endif
-#include <stb_image.h>
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image.h> // declarations only: implemented in stb_image.cpp
 #define STBI_WRITE_NO_STDIO
 #include <stb_image_write.h>
-#if defined(__clang__) || defined(__GNUC__)
-#pragma GCC diagnostic pop
-#endif
 
 #include "bowl/core/file.hpp"
 #include "bowl/gfx/renderer.hpp"
@@ -28,6 +16,7 @@
 #include "bowl/gfx/text.hpp"
 #include "bowl/gfx/tilemap.hpp"
 
+#include <climits>
 #include <string>
 
 namespace bowl::gfx {
@@ -96,8 +85,18 @@ struct DecodedImage {
 std::shared_ptr<DecodedImage> decode_image(std::span<const u8> bytes) {
     auto image = std::make_shared<DecodedImage>();
     int channels = 0;
+    if (bytes.size() > INT_MAX) { // stb counts bytes in an int
+        image->error = "the file is too big";
+        return image;
+    }
     image->pixels = stbi_load_from_memory(bytes.data(), static_cast<int>(bytes.size()), &image->w, &image->h, &channels, 4);
-    if (!image->pixels) image->error = stbi_failure_reason();
+    if (image->pixels && (image->w <= 0 || image->h <= 0)) { // stb accepts a BMP 0 pixels high; a texture can't be
+        stbi_image_free(image->pixels);
+        image->pixels = nullptr;
+        image->error = "the picture is empty";
+    } else if (!image->pixels) {
+        image->error = stbi_failure_reason();
+    }
     return image;
 }
 
