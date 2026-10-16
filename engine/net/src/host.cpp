@@ -1,5 +1,7 @@
 #include "bowl/net/host.hpp"
 
+#include "crypto.hpp"
+
 #include "bowl/core/log.hpp"
 #include "bowl/core/time.hpp"
 
@@ -11,12 +13,16 @@ namespace bowl::net {
 
 // Packets, little-endian:
 //   u32 protocol, u8 kind, then by kind:
-//   ConnectRequest  u64 client salt
-//   ConnectAccept   u64 client salt, u64 server salt           (the connection's key is client ^ server)
+//   ConnectRequest  u64 client salt, [32] client public key, [24] zeros (as long as the answer: no amplification)
+//   ConnectAccept   u64 client salt, u64 server salt, [32] server public key, [16] tag over all of it (counter 0):
+//                   proof that the server made the same keys, so it had the same secret
 //   ConnectDeny     u64 client salt                             (the host is full)
-//   Data            u64 key, u16 sequence, u16 ack, u32 ack bits, u8 acks valid, then messages:
+//   Data            u64 token, u64 counter, [16] tag, then encrypted:
+//                     u16 sequence, u16 ack, u32 ack bits, u8 acks valid, then messages:
 //                     u8 flags (1: reliable, 2: more pieces follow), [u16 id if reliable], u16 length, bytes
-//   Disconnect      u64 key
+//   Disconnect      u64 token, u64 counter, [16] tag (nothing encrypted)
+// The token (client salt ^ server salt) names the connection. Each direction has its own key and counts its packets;
+// a counter is never used twice, and one seen before (or 64 or more behind the newest) is turned away.
 
 namespace {
 
@@ -25,6 +31,14 @@ constexpr usize max_packet = 1200;
 constexpr usize piece_size = 1024; // reliable messages are cut into pieces this big
 constexpr u8 flag_reliable = 1, flag_more = 2;
 constexpr usize window = 1024;     // packets remembered for acks
+constexpr usize sealed_header = 4 + 1 + 8 + 8;                  // protocol, kind, token, counter
+constexpr usize sealed_overhead = sealed_header + crypto::mac_size; // before the encrypted part
+constexpr usize request_padding = 24;
+
+u64 nonzero_random() {
+    for (;;)
+        if (u64 v = crypto::random_u64()) return v;
+}
 
 // u16 numbers wrap: a is newer than b if it's ahead by less than half the range.
 bool newer(u16 a, u16 b) { return a != b && static_cast<u16>(a - b) < 32768; }
@@ -77,11 +91,19 @@ struct Host::Delayed {
 };
 
 struct Host::Peer {
-    enum class State { Connecting, Connected } state = State::Connecting;
+    // Connecting: we asked and wait for an answer. Accepted: they asked and we answered, but they haven't yet sent a
+    // packet with the keys (with the wrong secret, they never will). Connected: both ends have the keys.
+    enum class State { Connecting, Accepted, Connected } state = State::Connecting;
     PeerId id = 0;
     Address address;
     u64 client_salt = 0, server_salt = 0;
     bool outgoing = false; // we connected to them
+    crypto::KeyPair keys;                 // ours, made for this connection
+    crypto::Key their_key{};              // their public key
+    crypto::SessionKeys session;
+    std::vector<u8> accept;               // the server's answer, sent again if the client asks again
+    u64 send_counter = 1;                 // 0 is the answer's tag
+    u64 receive_highest = 0, receive_seen = 0; // newest counter, and which of the 64 before it arrived
     f64 last_received = 0, last_sent = -1e9, started = 0;
     bool ack_owed = false;
     PeerStats stats;
@@ -117,7 +139,23 @@ struct Host::Peer {
     bool any_acked = false;
     u16 highest_ack = 0;
 
-    u64 key() const { return client_salt ^ server_salt; }
+    u64 token() const { return client_salt ^ server_salt; }
+    const crypto::Key& sending_key() const { return outgoing ? session.client_to_server : session.server_to_client; }
+    const crypto::Key& receiving_key() const { return outgoing ? session.server_to_client : session.client_to_server; }
+    bool seen(u64 counter) const {
+        if (counter == 0) return true;
+        if (counter > receive_highest) return false;
+        u64 back = receive_highest - counter;
+        return back >= 64 || ((receive_seen >> back) & 1);
+    }
+    void mark_seen(u64 counter) {
+        if (counter > receive_highest) {
+            u64 shift = counter - receive_highest;
+            receive_seen = shift >= 64 ? 0 : receive_seen << shift;
+            receive_highest = counter;
+        }
+        receive_seen |= 1ull << (receive_highest - counter);
+    }
     f32 resend_delay() const { return std::max(0.1f, stats.rtt * 1.25f); }
 };
 
@@ -151,8 +189,7 @@ PeerId Host::connect(const Address& to) {
     p->id = next_id_++;
     p->address = to;
     p->outgoing = true;
-    random_ ^= random_ << 13, random_ ^= random_ >> 7, random_ ^= random_ << 17;
-    p->client_salt = random_ | 1;
+    p->client_salt = nonzero_random();
     p->started = p->last_received = now_;
     PeerId id = p->id;
     peers_[id] = std::move(p);
@@ -189,11 +226,8 @@ void Host::broadcast(std::span<const u8> data, Delivery delivery) {
 void Host::disconnect(PeerId id) {
     auto it = peers_.find(id);
     if (it == peers_.end()) return;
-    Writer w;
-    w.u32_(settings_.protocol);
-    w.u8_(Disconnect);
-    w.u64_(it->second->key());
-    for (int i = 0; i < 3; ++i) socket_.send(it->second->address, w.out); // said a few times: it may be lost
+    if (it->second->state != Peer::State::Connecting) // a peer that never answered has no keys to say it with
+        for (int i = 0; i < 3; ++i) socket_.send(it->second->address, sealed(*it->second, Disconnect, {})); // may be lost
     drop(id, false);
 }
 
@@ -246,6 +280,20 @@ void Host::transmit(const Address& to, std::vector<u8> packet, f64 now) {
     socket_.send(to, packet);
 }
 
+std::vector<u8> Host::sealed(Peer& p, u8 kind, std::vector<u8> body) {
+    Writer w;
+    w.u32_(settings_.protocol);
+    w.u8_(kind);
+    w.u64_(p.token());
+    u64 counter = p.send_counter++;
+    w.u64_(counter);
+    crypto::Mac mac;
+    crypto::seal(body, mac, p.sending_key(), counter, w.out);
+    w.bytes(mac);
+    w.bytes(body);
+    return std::move(w.out);
+}
+
 void Host::send_packet(Peer& p, f64 now, bool force) {
     if (p.state == Peer::State::Connecting) { // a client asking; asked again until answered
         if (now - p.last_sent < 0.25) return;
@@ -253,10 +301,13 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         w.u32_(settings_.protocol);
         w.u8_(ConnectRequest);
         w.u64_(p.client_salt);
+        w.bytes(p.keys.public_key);
+        w.out.resize(w.out.size() + request_padding);
         p.last_sent = now;
         transmit(p.address, std::move(w.out), now);
         return;
     }
+    if (p.state == Peer::State::Accepted) return; // nothing to send until they show they have the keys
     // A reliable piece goes out if it hasn't been acknowledged in a while, and only within `window` of the oldest
     // unacknowledged one: the receiver keeps no more than that ahead of what it has delivered.
     f32 delay = p.resend_delay();
@@ -270,10 +321,7 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         bool owed = packets == 0 && (force || p.ack_owed || now - p.last_sent >= settings_.keep_alive);
         if (!more && !owed) break;
 
-        Writer w;
-        w.u32_(settings_.protocol);
-        w.u8_(Data);
-        w.u64_(p.key());
+        Writer w; // the part that gets encrypted
         u16 sequence = p.next_sequence++;
         w.u16_(sequence);
         w.u16_(p.remote_sequence);
@@ -283,7 +331,7 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         if (record.used && !record.acked) ++p.lost_lately; // fell out of the window unacknowledged
         record = {true, false, sequence, now, {}};
         for (auto& m : p.reliable_out) {
-            if (!due(m) || w.out.size() + m.data.size() + 5 > max_packet) continue;
+            if (!due(m) || sealed_overhead + w.out.size() + m.data.size() + 5 > max_packet) continue;
             w.u8_(m.flags);
             w.u16_(m.id);
             w.u16_(static_cast<u16>(m.data.size()));
@@ -295,7 +343,7 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         }
         for (; unreliable_at < p.unreliable_out.size(); ++unreliable_at) {
             const auto& m = p.unreliable_out[unreliable_at];
-            if (w.out.size() + m.size() + 3 > max_packet) break; // the next packet takes it
+            if (sealed_overhead + w.out.size() + m.size() + 3 > max_packet) break; // the next packet takes it
             w.u8_(0);
             w.u16_(static_cast<u16>(m.size()));
             w.bytes(m);
@@ -303,7 +351,7 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         p.ack_owed = false;
         p.last_sent = now;
         ++p.stats.sent;
-        transmit(p.address, std::move(w.out), now);
+        transmit(p.address, sealed(p, Data, std::move(w.out)), now);
     }
     p.unreliable_out.clear(); // whatever didn't fit in 16 packets is dropped: it's unreliable
 }
@@ -317,8 +365,11 @@ void Host::handle(const Address& from, std::span<const u8> packet, f64 now) {
 
     if (kind == ConnectRequest) {
         u64 client_salt = r.u64_();
-        if (!r.ok) return;
-        if (p && p->client_salt != client_salt) return; // someone else from the same address: ignore
+        auto their_key = r.bytes(crypto::key_size);
+        if (!r.ok || client_salt == 0) return;
+        if (p && (p->outgoing || p->client_salt != client_salt ||
+                  !std::equal(their_key.begin(), their_key.end(), p->their_key.begin())))
+            return; // someone else from the same address: ignore
         if (!p) {
             usize connected = 0;
             for (auto& [id, q] : peers_) connected += q->outgoing ? 0 : 1;
@@ -331,50 +382,87 @@ void Host::handle(const Address& from, std::span<const u8> packet, f64 now) {
                 return;
             }
             auto fresh = std::make_unique<Peer>();
-            fresh->id = next_id_++;
             fresh->address = from;
             fresh->client_salt = client_salt;
-            random_ ^= random_ << 13, random_ ^= random_ >> 7, random_ ^= random_ << 17;
-            fresh->server_salt = random_ | 2;
-            fresh->state = Peer::State::Connected;
+            fresh->server_salt = nonzero_random();
+            std::copy(their_key.begin(), their_key.end(), fresh->their_key.begin());
+            if (!crypto::derive(fresh->session, fresh->keys, fresh->their_key, false, client_salt, fresh->server_salt,
+                                settings_.secret))
+                return;
+            Writer accept;
+            accept.u32_(settings_.protocol);
+            accept.u8_(ConnectAccept);
+            accept.u64_(client_salt);
+            accept.u64_(fresh->server_salt);
+            accept.bytes(fresh->keys.public_key);
+            crypto::Mac proof;
+            crypto::seal({}, proof, fresh->session.server_to_client, 0, accept.out);
+            accept.bytes(proof);
+            fresh->accept = std::move(accept.out);
+            fresh->id = next_id_++;
+            fresh->state = Peer::State::Accepted;
             fresh->started = fresh->last_received = now;
             p = fresh.get();
             peers_[p->id] = std::move(fresh);
-            events_.push_back({Event::Type::Connected, p->id, Delivery::Reliable, {}});
         }
-        Writer accept; // answered every time it's asked: the first answer may have been lost
-        accept.u32_(settings_.protocol);
-        accept.u8_(ConnectAccept);
-        accept.u64_(p->client_salt);
-        accept.u64_(p->server_salt);
-        transmit(from, std::move(accept.out), now);
+        transmit(from, p->accept, now); // answered every time it's asked: the first answer may have been lost
         return;
     }
     if (!p) return;
     if (kind == ConnectAccept || kind == ConnectDeny) {
         u64 client_salt = r.u64_();
-        u64 server_salt = kind == ConnectAccept ? r.u64_() : 0;
-        if (!r.ok || !p->outgoing || client_salt != p->client_salt) return;
+        if (!r.ok || !p->outgoing || client_salt != p->client_salt || p->state != Peer::State::Connecting) return;
         if (kind == ConnectDeny) {
             drop(p->id, true);
             return;
         }
-        if (p->state == Peer::State::Connecting) {
-            p->server_salt = server_salt;
-            p->state = Peer::State::Connected;
-            p->last_received = now;
-            events_.push_back({Event::Type::Connected, p->id, Delivery::Reliable, {}});
-            send_packet(*p, now, true); // tell the server right away that we heard it
-        }
+        u64 server_salt = r.u64_();
+        auto their_key = r.bytes(crypto::key_size);
+        usize signed_part = r.at;
+        auto proof_bytes = r.bytes(crypto::mac_size);
+        if (!r.ok || server_salt == 0) return;
+        crypto::Key key{};
+        std::copy(their_key.begin(), their_key.end(), key.begin());
+        crypto::SessionKeys session;
+        crypto::Mac proof;
+        std::copy(proof_bytes.begin(), proof_bytes.end(), proof.begin());
+        // A different secret (or anyone tampering with the answer) makes different keys, and the proof fails.
+        if (!crypto::derive(session, p->keys, key, true, client_salt, server_salt, settings_.secret) ||
+            !crypto::open({}, proof, session.server_to_client, 0, packet.first(signed_part)))
+            return;
+        p->server_salt = server_salt;
+        p->their_key = key;
+        p->session = session;
+        p->state = Peer::State::Connected;
+        p->last_received = now;
+        events_.push_back({Event::Type::Connected, p->id, Delivery::Reliable, {}});
+        send_packet(*p, now, true); // tell the server right away that we heard it, with the keys
         return;
     }
-    u64 key = r.u64_();
-    if (!r.ok || key != p->key() || p->state != Peer::State::Connected) return;
+    if (kind != Data && kind != Disconnect) return;
+    handle_sealed(*p, kind, packet, r.at, now);
+}
+
+void Host::handle_sealed(Peer& peer, u8 kind, std::span<const u8> packet, usize at, f64 now) {
+    Peer* p = &peer;
+    Reader h{packet, at};
+    u64 token = h.u64_(), counter = h.u64_();
+    auto mac_bytes = h.bytes(crypto::mac_size);
+    if (!h.ok || p->state == Peer::State::Connecting || token != p->token() || p->seen(counter)) return;
+    std::vector<u8> body(packet.begin() + static_cast<std::ptrdiff_t>(h.at), packet.end());
+    crypto::Mac mac;
+    std::copy(mac_bytes.begin(), mac_bytes.end(), mac.begin());
+    if (!crypto::open(body, mac, p->receiving_key(), counter, packet.first(sealed_header))) return;
+    p->mark_seen(counter);
+    if (p->state == Peer::State::Accepted) { // the first packet with the keys: now they're in
+        p->state = Peer::State::Connected;
+        events_.push_back({Event::Type::Connected, p->id, Delivery::Reliable, {}});
+    }
     if (kind == Disconnect) {
         drop(p->id, true);
         return;
     }
-    if (kind != Data) return;
+    Reader r{body};
     u16 sequence = r.u16_(), ack = r.u16_();
     u32 ack_bits = r.u32_();
     bool has_acks = r.u8_() != 0; // nothing to acknowledge until they've heard from us

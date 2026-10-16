@@ -182,6 +182,7 @@ Fetched by `cmake/BowlDependencies.cmake`, each pinned to a release archive and 
 | [SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross) | vulkan-sdk-1.4.341.0 | SPIR-V to MSL and HLSL (shader compiler only) | Apache-2.0 |
 | [Dear ImGui](https://github.com/ocornut/imgui) | 1.92.8 | The dev overlay (dev builds only) | MIT |
 | [doctest](https://github.com/doctest/doctest) | 2.5.2 | Unit tests (tests only) | MIT |
+| [Monocypher](https://monocypher.org) | 4.0.2 | Encrypted `net::Host` connections | BSD-2-Clause or CC0-1.0 |
 | [Tracy](https://github.com/wolfpld/tracy) | 0.12.2 | Profiler client (`BOWL_TRACY` only) | BSD-3-Clause |
 | [Box2D](https://github.com/erincatto/box2d) | 3.1.1 | Rigid bodies (`BOWL_BOX2D` only) | MIT |
 | [libogg](https://xiph.org/ogg/), [libopus](https://opus-codec.org), [opusfile](https://opus-codec.org) | 1.3.5, 1.5.2, 0.12 | Opus sounds (`BOWL_OPUS` only) | BSD-3-Clause |

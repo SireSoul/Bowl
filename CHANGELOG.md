@@ -113,6 +113,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- **Breaking**: `net::Host` connections are encrypted and authenticated (X25519 key agreement, XChaCha20-Poly1305
+  packets, with Monocypher), with replays turned away; `HostSettings::secret` keeps out hosts that don't know it.
+  Builds before this one can't connect to builds after it. Connection salts come from the system's secure random
+  numbers.
 - The isometric sample has installers (`bowl_package`), which the Package workflow builds and runs on every
   platform. CI dependency downloads retry when they stall, and jobs stop after 45 minutes.
 - Bowl is under the Apache License 2.0 (`LICENSE`, `NOTICE`).

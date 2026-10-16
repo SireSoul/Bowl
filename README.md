@@ -63,8 +63,8 @@ load their worlds without a pile of boilerplate.
 - Collision: rectangles, circles, capsules and convex polygons, swept boxes that don't tunnel, raycasts, a spatial
   hash, `move_and_slide`, colliders and trigger events as components
 - Optional Box2D v3 rigid bodies, with joints, springs, motors and contact events
-- Networking: `net::Host` connections over UDP with reliable and unreliable messages and a simulated bad network;
-  lockstep and rollback helpers built on the deterministic ECS
+- Networking: encrypted `net::Host` connections over UDP with reliable and unreliable messages and a simulated bad
+  network; lockstep and rollback helpers built on the deterministic ECS
 - Localization with fallbacks, placeholders and plurals
 - Player settings stored in the OS's per-user folder
 
@@ -225,6 +225,6 @@ it as you need. A game that ships Bowl includes its [LICENSE](LICENSE) and [NOTI
 you changed say so. Copyright 2026 Starlight (SireSoul).
 
 Third-party code keeps its own license: SDL (zlib), stb (public domain or MIT), glslang (BSD-3-Clause and others),
-SPIRV-Cross (Apache-2.0), Dear ImGui (MIT), doctest (MIT) and the Roboto font (Apache-2.0, in `engine/assets/fonts`).
-Optional ones, fetched only when their option is on: Box2D (MIT), HarfBuzz (Old MIT), libogg, libopus and opusfile
+SPIRV-Cross (Apache-2.0), Dear ImGui (MIT), doctest (MIT), Monocypher (BSD-2-Clause or CC0) and the Roboto font
+(Apache-2.0, in `engine/assets/fonts`). Optional ones, fetched only when their option is on: Box2D (MIT), HarfBuzz (Old MIT), libogg, libopus and opusfile
 (BSD-3-Clause) and Tracy (BSD-3-Clause).

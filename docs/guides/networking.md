@@ -39,6 +39,28 @@ turns new ones away. `disconnect(peer)` says goodbye, and `stop()` says it to ev
 `HostSettings::protocol` is a number both sides must share: hosts with different numbers ignore each other. Put your
 game's version in it so old and new builds don't talk.
 
+### Encryption
+
+Every connection is encrypted; there's nothing to turn on. When two hosts connect they agree on fresh keys (X25519,
+from [Monocypher](https://monocypher.org)), one per direction, and every packet after that is encrypted and
+authenticated (XChaCha20-Poly1305). Nobody on the network in between can read a message, change one, send an old
+packet again, or forge a goodbye that drops a player.
+
+What a key exchange alone can't stop is someone who intercepts the handshake itself and talks to each side in the
+other's place. `HostSettings::secret` closes that: the keys depend on it, so hosts with different secrets can't
+connect, and a host lets in only peers that know its secret.
+
+```cpp
+server.start({.port = 27015, .secret = "correct horse battery staple"}); // a private game's password
+client.start({.secret = "correct horse battery staple"});
+```
+
+A secret built into the game keeps out other programs and changed builds that don't have it, though anyone who digs
+it out of the game can use it. For a private match, let players type a password and use that.
+
+A server reports a client as `Connected` only after a packet that shows the client has the keys, so peers with the
+wrong secret never appear. It counts toward `max_peers` until it times out.
+
 ## Messages
 
 ```cpp
@@ -153,8 +175,7 @@ To catch a desync, hash the state of a confirmed tick now and then, and compare 
 
 ## What it doesn't do
 
-`bowl_net` doesn't do encryption or authentication (the connection key only stops strangers from mixing in packets),
-NAT punch-through, relays, lobbies or matchmaking. Over the internet, players need a reachable host (an open port, or
+`bowl_net` doesn't do NAT punch-through, relays, lobbies or matchmaking. Over the internet, players need a reachable host (an open port, or
 a server with a public address), or a service such as Steam networking.
 
 Multiplayer that sends state instead of inputs (a server runs the game and sends what changed) is built from `Host`

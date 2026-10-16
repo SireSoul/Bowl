@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -17,6 +18,12 @@ namespace bowl::net {
 // Messages are either reliable (delivered once, in order, resent until acknowledged; any size up to 64 KB) or
 // unreliable (sent once, may be lost or arrive out of order; up to 1 KB). Everything happens inside update(), on the
 // calling thread; there are no threads of its own.
+//
+// Every connection is encrypted: the two ends agree on fresh keys when they connect (X25519), and every packet after
+// that is encrypted and authenticated (XChaCha20-Poly1305), so nobody on the way can read, change, replay or forge
+// one, or disconnect a peer. Without a `secret`, someone who can intercept and rewrite the handshake itself could sit
+// in the middle; with one (the same on both ends: a password for a private game, or a value built into the game),
+// they can't, and a host only lets in peers that know it.
 //
 //     net::Host host;
 //     host.start({.port = 27015});                       // a server; clients start with no port
@@ -35,6 +42,7 @@ struct HostSettings {
     bool ipv6 = false;         // an IPv6 socket also talks to IPv4
     u32 max_peers = 32;        // how many may connect to this host
     u32 protocol = 0x424F574C; // hosts with different numbers ignore each other: put your game's version in it
+    std::string secret;        // optional; both ends need the same one to connect (see above)
     f32 timeout = 8;           // seconds without hearing from a peer before it's gone
     f32 keep_alive = 0.25f;    // seconds between packets when there's nothing to say
     // For testing on one machine: lose this share of outgoing packets, and hold them back this long (plus up to
@@ -73,7 +81,8 @@ public:
     bool running() const;
     u16 port() const;
 
-    // Starts connecting; the peer's Connected (or, if nobody answers in time, Disconnected) event follows.
+    // Starts connecting; the peer's Connected (or, if nobody answers in time, Disconnected) event follows. A host
+    // with a different `secret` never answers, so that ends in Disconnected too.
     PeerId connect(const Address& to);
     // False if the peer isn't connected or the message is too big for its delivery.
     bool send(PeerId peer, std::span<const u8> data, Delivery delivery = Delivery::Reliable);
@@ -92,7 +101,9 @@ private:
     struct Peer;
     struct Delayed;
     void handle(const Address& from, std::span<const u8> packet, f64 now);
+    void handle_sealed(Peer& peer, u8 kind, std::span<const u8> packet, usize header, f64 now);
     void send_packet(Peer& peer, f64 now, bool force);
+    std::vector<u8> sealed(Peer& peer, u8 kind, std::vector<u8> body);
     void transmit(const Address& to, std::vector<u8> packet, f64 now);
     void drop(PeerId id, bool notify);
     Peer* find(const Address& address);

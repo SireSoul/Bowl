@@ -173,6 +173,18 @@ if(BOWL_HARFBUZZ)
     target_compile_options(bowl_harfbuzz PRIVATE $<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w> $<$<CXX_COMPILER_ID:MSVC>:/bigobj>)
 endif()
 
+# Monocypher: encryption for net::Host connections (X25519, XChaCha20-Poly1305, BLAKE2b). One C file.
+bowl_fetch(monocypher https://monocypher.org/download/monocypher-4.0.2.tar.gz
+         38d07179738c0c90677dba3ceb7a7b8496bcfea758ba1a53e803fed30ae0879c)
+FetchContent_GetProperties(monocypher)
+if(NOT monocypher_POPULATED)
+    FetchContent_Populate(monocypher)
+endif()
+add_library(bowl_monocypher STATIC ${monocypher_SOURCE_DIR}/src/monocypher.c)
+target_include_directories(bowl_monocypher SYSTEM PUBLIC ${monocypher_SOURCE_DIR}/src)
+set_target_properties(bowl_monocypher PROPERTIES FOLDER third_party)
+target_compile_options(bowl_monocypher PRIVATE $<IF:$<C_COMPILER_ID:MSVC>,/w,-w>)
+
 # doctest: unit tests
 if(BOWL_BUILD_TESTS)
     set(DOCTEST_NO_INSTALL ON CACHE BOOL "" FORCE)
