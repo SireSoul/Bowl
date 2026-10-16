@@ -49,7 +49,8 @@ would otherwise be for.
 - ~~Packaging: release builds with static SDL, macOS .app bundles, `cmake --install` layouts, app icons, code signing
   and notarization, installers (DMG, NSIS), Linux AppImage and Flatpak, Steam Deck checks, asset archives~~ (done)
 - ~~iOS and iPadOS: the `ios` preset, app bundles with icons and packed assets, touch input, the safe area,
-  backgrounding~~ (done; built for the simulator, not yet run on a simulator or device)
+  backgrounding~~ (done; CI launches the app in an iPhone simulator, but GitHub's simulators can't run SDL_GPU, so
+  drawing on iOS hasn't been seen yet; it needs a simulator on a Mac or a device)
 - Android project (SDL3 supports it; needs the Android SDK and NDK, Gradle packaging and asset packaging)
 - Web build (Emscripten + WebGPU once SDL_GPU supports it)
 - Consoles through SDL's console ports (needs developer agreements)

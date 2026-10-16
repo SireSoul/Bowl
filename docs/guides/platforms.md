@@ -10,7 +10,7 @@ everywhere; no `#ifdef`s are needed for the supported platforms.
 | Windows 10, 11 | x64 | Direct3D 12 (default), Vulkan | Built and tested on CI. Every CI run renders the isometric sample on Direct3D 12 through WARP (Microsoft's software renderer) and keeps the screenshot |
 | macOS | Apple silicon, Intel | Metal | Built and tested on CI. The main development platform |
 | Linux | x64 | Vulkan | Built and tested on CI (X11 and Wayland) |
-| iOS 17+, iPadOS 17+ | arm64 | Metal | The engine and samples build for the simulator (the `ios` preset; see [below](#ios-and-ipados)). Not run on a simulator or device yet |
+| iOS 17+, iPadOS 17+ | arm64 | Metal | The engine and samples build for the simulator (the `ios` preset; see [below](#ios-and-ipados)). The Package workflow launches the isometric sample in an iPhone simulator; GitHub's simulators can't run SDL_GPU, so drawing on iOS still needs checking on a Mac's simulator or a device |
 | Android | arm64 | Vulkan | Not set up yet |
 | Web | wasm | (needs WebGPU in SDL_GPU) | Planned |
 | Consoles | | | Through SDL's console ports, which need developer agreements with each platform holder |
