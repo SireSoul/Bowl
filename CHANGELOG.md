@@ -5,6 +5,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+### Fixed
+- The log's window line shows the size the window got (full screen on a phone, for example), not the size asked
+  for.
+
 ## [0.2.0] - 2026-10-16
 
 ### Added

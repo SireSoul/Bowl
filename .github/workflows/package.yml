@@ -220,8 +220,8 @@ jobs:
       - name: Build for the simulator
         run: cmake --build --preset ios-simulator --target isometric
 
-      # Boot an iPhone simulator, install the app and run it until it quits after its frames. The simulators on GitHub's
-      # Macs have a virtual GPU that SDL_GPU's Metal backend turns down, so there the run proves the app installs,
+      # Boot an iPhone simulator, install the app and run it until it quits after its frames. SDL_GPU needs an A9 or
+      # newer GPU (Metal's Apple GPU family 3) and no iOS Simulator has one, so the run proves the app installs,
       # launches and opens its window, and stops at the GPU; that one outcome is a warning, any other failure an error.
       - name: Run in the simulator
         run: |
@@ -240,7 +240,7 @@ jobs:
           if [ -f ios-simulator.png ]; then exit 0; fi
           grep -q "on iOS" ios-console.txt || { echo "::error::the app didn't start"; exit 1; }
           if grep -q "does not meet the hardware requirements for SDL_GPU" ios-console.txt; then
-            echo "::warning::The app launched and opened its window; this simulator's GPU can't run SDL_GPU, so nothing was drawn"
+            echo "::warning::The app launched and opened its window; SDL_GPU can't run in the iOS Simulator, so nothing was drawn"
             exit 0
           fi
           echo "::error::the app stopped before drawing a frame"; exit 1

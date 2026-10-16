@@ -194,7 +194,7 @@ Start at [docs/README.md](docs/README.md), the full index. The main entry points
 | Windows 10 and 11 | Direct3D 12 (Vulkan also works) | Built and tested on CI; every CI run renders a sample on D3D12 through WARP |
 | macOS | Metal | Built and tested on CI; the main development machine |
 | Linux (X11, Wayland) | Vulkan | Built and tested on CI |
-| iOS 17+, iPadOS 17+ | Metal | Built in CI and launched in an iPhone simulator; drawing not yet seen on iOS (the CI simulator's GPU can't run SDL_GPU) |
+| iOS 17+, iPadOS 17+ | Metal | Built in CI and launched in an iPhone simulator; drawing needs a device (SDL_GPU won't run in the iOS Simulator) and hasn't been tried on one yet |
 | Android | Vulkan | Not set up yet |
 | Web | waiting on WebGPU support in SDL_GPU | Planned |
 

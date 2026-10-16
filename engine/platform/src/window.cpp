@@ -19,8 +19,8 @@ bool Window::create(const WindowDesc& desc) {
         error("window: SDL_CreateWindow failed: {}", SDL_GetError());
         return false;
     }
-    Vec2 px = pixel_size();
-    info("window: {}x{} points, {}x{} pixels", desc.width, desc.height, px.x, px.y);
+    Vec2 pt = size(), px = pixel_size(); // what it got: phones, fullscreen and the Steam Deck ignore the asked size
+    info("window: {}x{} points, {}x{} pixels", pt.x, pt.y, px.x, px.y);
     return true;
 }
 
