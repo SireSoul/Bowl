@@ -146,6 +146,7 @@ jobs:
         run: |
           cmake --build build/release --target isometric_appimage
           cd build/release && cpack -C Release
+          for f in *.AppImage; do sha256sum "$f" > "$f.sha256"; done # cpack writes the others
 
       # Run the AppImage in a virtual X display, on Vulkan in software (lavapipe).
       - name: Run the AppImage
