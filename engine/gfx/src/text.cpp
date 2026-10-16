@@ -477,8 +477,8 @@ struct TextShaper {
             // Only right-to-left letters or Arabic digits can change the order; anything else stays left to right.
             bool rtl = direction == bidi::Direction::RightToLeft;
             for (usize i = begin; i < end && !rtl; ++i) {
-                bidi::Type t = bidi::type_of(cps[i]);
-                rtl = t == bidi::Type::R || t == bidi::Type::AL || t == bidi::Type::AN;
+                bidi::Type type = bidi::type_of(cps[i]);
+                rtl = type == bidi::Type::R || type == bidi::Type::AL || type == bidi::Type::AN;
             }
             if (rtl) {
                 bidi::Paragraph p = bidi::resolve(std::span(cps).subspan(begin, end - begin), direction);
@@ -568,8 +568,8 @@ struct TextShaper {
             const Item& it = items[k];
             if (it.slot < 0) { // no font has these: one '?' each, right to left in right-to-left runs
                 bool rtl = it.level % 2 != 0;
-                for (usize k = 0; k < it.end - it.begin; ++k) {
-                    usize i = rtl ? it.end - 1 - k : it.begin + k;
+                for (usize j = 0; j < it.end - it.begin; ++j) {
+                    usize i = rtl ? it.end - 1 - j : it.begin + j;
                     u32 cp = rtl ? bidi::mirror(cps[i]) : cps[i];
                     line.glyphs.push_back({-1, cp, offsets[i], x, 0});
                     x += font.advance(cp, px);

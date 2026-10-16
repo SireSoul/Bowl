@@ -132,7 +132,13 @@ if(PH_OPUS)
              118d8601c12dd6a44f52423e68ca9083cc9f2bfe72da7a8c1acb22a80ae3550b)
     set(saved_log_level "${CMAKE_MESSAGE_LOG_LEVEL}")
     set(CMAKE_MESSAGE_LOG_LEVEL NOTICE) # libopus prints a long feature list on every configure
+    # libogg's include(CTest) and libopus's BUILD_TESTING check would add their own tests to ctest. CMP0077 lets
+    # libogg (cmake_minimum_required 2.8.12) take this plain variable instead of its option's default.
+    set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+    set(BUILD_TESTING OFF)
     FetchContent_MakeAvailable(ogg opus)
+    unset(BUILD_TESTING)
+    unset(CMAKE_POLICY_DEFAULT_CMP0077)
     set(CMAKE_MESSAGE_LOG_LEVEL "${saved_log_level}")
     FetchContent_GetProperties(opusfile)
     if(NOT opusfile_POPULATED)

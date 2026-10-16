@@ -6,7 +6,7 @@ set(PH_MACOS_ENTITLEMENTS "" CACHE FILEPATH "macOS: entitlements file for codesi
 set(PH_WINDOWS_SIGN_COMMAND "" CACHE STRING
     "Windows: a command run on each installed .exe to sign it, as a list (e.g. signtool;sign;/fd;SHA256;/a;/tr;http://timestamp.digicert.com;/td;SHA256)")
 set(PH_IOS_TEAM "" CACHE STRING "iOS: Apple development team ID that signs apps for devices (empty: ad hoc, simulator only)")
-option(PH_LINUX_SHARE"Linux: also install the desktop file and icon under share/, and the game under bin/ (Flatpak, distro packages)" OFF)
+option(PH_LINUX_SHARE "Linux: also install the desktop file and icon under share/, and the game under bin/ (Flatpak, distro packages)" OFF)
 
 set(PH_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 
