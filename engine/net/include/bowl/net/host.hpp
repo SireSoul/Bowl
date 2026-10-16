@@ -117,6 +117,7 @@ public:
     std::optional<PeerStats> stats(PeerId peer) const;
 
 private:
+    friend struct FuzzAccess; // tests/fuzz hands packets straight to the handlers below
     struct Peer;
     struct Delayed;
     void handle(const Address& from, u64 session, std::span<const u8> packet, f64 now);
@@ -124,6 +125,8 @@ private:
     void handle_rendezvous(const Address& from, std::span<const u8> packet, f64 now);
     bool is_rendezvous(const Address& address) const;
     void send_packet(Peer& peer, f64 now, bool force);
+    // The end of update(): peers not heard from in a while are gone, the others get what's waiting for them.
+    void send_or_time_out(f64 now);
     std::vector<u8> sealed(Peer& peer, u8 kind, std::vector<u8> body);
     // `session` set: the packet goes through the relay at `to`, wrapped for it.
     void transmit(const Address& to, u64 session, std::vector<u8> packet, f64 now);

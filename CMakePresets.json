@@ -33,6 +33,18 @@
       }
     },
     {
+      "name": "fuzz",
+      "displayName": "Fuzz (libFuzzer, AddressSanitizer and UBSan; needs Clang with libFuzzer, see CONTRIBUTING.md)",
+      "inherits": "dev",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "BOWL_FUZZ": "ON",
+        "BOWL_BUILD_SAMPLES": "OFF",
+        "BOWL_BUILD_EDITOR": "OFF"
+      }
+    },
+    {
       "name": "host-tools",
       "displayName": "Host tools (bowl-shaderc, bowl-icon, bowl-pack for cross builds, in build/host-tools/bin)",
       "inherits": "base",
@@ -65,6 +77,7 @@
     { "name": "dev", "configurePreset": "dev", "configuration": "RelWithDebInfo" },
     { "name": "debug", "configurePreset": "debug", "configuration": "Debug" },
     { "name": "release", "configurePreset": "release", "configuration": "Release" },
+    { "name": "fuzz", "configurePreset": "fuzz", "configuration": "RelWithDebInfo" },
     { "name": "host-tools", "configurePreset": "host-tools", "configuration": "Release",
       "targets": ["bowl-shaderc", "bowl-icon", "bowl-pack"] },
     { "name": "ios-simulator", "configurePreset": "ios", "configuration": "Release",
@@ -74,6 +87,7 @@
   ],
   "testPresets": [
     { "name": "dev", "configurePreset": "dev", "configuration": "RelWithDebInfo", "output": { "outputOnFailure": true } },
-    { "name": "release", "configurePreset": "release", "configuration": "Release", "output": { "outputOnFailure": true } }
+    { "name": "release", "configurePreset": "release", "configuration": "Release", "output": { "outputOnFailure": true } },
+    { "name": "fuzz", "configurePreset": "fuzz", "configuration": "RelWithDebInfo", "output": { "outputOnFailure": true } }
   ]
 }

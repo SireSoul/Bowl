@@ -3,6 +3,7 @@
 #include "bowl/net/socket.hpp"
 
 #include <memory>
+#include <span>
 
 namespace bowl::net {
 
@@ -44,6 +45,10 @@ public:
     RendezvousStats stats() const;
 
 private:
+    friend struct FuzzAccess; // tests/fuzz hands packets straight to handle(), without a socket
+    // One packet from `from`, as update() handles what its socket receives.
+    void handle(const Address& from, std::span<const u8> packet, f64 now);
+
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

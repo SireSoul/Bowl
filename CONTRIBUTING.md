@@ -7,6 +7,7 @@ How work on the engine is done: branches, building and testing, code style, comm
 - [Code style](#code-style)
 - [Comments](#comments)
 - [Tests](#tests)
+- [Fuzzing](#fuzzing)
 - [Documentation](#documentation)
 - [Commit messages](#commit-messages)
 - [Adding a dependency](#adding-a-dependency)
@@ -95,6 +96,41 @@ holds all of them.
 - Tests can't assume a GPU or a window. Code that needs one should be split so its logic can be tested without it (the
   font, tilemap and sprite sheet tests work this way).
 - Data files go in `tests/data/`, with a note in its README on how they were made. Keep them tiny.
+
+## Fuzzing
+
+Everything that reads data a stranger could control has a fuzzer in `tests/fuzz`: network packets (`host`,
+`rendezvous`, `address`), JSON text and binary (`json`), saves and prefabs (`world`), XML (`xml`), Tiled maps
+(`tilemap`), Aseprite sheets (`sprite_sheet`), asset archives (`archive`), fonts (`font`) and pictures (`png`). Each is a
+[libFuzzer](https://llvm.org/docs/LibFuzzer.html) program that feeds its parser inputs made up from seeds (written by
+`bowl_fuzz_seeds` from what the tests use), with AddressSanitizer and UBSan watching.
+
+They need Clang with libFuzzer. On Linux the distribution's `clang` has it; Apple's Clang doesn't, so on macOS use LLVM's
+(`brew install llvm`) and point the preset at it:
+
+```bash
+cmake --preset fuzz -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++
+```
+
+```bash
+cmake --build --preset fuzz --target bowl_fuzz bowl_tests
+```
+
+`ctest --preset fuzz` runs the unit tests and every fuzzer over its seeds once, all under the sanitizers. To fuzz for a
+while (each for 60 seconds, or the time and fuzzers you name):
+
+```bash
+tests/fuzz/run.sh build/fuzz 300 font tilemap
+```
+
+What they keep finding grows in `build/fuzz/fuzz/corpus/<name>`, so later runs carry on from there. An input that
+crashes, hangs, leaks or trips a sanitizer is saved in `build/fuzz/fuzz/crashes`; run `build/fuzz/fuzz/fuzz_<name>
+<file>` to see it again. Fix the engine, not the fuzzer, then add the input (or a smaller one that fails the same way) to
+the matching `tests/test_<area>.cpp` so it stays fixed without a fuzzer: inline if it's short, otherwise in
+`tests/data/fuzz/`.
+
+When you add a parser for files or packets that can come from outside the game, add a fuzzer for it: a `fuzz_<name>.cpp`
+next to the others, a `bowl_fuzzer(<name> <libraries>)` line in `tests/fuzz/CMakeLists.txt`, and seeds in `seeds.cpp`.
 
 ## Documentation
 

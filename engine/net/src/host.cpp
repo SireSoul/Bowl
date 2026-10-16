@@ -668,10 +668,14 @@ void Host::update(f64 now) {
         if (is_rendezvous(from)) handle_rendezvous(from, packet, now_);
         else if (!settings_.simulated_unreachable) handle(from, 0, packet, now_);
     }
+    send_or_time_out(now_);
+}
+
+void Host::send_or_time_out(f64 now) {
     std::vector<PeerId> gone;
     for (auto& [id, p] : peers_) {
-        if (now_ - p->last_received > settings_.timeout) gone.push_back(id);
-        else send_packet(*p, now_, false);
+        if (now - p->last_received > settings_.timeout) gone.push_back(id);
+        else send_packet(*p, now, false);
     }
     std::sort(gone.begin(), gone.end());
     for (PeerId id : gone) drop(id, true);
