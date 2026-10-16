@@ -49,6 +49,9 @@ if(NOT BOWL_HOST_TOOLS) # built for this machine; a cross build uses the host's 
     add_subdirectory(tools/icon)
     add_subdirectory(tools/pack)
     add_subdirectory(tools/apidoc)
+    if(NOT IOS)
+        add_subdirectory(tools/rendezvous)
+    endif()
 endif()
 
 if(BOWL_BUILD_TESTS)

@@ -124,6 +124,37 @@ std::string Address::to_string() const {
     return std::format("{}:{}", text, port());
 }
 
+void Address::write(std::vector<u8>& out) const {
+    auto put = [&](const void* bytes, usize n) {
+        auto* b = static_cast<const u8*>(bytes);
+        out.insert(out.end(), b, b + n);
+    };
+    u16 p = port();
+    if (ipv6()) {
+        out.push_back(6);
+        put(&reinterpret_cast<const sockaddr_in6*>(storage_.data())->sin6_addr, 16);
+    } else {
+        out.push_back(4);
+        put(&reinterpret_cast<const sockaddr_in*>(storage_.data())->sin_addr, 4);
+    }
+    out.push_back(static_cast<u8>(p >> 8));
+    out.push_back(static_cast<u8>(p));
+}
+
+std::optional<Address> Address::read(std::span<const u8> in, usize& at) {
+    if (at >= in.size()) return std::nullopt;
+    u8 family = in[at];
+    usize n = family == 6 ? 16 : family == 4 ? 4 : 0;
+    if (n == 0 || at + 1 + n + 2 > in.size()) return std::nullopt;
+    const u8* ip = in.data() + at + 1;
+    u16 p = static_cast<u16>((in[at + 1 + n] << 8) | in[at + 2 + n]);
+    at += 1 + n + 2;
+    Address a = any(p, family == 6);
+    if (family == 6) std::memcpy(&reinterpret_cast<sockaddr_in6*>(a.storage_.data())->sin6_addr, ip, 16);
+    else std::memcpy(&reinterpret_cast<sockaddr_in*>(a.storage_.data())->sin_addr, ip, 4);
+    return a;
+}
+
 bool Address::operator==(const Address& o) const {
     if (size_ != o.size_ || ipv6() != o.ipv6() || port() != o.port()) return false;
     if (!size_) return true;

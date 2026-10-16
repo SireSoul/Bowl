@@ -64,7 +64,8 @@ load their worlds without a pile of boilerplate.
   hash, `move_and_slide`, colliders and trigger events as components
 - Optional Box2D v3 rigid bodies, with joints, springs, motors and contact events
 - Networking: encrypted `net::Host` connections over UDP with reliable and unreliable messages and a simulated bad
-  network; lockstep and rollback helpers built on the deterministic ECS
+  network; rooms through a rendezvous server, with NAT punch-through and a relay (`bowl-rendezvous`); lockstep and
+  rollback helpers built on the deterministic ECS
 - Localization with fallbacks, placeholders and plurals
 - Player settings stored in the OS's per-user folder
 
@@ -200,7 +201,7 @@ Start at [docs/README.md](docs/README.md), the full index. The main entry points
 engine/      the engine: core, ecs, platform, gfx, audio, physics, ui, net, app (+ engine assets)
 editor/      Bowl Editor
 tools/       bowl-shaderc (shaders), bowl-atlas (atlases), bowl-icon (app icons), bowl-pack (asset archives),
-             bowl-apidoc (the API reference)
+             bowl-apidoc (the API reference), bowl-rendezvous (the server players meet through)
 samples/     tutorial, isometric, sprites
 tests/       unit tests (doctest) and an ECS benchmark
 cmake/       build helpers: dependencies, compiler flags, shaders, bowl_add_game, packaging

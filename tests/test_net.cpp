@@ -1,5 +1,6 @@
 #include "bowl/net/host.hpp"
 #include "bowl/net/lockstep.hpp"
+#include "bowl/net/rendezvous.hpp"
 #include "bowl/net/rollback.hpp"
 
 #include <doctest/doctest.h>
@@ -34,6 +35,11 @@ template <class Update, class Done> bool run(f64& now, f64 seconds, Update updat
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     return false;
+}
+
+// Lets `seconds` of the made-up clock pass, for checking that something does *not* happen.
+template <class Update> void wait(f64& now, f64 seconds, Update update) {
+    for (f64 end = now + seconds; now < end; now += 0.005) update(now);
 }
 
 template <class Done> bool pump(Host& a, Host& b, f64& now, f64 seconds, Done done) {
@@ -127,9 +133,8 @@ TEST_CASE("net: connections are encrypted: nothing on the way can read, change, 
     Middle middle(server.port());
     PeerId to_server = client.connect(middle.address());
     f64 now = 0;
-    auto step = [&](f64 seconds, auto done) {
-        return run(now, seconds, [&](f64 t) { client.update(t), middle.pass(), server.update(t), middle.pass(); }, done);
-    };
+    auto update = [&](f64 t) { client.update(t), middle.pass(), server.update(t), middle.pass(); };
+    auto step = [&](f64 seconds, auto done) { return run(now, seconds, update, done); };
     PeerId to_client = 0;
     bool client_in = false;
     REQUIRE(step(2, [&] {
@@ -165,7 +170,8 @@ TEST_CASE("net: connections are encrypted: nothing on the way can read, change, 
 
     // A packet sent again later isn't delivered again.
     middle.socket.send(middle.server, carried);
-    step(0.5, [&] { return collect(), false; });
+    wait(now, 0.5, update);
+    collect();
     CHECK(got.size() == 2);
 
     // A made-up disconnect, with the connection's token but no keys, is ignored.
@@ -174,7 +180,8 @@ TEST_CASE("net: connections are encrypted: nothing on the way can read, change, 
     forged.insert(forged.end(), {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F});
     forged.resize(forged.size() + 16); // a tag that isn't one
     middle.socket.send(middle.server, forged);
-    step(0.5, [&] { return collect(), false; });
+    wait(now, 0.5, update);
+    collect();
     CHECK_FALSE(server_lost_client);
     CHECK(server.peers() == std::vector<PeerId>{to_client});
 
@@ -206,6 +213,87 @@ TEST_CASE("net: with a secret, only hosts that know it connect") {
     CHECK(stranger_gone);           // never answered with keys it could use
     CHECK(server_connections == 1); // and the server never counted it as connected
     CHECK(server.peers().size() == 1);
+}
+
+// A rendezvous server, a host with a room and a player, all on this machine.
+struct Rooms {
+    Rendezvous rendezvous;
+    Host host, player;
+    f64 now = 0;
+    PeerId to_host = 0, to_player = 0;
+    bool player_in = false, player_out = false;
+    std::vector<std::string> host_got, player_got;
+
+    Rooms(HostSettings host_settings = {}) {
+        REQUIRE(rendezvous.start({.port = 0}));
+        REQUIRE(host.start(host_settings));
+        REQUIRE(player.start());
+        host.host_room(server(), "dragons-1234");
+    }
+    Address server() const { return Address::loopback(rendezvous.port()); }
+    void update(f64 t) { rendezvous.update(t), host.update(t), player.update(t); }
+    bool events() {
+        while (auto e = host.receive()) {
+            if (e->type == Event::Type::Connected) to_player = e->peer;
+            if (e->type == Event::Type::Message) host_got.push_back(text_of(e->data));
+        }
+        while (auto e = player.receive()) {
+            if (e->type == Event::Type::Connected) player_in = true;
+            if (e->type == Event::Type::Disconnected) player_out = true;
+            if (e->type == Event::Type::Message) player_got.push_back(text_of(e->data));
+        }
+        return false;
+    }
+    bool join(Route route, f64 seconds = 5) {
+        wait(now, 0.1, [&](f64 t) { update(t); }); // the host tells the server about its room
+        to_host = player.join_room(server(), "dragons-1234", route);
+        return run(now, seconds, [&](f64 t) { update(t); }, [&] { return events(), (player_in && to_player) || player_out; }) &&
+               player_in;
+    }
+    void talk() {
+        CHECK(player.send(to_host, bytes_of("hello host")));
+        CHECK(host.send(to_player, bytes_of("hello player")));
+        CHECK(run(now, 2, [&](f64 t) { update(t); }, [&] { return events(), !host_got.empty() && !player_got.empty(); }));
+        CHECK(host_got == std::vector<std::string>{"hello host"});
+        CHECK(player_got == std::vector<std::string>{"hello player"});
+    }
+};
+
+TEST_CASE("net: rooms: a player joins a host through a rendezvous server, directly when it can") {
+    Rooms rooms;
+    REQUIRE(rooms.join(Route::Auto));
+    rooms.talk();
+    CHECK_FALSE(rooms.player.stats(rooms.to_host)->relayed);
+    CHECK_FALSE(rooms.host.stats(rooms.to_player)->relayed);
+    CHECK(rooms.rendezvous.stats().introductions == 1);
+    CHECK(rooms.rendezvous.stats().relayed_packets == 0);
+}
+
+TEST_CASE("net: rooms: Route::Relay goes through the server, and neither side learns the other's address") {
+    Rooms rooms;
+    REQUIRE(rooms.join(Route::Relay));
+    rooms.talk();
+    CHECK(rooms.player.stats(rooms.to_host)->relayed);
+    CHECK(rooms.host.stats(rooms.to_player)->relayed);
+    CHECK(rooms.host.stats(rooms.to_player)->address == rooms.server()); // all the host sees is the server
+    CHECK(rooms.player.stats(rooms.to_host)->address == rooms.server());
+    CHECK(rooms.rendezvous.stats().relayed_packets > 0);
+}
+
+TEST_CASE("net: rooms: when the host can't be reached directly, the player takes the relay") {
+    Rooms rooms({.simulated_unreachable = true});
+    REQUIRE(rooms.join(Route::Auto));
+    CHECK(rooms.player.stats(rooms.to_host)->relayed);
+    rooms.talk();
+}
+
+TEST_CASE("net: rooms: joining a room nobody hosts ends quickly") {
+    Rooms rooms;
+    rooms.host.stop_hosting_room(); // before it ever told the server
+    f64 before = rooms.now;
+    CHECK_FALSE(rooms.join(Route::Auto));
+    CHECK(rooms.player_out);
+    CHECK(rooms.now - before < 1); // the server says so: no waiting for a timeout
 }
 
 TEST_CASE("net: reliable messages arrive once and in order through a bad network") {
@@ -241,7 +329,9 @@ TEST_CASE("net: reliable messages arrive once and in order through a bad network
     auto stats = client.stats(to_server);
     REQUIRE(stats);
     CHECK(stats->resent > 0); // some were lost and sent again
-    CHECK(stats->rtt > 0.05f);
+    // Everything can arrive before the first acknowledgement makes it back, 30-70 ms later: wait for one.
+    CHECK(pump(server, client, now, 5, [&] { return client.stats(to_server)->rtt > 0; }));
+    CHECK(client.stats(to_server)->rtt > 0.05f);
 }
 
 TEST_CASE("net: a full host turns new peers away; a silent peer times out") {

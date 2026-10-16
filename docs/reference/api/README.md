@@ -57,6 +57,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/gfx/tilemap.hpp](gfx.md#bowlgfxtilemaphpp) | Tiled maps (mapeditor.org), loaded from Tiled's JSON (.tmj, .tsj) or XML (.tmx, .tsx) files. |
 | [bowl/net/host.hpp](net.md#bowlnethosthpp) | Connections over UDP: the same Host is a server (others connect to it) or a client (it connects to one), or both. |
 | [bowl/net/lockstep.hpp](net.md#bowlnetlockstephpp) | One player's inputs for a run of ticks, as Lockstep and Rollback send them. |
+| [bowl/net/rendezvous.hpp](net.md#bowlnetrendezvoushpp) | The server players meet through when they can't reach each other directly: hosts behind home routers tell it which room they host (Host::host_room), players ask it for a room (Host::join_room), and it introduces them, so they can connect straight to each other. |
 | [bowl/net/rollback.hpp](net.md#bowlnetrollbackhpp) | Rollback: nobody waits. |
 | [bowl/net/socket.hpp](net.md#bowlnetsockethpp) | An IPv4 or IPv6 address and port. |
 | [bowl/physics/colliders.hpp](physics.md#bowlphysicscollidershpp) | A collision shape on an entity, placed by its GlobalTransform2D (position, rotation and scale all apply). |

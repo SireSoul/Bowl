@@ -1,6 +1,7 @@
 #include "bowl/net/host.hpp"
 
 #include "crypto.hpp"
+#include "wire.hpp"
 
 #include "bowl/core/log.hpp"
 #include "bowl/core/time.hpp"
@@ -21,12 +22,13 @@ namespace bowl::net {
 //                     u16 sequence, u16 ack, u32 ack bits, u8 acks valid, then messages:
 //                     u8 flags (1: reliable, 2: more pieces follow), [u16 id if reliable], u16 length, bytes
 //   Disconnect      u64 token, u64 counter, [16] tag (nothing encrypted)
+//   Punch           nothing: a host sends it to a player it was introduced to, so its router lets the player in
 // The token (client salt ^ server salt) names the connection. Each direction has its own key and counts its packets;
 // a counter is never used twice, and one seen before (or 64 or more behind the newest) is turned away.
 
 namespace {
 
-enum Kind : u8 { ConnectRequest = 1, ConnectAccept = 2, ConnectDeny = 3, Data = 4, Disconnect = 5 };
+enum Kind : u8 { ConnectRequest = 1, ConnectAccept = 2, ConnectDeny = 3, Data = 4, Disconnect = 5, Punch = 6 };
 constexpr usize max_packet = 1200;
 constexpr usize piece_size = 1024; // reliable messages are cut into pieces this big
 constexpr u8 flag_reliable = 1, flag_more = 2;
@@ -34,6 +36,7 @@ constexpr usize window = 1024;     // packets remembered for acks
 constexpr usize sealed_header = 4 + 1 + 8 + 8;                  // protocol, kind, token, counter
 constexpr usize sealed_overhead = sealed_header + crypto::mac_size; // before the encrypted part
 constexpr usize request_padding = 24;
+constexpr f64 direct_wait = 2; // seconds an Auto join tries to reach the host directly before taking the relay
 
 u64 nonzero_random() {
     for (;;)
@@ -43,44 +46,8 @@ u64 nonzero_random() {
 // u16 numbers wrap: a is newer than b if it's ahead by less than half the range.
 bool newer(u16 a, u16 b) { return a != b && static_cast<u16>(a - b) < 32768; }
 
-struct Writer {
-    std::vector<u8> out;
-    void u8_(u8 v) { out.push_back(v); }
-    void u16_(u16 v) { u8_(static_cast<u8>(v)), u8_(static_cast<u8>(v >> 8)); }
-    void u32_(u32 v) { u16_(static_cast<u16>(v)), u16_(static_cast<u16>(v >> 16)); }
-    void u64_(u64 v) { u32_(static_cast<u32>(v)), u32_(static_cast<u32>(v >> 32)); }
-    void bytes(std::span<const u8> b) { out.insert(out.end(), b.begin(), b.end()); }
-};
-
-struct Reader {
-    std::span<const u8> in;
-    usize at = 0;
-    bool ok = true;
-    bool need(usize n) {
-        if (at + n > in.size()) ok = false;
-        return ok;
-    }
-    u8 u8_() { return need(1) ? in[at++] : 0; }
-    u16 u16_() {
-        u16 lo = u8_();
-        return static_cast<u16>(lo | (u8_() << 8));
-    }
-    u32 u32_() {
-        u32 lo = u16_();
-        return lo | (static_cast<u32>(u16_()) << 16);
-    }
-    u64 u64_() {
-        u64 lo = u32_();
-        return lo | (static_cast<u64>(u32_()) << 32);
-    }
-    std::span<const u8> bytes(usize n) {
-        if (!need(n)) return {};
-        auto s = in.subspan(at, n);
-        at += n;
-        return s;
-    }
-    bool done() const { return at >= in.size(); }
-};
+using wire::Reader;
+using wire::Writer;
 
 } // namespace
 
@@ -91,11 +58,20 @@ struct Host::Delayed {
 };
 
 struct Host::Peer {
-    // Connecting: we asked and wait for an answer. Accepted: they asked and we answered, but they haven't yet sent a
-    // packet with the keys (with the wrong secret, they never will). Connected: both ends have the keys.
-    enum class State { Connecting, Accepted, Connected } state = State::Connecting;
+    // Joining: we asked a rendezvous server for a room's host. Connecting: we asked the host and wait for an answer.
+    // Accepted: they asked and we answered, but they haven't yet sent a packet with the keys (with the wrong secret,
+    // they never will). Connected: both ends have the keys.
+    enum class State { Joining, Connecting, Accepted, Connected } state = State::Connecting;
     PeerId id = 0;
-    Address address;
+    Address address;      // where packets go: the peer, or the rendezvous server when relayed
+    u64 relay_session = 0; // set: relayed, through `address`
+
+    // join_room
+    Address rendezvous;
+    std::string room;
+    Route route = Route::Auto;
+    u64 join_nonce = 0, room_session = 0; // the rendezvous server's name for our introduction
+    f64 direct_until = 0;
     u64 client_salt = 0, server_salt = 0;
     bool outgoing = false; // we connected to them
     crypto::KeyPair keys;                 // ours, made for this connection
@@ -196,6 +172,33 @@ PeerId Host::connect(const Address& to) {
     return id;
 }
 
+void Host::host_room(const Address& rendezvous, std::string_view room) {
+    room_server_ = rendezvous;
+    room_ = std::string(room.substr(0, wire::max_room));
+    room_announced_ = -1e9; // say so at the next update
+}
+
+void Host::stop_hosting_room() { room_.clear(); }
+
+PeerId Host::join_room(const Address& rendezvous, std::string_view room, Route route) {
+    PeerId id = connect(rendezvous);
+    if (id == 0) return 0;
+    Peer& p = *peers_[id];
+    p.state = Peer::State::Joining;
+    p.rendezvous = rendezvous;
+    p.room = std::string(room.substr(0, wire::max_room));
+    p.route = route;
+    p.join_nonce = nonzero_random();
+    return id;
+}
+
+bool Host::is_rendezvous(const Address& address) const {
+    if (!room_.empty() && address == room_server_) return true;
+    for (const auto& [id, p] : peers_)
+        if (p->join_nonce && p->rendezvous == address) return true;
+    return false;
+}
+
 bool Host::send(PeerId id, std::span<const u8> data, Delivery delivery) {
     auto it = peers_.find(id);
     if (it == peers_.end() || it->second->state != Peer::State::Connected) return false;
@@ -226,8 +229,9 @@ void Host::broadcast(std::span<const u8> data, Delivery delivery) {
 void Host::disconnect(PeerId id) {
     auto it = peers_.find(id);
     if (it == peers_.end()) return;
-    if (it->second->state != Peer::State::Connecting) // a peer that never answered has no keys to say it with
-        for (int i = 0; i < 3; ++i) socket_.send(it->second->address, sealed(*it->second, Disconnect, {})); // may be lost
+    Peer& p = *it->second;
+    if (p.state == Peer::State::Accepted || p.state == Peer::State::Connected) // the others have no keys to say it with
+        for (int i = 0; i < 3; ++i) send_now(p.address, p.relay_session, sealed(p, Disconnect, {})); // it may be lost
     drop(id, false);
 }
 
@@ -239,9 +243,9 @@ void Host::drop(PeerId id, bool notify) {
     if (notify && was_known) events_.push_back({Event::Type::Disconnected, id, Delivery::Reliable, {}});
 }
 
-Host::Peer* Host::find(const Address& address) {
+Host::Peer* Host::find(const Address& address, u64 session) {
     for (auto& [id, p] : peers_)
-        if (p->address == address) return p.get();
+        if (p->state != Peer::State::Joining && p->address == address && p->relay_session == session) return p.get();
     return nullptr;
 }
 
@@ -265,10 +269,30 @@ std::optional<PeerStats> Host::stats(PeerId id) const {
     if (it == peers_.end()) return std::nullopt;
     PeerStats s = it->second->stats;
     s.address = it->second->address;
+    s.relayed = it->second->relay_session != 0;
     return s;
 }
 
-void Host::transmit(const Address& to, std::vector<u8> packet, f64 now) {
+namespace {
+
+std::vector<u8> wrapped_for_relay(u64 session, std::span<const u8> packet) {
+    Writer w;
+    w.u32_(wire::rendezvous_magic);
+    w.u8_(wire::Relay);
+    w.u64_(session);
+    w.bytes(packet);
+    return std::move(w.out);
+}
+
+} // namespace
+
+void Host::send_now(const Address& to, u64 session, std::span<const u8> packet) {
+    if (session) socket_.send(to, wrapped_for_relay(session, packet));
+    else socket_.send(to, packet);
+}
+
+void Host::transmit(const Address& to, u64 session, std::vector<u8> packet, f64 now) {
+    if (session) packet = wrapped_for_relay(session, packet);
     if (settings_.simulated_loss > 0 || settings_.simulated_latency > 0 || settings_.simulated_jitter > 0) {
         random_ ^= random_ << 13, random_ ^= random_ >> 7, random_ ^= random_ << 17;
         f64 r = static_cast<f64>(random_ % 1000000) / 1000000.0;
@@ -295,7 +319,25 @@ std::vector<u8> Host::sealed(Peer& p, u8 kind, std::vector<u8> body) {
 }
 
 void Host::send_packet(Peer& p, f64 now, bool force) {
+    if (p.state == Peer::State::Joining) { // asking the rendezvous server who hosts the room, until it says
+        if (now - p.last_sent < 0.25) return;
+        Writer w;
+        w.u32_(wire::rendezvous_magic);
+        w.u8_(wire::JoinRoom);
+        w.u32_(settings_.protocol);
+        w.text(p.room);
+        w.u64_(p.join_nonce);
+        w.u8_(p.route == Route::Relay ? 1 : 0);
+        p.last_sent = now;
+        socket_.send(p.rendezvous, w.out);
+        return;
+    }
     if (p.state == Peer::State::Connecting) { // a client asking; asked again until answered
+        if (p.room_session && !p.relay_session && now >= p.direct_until) { // the host can't be reached: take the relay
+            p.address = p.rendezvous;
+            p.relay_session = p.room_session;
+            p.last_sent = -1e9;
+        }
         if (now - p.last_sent < 0.25) return;
         Writer w;
         w.u32_(settings_.protocol);
@@ -304,7 +346,7 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         w.bytes(p.keys.public_key);
         w.out.resize(w.out.size() + request_padding);
         p.last_sent = now;
-        transmit(p.address, std::move(w.out), now);
+        transmit(p.address, p.relay_session, std::move(w.out), now);
         return;
     }
     if (p.state == Peer::State::Accepted) return; // nothing to send until they show they have the keys
@@ -351,17 +393,66 @@ void Host::send_packet(Peer& p, f64 now, bool force) {
         p.ack_owed = false;
         p.last_sent = now;
         ++p.stats.sent;
-        transmit(p.address, sealed(p, Data, std::move(w.out)), now);
+        transmit(p.address, p.relay_session, sealed(p, Data, std::move(w.out)), now);
     }
     p.unreliable_out.clear(); // whatever didn't fit in 16 packets is dropped: it's unreliable
 }
 
-void Host::handle(const Address& from, std::span<const u8> packet, f64 now) {
+void Host::handle_rendezvous(const Address& from, std::span<const u8> packet, f64 now) {
+    Reader r{packet};
+    if (r.u32_() != wire::rendezvous_magic) return;
+    u8 kind = r.u8_();
+    if (!r.ok) return;
+    if (kind == wire::Relay) {
+        u64 session = r.u64_();
+        if (r.ok && session) handle(from, session, packet.subspan(r.at), now);
+        return;
+    }
+    u64 nonce = r.u64_();
+    if (!r.ok) return;
+    if (kind == wire::Introduce && nonce == 0) { // to us as a room's host: a player is coming
+        u64 session = r.u64_();
+        bool has_address = r.u8_() != 0;
+        std::optional<Address> player = has_address ? Address::read(packet, r.at) : std::nullopt;
+        if (!r.ok || session == 0 || room_.empty() || !(from == room_server_) || !player) return;
+        Writer punch; // opens our router to them, so their requests get through
+        punch.u32_(settings_.protocol);
+        punch.u8_(Punch);
+        for (int i = 0; i < 2; ++i) transmit(*player, 0, punch.out, now);
+        return;
+    }
+    Peer* p = nullptr;
+    for (auto& [id, q] : peers_)
+        if (q->state == Peer::State::Joining && q->join_nonce == nonce && q->rendezvous == from) p = q.get();
+    if (!p) return;
+    if (kind == wire::NoRoom) {
+        drop(p->id, true);
+        return;
+    }
+    if (kind != wire::Introduce) return;
+    u64 session = r.u64_();
+    bool has_address = r.u8_() != 0;
+    std::optional<Address> host = has_address ? Address::read(packet, r.at) : std::nullopt;
+    if (!r.ok || session == 0) return;
+    p->room_session = session;
+    p->state = Peer::State::Connecting;
+    p->last_sent = -1e9; // ask the host right away
+    p->last_received = now;
+    if (p->route == Route::Relay || !host) {
+        p->address = p->rendezvous;
+        p->relay_session = session;
+    } else {
+        p->address = *host;
+        p->direct_until = now + direct_wait;
+    }
+}
+
+void Host::handle(const Address& from, u64 session, std::span<const u8> packet, f64 now) {
     Reader r{packet};
     if (r.u32_() != settings_.protocol) return;
     u8 kind = r.u8_();
     if (!r.ok) return;
-    Peer* p = find(from);
+    Peer* p = find(from, session);
 
     if (kind == ConnectRequest) {
         u64 client_salt = r.u64_();
@@ -378,11 +469,12 @@ void Host::handle(const Address& from, std::span<const u8> packet, f64 now) {
                 deny.u32_(settings_.protocol);
                 deny.u8_(ConnectDeny);
                 deny.u64_(client_salt);
-                transmit(from, std::move(deny.out), now);
+                transmit(from, session, std::move(deny.out), now);
                 return;
             }
             auto fresh = std::make_unique<Peer>();
             fresh->address = from;
+            fresh->relay_session = session;
             fresh->client_salt = client_salt;
             fresh->server_salt = nonzero_random();
             std::copy(their_key.begin(), their_key.end(), fresh->their_key.begin());
@@ -405,7 +497,7 @@ void Host::handle(const Address& from, std::span<const u8> packet, f64 now) {
             p = fresh.get();
             peers_[p->id] = std::move(fresh);
         }
-        transmit(from, p->accept, now); // answered every time it's asked: the first answer may have been lost
+        transmit(from, session, p->accept, now); // answered every time it's asked: the first may have been lost
         return;
     }
     if (!p) return;
@@ -423,16 +515,16 @@ void Host::handle(const Address& from, std::span<const u8> packet, f64 now) {
         if (!r.ok || server_salt == 0) return;
         crypto::Key key{};
         std::copy(their_key.begin(), their_key.end(), key.begin());
-        crypto::SessionKeys session;
+        crypto::SessionKeys agreed;
         crypto::Mac proof;
         std::copy(proof_bytes.begin(), proof_bytes.end(), proof.begin());
         // A different secret (or anyone tampering with the answer) makes different keys, and the proof fails.
-        if (!crypto::derive(session, p->keys, key, true, client_salt, server_salt, settings_.secret) ||
-            !crypto::open({}, proof, session.server_to_client, 0, packet.first(signed_part)))
+        if (!crypto::derive(agreed, p->keys, key, true, client_salt, server_salt, settings_.secret) ||
+            !crypto::open({}, proof, agreed.server_to_client, 0, packet.first(signed_part)))
             return;
         p->server_salt = server_salt;
         p->their_key = key;
-        p->session = session;
+        p->session = agreed;
         p->state = Peer::State::Connected;
         p->last_received = now;
         events_.push_back({Event::Type::Connected, p->id, Delivery::Reliable, {}});
@@ -558,12 +650,23 @@ void Host::update(f64 now) {
             ++it;
         }
     }
+    if (!room_.empty() && now_ - room_announced_ >= 1) { // still hosting the room: the server forgets quiet hosts
+        Writer w;
+        w.u32_(wire::rendezvous_magic);
+        w.u8_(wire::HostRoom);
+        w.u32_(settings_.protocol);
+        w.text(room_);
+        socket_.send(room_server_, w.out);
+        room_announced_ = now_;
+    }
     std::array<u8, 2048> buffer;
     Address from;
     for (int i = 0; i < 4096; ++i) {
         auto got = socket_.receive(from, buffer);
         if (!got) break;
-        handle(from, std::span(buffer.data(), *got), now_);
+        std::span<const u8> packet(buffer.data(), *got);
+        if (is_rendezvous(from)) handle_rendezvous(from, packet, now_);
+        else if (!settings_.simulated_unreachable) handle(from, 0, packet, now_);
     }
     std::vector<PeerId> gone;
     for (auto& [id, p] : peers_) {

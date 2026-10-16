@@ -37,6 +37,11 @@ using PeerId = u32; // 0: none
 
 enum class Delivery : u8 { Unreliable, Reliable };
 
+// How join_room reaches the host. Auto: straight to it when the routers in between let it (most home routers do,
+// once both sides have sent to each other), and through the rendezvous server's relay when they don't. Relay: always
+// through the relay, so the players never learn each other's addresses.
+enum class Route : u8 { Auto, Relay };
+
 struct HostSettings {
     u16 port = 0;              // 0: any free port (what clients want)
     bool ipv6 = false;         // an IPv6 socket also talks to IPv4
@@ -50,6 +55,8 @@ struct HostSettings {
     f32 simulated_loss = 0;
     f32 simulated_latency = 0;
     f32 simulated_jitter = 0;
+    // For testing the relay: as if behind a router nothing gets through, only packets from rendezvous servers arrive.
+    bool simulated_unreachable = false;
 };
 
 struct Event {
@@ -65,6 +72,7 @@ struct PeerStats {
     f32 rtt = 0;   // round trip, seconds (smoothed)
     f32 loss = 0;  // share of packets lost lately, 0..1
     u64 sent = 0, received = 0, resent = 0; // packets, packets, reliable messages sent again
+    bool relayed = false;                   // through a rendezvous server's relay (join_room)
 };
 
 class Host : NonCopyable {
@@ -84,6 +92,17 @@ public:
     // Starts connecting; the peer's Connected (or, if nobody answers in time, Disconnected) event follows. A host
     // with a different `secret` never answers, so that ends in Disconnected too.
     PeerId connect(const Address& to);
+
+    // Rooms, through a rendezvous server (net::Rendezvous; the bowl-rendezvous tool runs one on a machine everyone can
+    // reach), for players behind home routers that can't take connections. A host names a room and keeps telling the
+    // server it's there; a player joins by name, the server introduces them, and they connect: directly if they can,
+    // through the server's relay if not. The connection is the same as connect()'s, encrypted end to end, so the
+    // server only ever passes on packets it can't read. Room names are up to 64 bytes; make them hard to guess (a
+    // random code) unless the room is meant to be public.
+    void host_room(const Address& rendezvous, std::string_view room);
+    void stop_hosting_room();
+    // Like connect(): Connected follows, or Disconnected if nobody hosts the room or nobody answers in time.
+    PeerId join_room(const Address& rendezvous, std::string_view room, Route route = Route::Auto);
     // False if the peer isn't connected or the message is too big for its delivery.
     bool send(PeerId peer, std::span<const u8> data, Delivery delivery = Delivery::Reliable);
     void broadcast(std::span<const u8> data, Delivery delivery = Delivery::Reliable);
@@ -100,13 +119,17 @@ public:
 private:
     struct Peer;
     struct Delayed;
-    void handle(const Address& from, std::span<const u8> packet, f64 now);
+    void handle(const Address& from, u64 session, std::span<const u8> packet, f64 now);
     void handle_sealed(Peer& peer, u8 kind, std::span<const u8> packet, usize header, f64 now);
+    void handle_rendezvous(const Address& from, std::span<const u8> packet, f64 now);
+    bool is_rendezvous(const Address& address) const;
     void send_packet(Peer& peer, f64 now, bool force);
     std::vector<u8> sealed(Peer& peer, u8 kind, std::vector<u8> body);
-    void transmit(const Address& to, std::vector<u8> packet, f64 now);
+    // `session` set: the packet goes through the relay at `to`, wrapped for it.
+    void transmit(const Address& to, u64 session, std::vector<u8> packet, f64 now);
+    void send_now(const Address& to, u64 session, std::span<const u8> packet);
     void drop(PeerId id, bool notify);
-    Peer* find(const Address& address);
+    Peer* find(const Address& address, u64 session);
 
     HostSettings settings_;
     Socket socket_;
@@ -114,6 +137,9 @@ private:
     std::deque<Event> events_;
     std::vector<std::unique_ptr<Delayed>> delayed_;
     PeerId next_id_ = 1;
+    Address room_server_; // host_room
+    std::string room_;
+    f64 room_announced_ = -1e9;
     u64 random_ = 0x9E3779B97F4A7C15ull;
     f64 now_ = 0;
 };

@@ -7,6 +7,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace bowl::net {
 
@@ -24,6 +25,9 @@ public:
     bool valid() const { return size_ > 0; }
     std::string to_string() const; // "192.168.1.20:27015", "[::1]:27015"
     bool operator==(const Address& o) const;
+    // The same on every platform, for sending an address in a packet: u8 4 or 6, the 4 or 16 address bytes, u16 port.
+    void write(std::vector<u8>& out) const;
+    static std::optional<Address> read(std::span<const u8> in, usize& at);
 
     // The platform's sockaddr, for the socket code.
     const void* data() const { return storage_.data(); }

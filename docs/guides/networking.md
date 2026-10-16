@@ -61,6 +61,40 @@ it out of the game can use it. For a private match, let players type a password 
 A server reports a client as `Connected` only after a packet that shows the client has the keys, so peers with the
 wrong secret never appear. It counts toward `max_peers` until it times out.
 
+## Rooms: playing over the internet
+
+Most players are behind home routers that don't let connections in, so one player hosting with `connect()` only
+works if they open a port. Rooms get around that with a rendezvous server: a small program, `bowl-rendezvous`, on a
+machine everyone can reach (any cheap server with a public address and its UDP port open; it uses little power).
+
+```bash
+bowl-rendezvous --port 27016
+```
+
+The host names a room and the player joins it by name:
+
+```cpp
+auto server = *net::Address::resolve("rendezvous.example.com", 27016);
+
+host.host_room(server, room_code);           // keeps telling the server the room is there, from update()
+net::PeerId peer = player.join_room(server, room_code);
+// then the same Connected event as connect(), or Disconnected if nobody hosts the room
+```
+
+The server introduces the two, and they connect straight to each other: both send first, which opens both routers
+(NAT punch-through). Some routers won't allow that; then, after two seconds, the player goes through the server's relay
+instead, and `stats(peer).relayed` says so. `net::Route::Relay` always takes the relay, so the players never learn each
+other's addresses.
+
+Either way the connection is the same encrypted one, so the server only passes on packets it can't read. It forgets a
+room a few seconds after its host goes quiet (`stop_hosting_room()` or `stop()`), and lets each relayed connection pass
+256 KB a second each way (`--relay-kbps` changes that). Room names are up to 64 bytes. Anyone who knows a room's name
+can join it, so make codes hard to guess (random letters) unless the room is meant to be public, and add a `secret` for
+a private game. Your game can also run the server itself: `net::Rendezvous` is the same thing as a class.
+
+To test the relay on one machine, `HostSettings::simulated_unreachable` makes a host act as if no one can reach it
+directly, so joining it has to take the relay.
+
 ## Messages
 
 ```cpp
@@ -175,7 +209,8 @@ To catch a desync, hash the state of a confirmed tick now and then, and compare 
 
 ## What it doesn't do
 
-`bowl_net` doesn't do NAT punch-through, relays, lobbies or matchmaking. Over the internet, players need a reachable host (an open port, or
+`bowl_net` doesn't do lobbies or matchmaking: listing rooms, or putting strangers together, is the game's (or a
+service's) job; rooms join players who share a name. Over the internet, players need a reachable host (an open port, or
 a server with a public address), or a service such as Steam networking.
 
 Multiplayer that sends state instead of inputs (a server runs the game and sends what changed) is built from `Host`

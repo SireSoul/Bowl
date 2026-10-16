@@ -6,6 +6,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Networking rooms (`Host::host_room`, `join_room`, `net::Route`): players meet through a rendezvous server
+  (`net::Rendezvous`, the `bowl-rendezvous` tool), connect straight to each other through home routers (NAT
+  punch-through), or through the server's relay when they can't (`PeerStats::relayed`; `Route::Relay` hides players'
+  addresses from each other). `HostSettings::simulated_unreachable` tests the relay on one machine. `Address::write`
+  and `Address::read` for addresses in packets.
 - iOS and iPadOS: the `ios` preset (Xcode project, iOS 17+; `ios-simulator` and `ios-device` build presets) and
   `host-tools`; `bowl_add_game` makes app bundles with an Info.plist, an asset-catalog icon and packed assets
   (`ORIENTATION`, `BOWL_IOS_TEAM`). `BOWL_HOST_TOOLS` for cross builds. `Input::touches()` and `Device::Touch`,

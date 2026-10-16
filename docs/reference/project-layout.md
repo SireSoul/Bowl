@@ -26,7 +26,7 @@ engine/
   audio/                  mixer, sounds, music
   physics/                collision
   ui/                     game UI
-  net/                    UDP connections, lockstep, rollback
+  net/                    encrypted UDP connections, rooms and the rendezvous server, lockstep, rollback
   app/                    Engine, Game, scenes, the main loop, dev tools, hot reload host
 tools/
   shaderc/                bowl-shaderc: library and command-line tool
@@ -34,6 +34,7 @@ tools/
   icon/                   bowl-icon: application icons from one picture
   pack/                   bowl-pack: asset archives (.bowlpak)
   apidoc/                 bowl-apidoc: the API reference from the headers
+  rendezvous/             bowl-rendezvous: the server players meet through for rooms
 editor/                   Bowl Editor
 samples/
   icon.png                the samples' application icon

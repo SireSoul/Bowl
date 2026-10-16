@@ -5,6 +5,7 @@ Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: chan
 
 - [bowl/net/host.hpp](#bowlnethosthpp)
 - [bowl/net/lockstep.hpp](#bowlnetlockstephpp)
+- [bowl/net/rendezvous.hpp](#bowlnetrendezvoushpp)
 - [bowl/net/rollback.hpp](#bowlnetrollbackhpp)
 - [bowl/net/socket.hpp](#bowlnetsockethpp)
 
@@ -16,6 +17,12 @@ Connections over UDP: the same Host is a server (others connect to it) or a clie
 Messages are either reliable (delivered once, in order, resent until acknowledged; any size up to 64 KB) or
 unreliable (sent once, may be lost or arrive out of order; up to 1 KB). Everything happens inside update(), on the
 calling thread; there are no threads of its own.
+
+Every connection is encrypted: the two ends agree on fresh keys when they connect (X25519), and every packet after
+that is encrypted and authenticated (XChaCha20-Poly1305), so nobody on the way can read, change, replay or forge
+one, or disconnect a peer. Without a `secret`, someone who can intercept and rewrite the handshake itself could sit
+in the middle; with one (the same on both ends: a password for a private game, or a value built into the game),
+they can't, and a host only lets in peers that know it.
 
 ```cpp
 net::Host host;
@@ -36,6 +43,14 @@ using PeerId = u32; // 0: none
 enum class Delivery : u8 { Unreliable, Reliable };
 ```
 
+How join_room reaches the host. Auto: straight to it when the routers in between let it (most home routers do,
+once both sides have sent to each other), and through the rendezvous server's relay when they don't. Relay: always
+through the relay, so the players never learn each other's addresses.
+
+```cpp
+enum class Route : u8 { Auto, Relay };
+```
+
 ### HostSettings
 
 ```cpp
@@ -44,6 +59,7 @@ struct HostSettings {
     bool ipv6 = false;         // an IPv6 socket also talks to IPv4
     u32 max_peers = 32;        // how many may connect to this host
     u32 protocol = 0x424F574C; // hosts with different numbers ignore each other: put your game's version in it
+    std::string secret;        // optional; both ends need the same one to connect (see above)
     f32 timeout = 8;           // seconds without hearing from a peer before it's gone
     f32 keep_alive = 0.25f;    // seconds between packets when there's nothing to say
     // For testing on one machine: lose this share of outgoing packets, and hold them back this long (plus up to
@@ -51,6 +67,8 @@ struct HostSettings {
     f32 simulated_loss = 0;
     f32 simulated_latency = 0;
     f32 simulated_jitter = 0;
+    // For testing the relay: as if behind a router nothing gets through, only packets from rendezvous servers arrive.
+    bool simulated_unreachable = false;
 };
 ```
 
@@ -74,6 +92,7 @@ struct PeerStats {
     f32 rtt = 0;   // round trip, seconds (smoothed)
     f32 loss = 0;  // share of packets lost lately, 0..1
     u64 sent = 0, received = 0, resent = 0; // packets, packets, reliable messages sent again
+    bool relayed = false;                   // through a rendezvous server's relay (join_room)
 };
 ```
 
@@ -105,10 +124,29 @@ bool running() const;
 u16 port() const;
 ```
 
-Starts connecting; the peer's Connected (or, if nobody answers in time, Disconnected) event follows.
+Starts connecting; the peer's Connected (or, if nobody answers in time, Disconnected) event follows. A host
+with a different `secret` never answers, so that ends in Disconnected too.
 
 ```cpp
 PeerId connect(const Address& to);
+```
+
+Rooms, through a rendezvous server (net::Rendezvous; the bowl-rendezvous tool runs one on a machine everyone can
+reach), for players behind home routers that can't take connections. A host names a room and keeps telling the
+server it's there; a player joins by name, the server introduces them, and they connect: directly if they can,
+through the server's relay if not. The connection is the same as connect()'s, encrypted end to end, so the
+server only ever passes on packets it can't read. Room names are up to 64 bytes; make them hard to guess (a
+random code) unless the room is meant to be public.
+
+```cpp
+void host_room(const Address& rendezvous, std::string_view room);
+void stop_hosting_room();
+```
+
+Like connect(): Connected follows, or Disconnected if nobody hosts the room or nobody answers in time.
+
+```cpp
+PeerId join_room(const Address& rendezvous, std::string_view room, Route route = Route::Auto);
 ```
 
 False if the peer isn't connected or the message is too big for its delivery.
@@ -233,6 +271,67 @@ Players whose input for tick() hasn't come yet.
 std::vector<u32> waiting_for() const;
 ```
 
+## bowl/net/rendezvous.hpp
+
+`#include "bowl/net/rendezvous.hpp"` · namespace `bowl::net`
+
+### RendezvousSettings
+
+The server players meet through when they can't reach each other directly: hosts behind home routers tell it which
+room they host (Host::host_room), players ask it for a room (Host::join_room), and it introduces them, so they can
+connect straight to each other. When their routers won't allow that, it relays their packets, which are encrypted
+end to end: it can't read or change them. Run it on a machine everyone can reach, with its port open, for example
+with the bowl-rendezvous tool. Like Host, it does everything inside update(), on the calling thread.
+
+```cpp
+struct RendezvousSettings {
+    u16 port = 27016;
+    bool ipv6 = false;
+    u32 max_rooms = 10000;
+    u32 max_sessions = 10000;                // introductions remembered (each can be relayed)
+    f32 room_timeout = 5;                    // a room goes when its host hasn't said it's still there for this long
+    f32 session_timeout = 60;                // an introduction goes when nothing has been relayed for this long
+    u32 relay_bytes_per_second = 256 * 1024; // per introduction, each way; more is dropped
+};
+```
+
+### RendezvousStats
+
+```cpp
+struct RendezvousStats {
+    usize rooms = 0, sessions = 0;
+    u64 introductions = 0;
+    u64 relayed_packets = 0, relayed_bytes = 0;
+    u64 dropped_packets = 0; // over the relay limit, or not from either side of their introduction
+};
+```
+
+### Rendezvous
+
+```cpp
+class Rendezvous : NonCopyable
+```
+
+```cpp
+Rendezvous();
+~Rendezvous();
+```
+
+```cpp
+bool start(const RendezvousSettings& settings = {});
+void stop();
+bool running() const;
+u16 port() const;
+```
+
+Receives, introduces and relays. Call it often (a loop with a short sleep is fine). `now` is in seconds; leave it
+out to use the clock.
+
+```cpp
+void update(f64 now = -1);
+RendezvousStats stats() const;
+```
+
 ## bowl/net/rollback.hpp
 
 `#include "bowl/net/rollback.hpp"` · namespace `bowl::net`
@@ -352,6 +451,13 @@ bool ipv6() const;
 bool valid() const;
 std::string to_string() const; // "192.168.1.20:27015", "[::1]:27015"
 bool operator==(const Address& o) const;
+```
+
+The same on every platform, for sending an address in a packet: u8 4 or 6, the 4 or 16 address bytes, u16 port.
+
+```cpp
+void write(std::vector<u8>& out) const;
+static std::optional<Address> read(std::span<const u8> in, usize& at);
 ```
 
 The platform's sockaddr, for the socket code.

@@ -56,8 +56,9 @@ would otherwise be for.
 - Consoles through SDL's console ports (needs developer agreements)
 
 ## M6: together
-- ~~Networking: reliable UDP transport, lockstep and rollback helpers built on the deterministic ECS~~ (done). Later:
-  encryption, NAT punch-through and relays, state replication
+- ~~Networking: reliable UDP transport, lockstep and rollback helpers built on the deterministic ECS, encryption,
+  rooms through a rendezvous server with NAT punch-through and a relay~~ (done). Later: state replication, lobbies
+  and matchmaking
 - ~~Deterministic entity ids for entities spawned in parallel systems~~ (done)
 
 ## Docs and tooling

@@ -124,6 +124,7 @@ bowl_module(net
     SOURCES
         net/src/crypto.cpp
         net/src/host.cpp
+        net/src/rendezvous.cpp
         net/src/socket.cpp
     PUBLIC_DEPS bowl_core
     PRIVATE_DEPS bowl_monocypher)
