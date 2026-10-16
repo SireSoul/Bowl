@@ -474,9 +474,13 @@ struct TextShaper {
         for (usize begin = 0; begin < cps.size();) { // paragraph by paragraph
             usize end = begin;
             while (end < cps.size() && cps[end] != '\n') ++end;
+            // Only right-to-left letters or Arabic digits can change the order; anything else stays left to right.
             bool rtl = direction == bidi::Direction::RightToLeft;
-            for (usize i = begin; i < end && !rtl; ++i) rtl = bidi::type_of(cps[i]) != bidi::Type::L || cps[i] >= 0x0590;
-            if (rtl) { // only text with right-to-left or neutral characters needs the full algorithm
+            for (usize i = begin; i < end && !rtl; ++i) {
+                bidi::Type t = bidi::type_of(cps[i]);
+                rtl = t == bidi::Type::R || t == bidi::Type::AL || t == bidi::Type::AN;
+            }
+            if (rtl) {
                 bidi::Paragraph p = bidi::resolve(std::span(cps).subspan(begin, end - begin), direction);
                 std::copy(p.levels.begin(), p.levels.end(), levels.begin() + static_cast<std::ptrdiff_t>(begin));
                 std::fill_n(paragraph_levels.begin() + static_cast<std::ptrdiff_t>(begin), end - begin, p.level);
