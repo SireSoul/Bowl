@@ -15,6 +15,31 @@ namespace ph::gfx {
 
 Renderer::~Renderer() { shutdown(); }
 
+Material light_material(AssetManager& assets, const LightLook& look) {
+    struct Params {
+        f32 height, normals, shadows, pad;
+    };
+    Material m;
+    m.fragment = assets.load<Shader>("engine/shaders/light.frag");
+    m.set_uniforms(Params{std::max(look.height, 0.01f), look.normals ? 1.0f : 0.0f, look.shadows ? 1.0f : 0.0f, 0});
+    return m;
+}
+
+std::vector<u8> make_neutral_lut(u32 size) {
+    size = std::clamp(size, 2u, 64u);
+    std::vector<u8> px(static_cast<usize>(size) * size * size * 4);
+    auto level = [&](u32 i) { return static_cast<u8>((i * 255 + (size - 1) / 2) / (size - 1)); };
+    for (u32 y = 0; y < size; ++y)
+        for (u32 x = 0; x < size * size; ++x) {
+            u8* p = &px[(static_cast<usize>(y) * size * size + x) * 4];
+            p[0] = level(x % size); // red across each slice
+            p[1] = level(y);        // green down
+            p[2] = level(x / size); // blue by slice
+            p[3] = 255;
+        }
+    return px;
+}
+
 namespace {
 
 std::unique_ptr<Texture> make_light_texture(GpuDevice& device) {
@@ -82,6 +107,7 @@ bool Renderer::init(GpuDevice& device, AssetManager& assets) {
     bloom_pre_fs_ = assets.load<Shader>("engine/shaders/post/bloom_prefilter.frag");
     bloom_down_fs_ = assets.load<Shader>("engine/shaders/post/bloom_down.frag");
     bloom_up_fs_ = assets.load<Shader>("engine/shaders/post/bloom_up.frag");
+    composite_fs_ = assets.load<Shader>("engine/shaders/post/composite.frag");
 
     SDL_GPUSamplerCreateInfo s{};
     s.min_filter = s.mag_filter = SDL_GPU_FILTER_NEAREST;
@@ -93,14 +119,19 @@ bool Renderer::init(GpuDevice& device, AssetManager& assets) {
     s.max_lod = 1000;
     linear_ = SDL_CreateGPUSampler(device.handle(), &s);
 
-    const u8 white[4] = {255, 255, 255, 255}, black[4] = {0, 0, 0, 255};
-    white_ = device.create_texture({.width = 1, .height = 1, .rgba8 = white, .premultiplied = true,
-                                    .filter = Filter::Nearest, .name = "white"});
-    black_ = device.create_texture({.width = 1, .height = 1, .rgba8 = black, .premultiplied = true,
-                                    .filter = Filter::Nearest, .name = "black"});
+    const u8 white[4] = {255, 255, 255, 255}, black[4] = {0, 0, 0, 255}, clear[4] = {0, 0, 0, 0},
+             flat[4] = {128, 128, 255, 255};
+    auto pixel = [&](const u8* rgba, const char* name) {
+        return device.create_texture(
+            {.width = 1, .height = 1, .rgba8 = rgba, .premultiplied = true, .filter = Filter::Nearest, .name = name});
+    };
+    white_ = pixel(white, "white");
+    black_ = pixel(black, "black");
+    clear_ = pixel(clear, "transparent");
+    flat_normal_ = pixel(flat, "flat normal");
     light_ = make_light_texture(device);
 
-    if (!nearest_ || !linear_ || !white_ || !black_ || !light_) {
+    if (!nearest_ || !linear_ || !white_ || !black_ || !clear_ || !flat_normal_ || !light_) {
         error("renderer: failed to create samplers/textures: {}", SDL_GetError());
         return false;
     }
@@ -114,7 +145,7 @@ bool Renderer::init(GpuDevice& device, AssetManager& assets) {
 void Renderer::release_targets() {
     SDL_GPUDevice* d = device_ ? device_->handle() : nullptr;
     if (!d) return;
-    for (SDL_GPUTexture** t : {&scene_, &final_, &lightmap_})
+    for (SDL_GPUTexture** t : {&scene_, &final_, &lightmap_, &scene2_, &emissive_, &normals_, &occluders_, &final2_})
         if (*t) SDL_ReleaseGPUTexture(d, *t), *t = nullptr;
     for (auto& t : bloom_)
         if (t) SDL_ReleaseGPUTexture(d, t), t = nullptr;
@@ -139,8 +170,11 @@ void Renderer::shutdown() {
     sprite_transfer_ = nullptr;
     white_.reset();
     black_.reset();
+    clear_.reset();
+    flat_normal_.reset();
     light_.reset();
     sprite_vs_ = sprite_fs_ = fullscreen_vs_ = final_fs_ = bloom_pre_fs_ = bloom_down_fs_ = bloom_up_fs_ = {};
+    composite_fs_ = {};
     device_ = nullptr;
 }
 
@@ -204,6 +238,10 @@ bool Renderer::begin_frame() {
     passes_.clear();
     light_passes_.clear();
     ui_passes_.clear();
+    emissive_passes_.clear();
+    normal_passes_.clear();
+    occluder_passes_.clear();
+    compute_.clear();
     stats_ = {};
 
     cmd_ = SDL_AcquireGPUCommandBuffer(device_->handle());
@@ -220,25 +258,26 @@ bool Renderer::begin_frame() {
     return swapchain_ != nullptr;
 }
 
+void Renderer::dispatch(ComputeDispatch job) {
+    if (!cmd_ || !job.shader || !job.shader->handle()) return;
+    compute_.push_back(std::move(job));
+}
+
+void Renderer::submit(const GpuBuffer& sprites, u32 count, const Texture* texture, const Camera2D& camera,
+                      BlendMode blend, const Material* material) {
+    count = std::min<u32>(count, sprites.size() / static_cast<u32>(sizeof(SpriteInstance)));
+    if (!swapchain_ || count == 0) return;
+    Pass pass{camera.view_projection(), static_cast<u32>(draws_.size()), 1, blend, material, sprites.handle()};
+    draws_.push_back({0, count, texture ? texture : white_.get()});
+    passes_.push_back(pass);
+    stats_.sprites += count;
+    ++stats_.batches;
+}
+
 void Renderer::record(const SpriteBatch& batch, std::vector<Pass>& passes) {
     if (!swapchain_ || batch.sprites_.empty()) return;
     usize n = batch.sprites_.size();
-    // Sort indices, never the sprites themselves.
-    order_.resize(n);
-    std::iota(order_.begin(), order_.end(), 0u);
-    auto tex_id = [&](u32 i) { return batch.textures_[i] ? batch.textures_[i]->id() : 0u; };
-    switch (batch.sort_) {
-    case SpriteSort::None: break;
-    case SpriteSort::Texture:
-        std::stable_sort(order_.begin(), order_.end(), [&](u32 a, u32 b) { return tex_id(a) < tex_id(b); });
-        break;
-    case SpriteSort::Depth:
-        std::stable_sort(order_.begin(), order_.end(), [&](u32 a, u32 b) {
-            f32 da = batch.sprites_[a].depth, db = batch.sprites_[b].depth;
-            return da != db ? da < db : tex_id(a) < tex_id(b);
-        });
-        break;
-    }
+    sprite_order(batch, order_);
     Pass pass{batch.camera_.view_projection(), static_cast<u32>(draws_.size()), 0, batch.blend_, batch.material_};
     u32 base = static_cast<u32>(frame_sprites_.size());
     frame_sprites_.reserve(frame_sprites_.size() + n);
@@ -259,22 +298,62 @@ void Renderer::submit(const SpriteBatch& batch) { record(batch, passes_); }
 
 void Renderer::submit_ui(const SpriteBatch& batch) { record(batch, ui_passes_); }
 
+void Renderer::submit(const StaticSprites& sprites, const Camera2D& camera, BlendMode blend, const Material* material) {
+    if (!swapchain_ || sprites.empty() || !sprites.buffer_) return;
+    Pass pass{camera.view_projection(), static_cast<u32>(draws_.size()), 0, blend, material, sprites.buffer_};
+    for (const StaticSprites::Run& run : sprites.runs_)
+        draws_.push_back({run.first, run.count, run.texture ? run.texture : white_.get()});
+    pass.draw_count = static_cast<u32>(sprites.runs_.size());
+    passes_.push_back(pass);
+    stats_.sprites += sprites.count_;
+    ++stats_.batches;
+}
+
 void Renderer::submit_light(const SpriteBatch& batch) {
     record(batch, light_passes_);
     if (!light_passes_.empty()) light_passes_.back().blend = BlendMode::Additive;
 }
 
-void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& passes, SDL_GPUTextureFormat format) {
+void Renderer::submit_emissive(const SpriteBatch& batch) { record(batch, emissive_passes_); }
+void Renderer::submit_normals(const SpriteBatch& batch) { record(batch, normal_passes_); }
+void Renderer::submit_occluders(const SpriteBatch& batch) { record(batch, occluder_passes_); }
+
+SDL_GPUTexture* Renderer::lazy_target(SDL_GPUTexture*& target, SDL_GPUTextureFormat format, const char* name) {
+    if (!target) target = make_target(device_->handle(), format, target_w_, target_h_, name);
+    return target;
+}
+
+void Renderer::draw_into(SDL_GPUTexture* target, Color clear, const std::vector<Pass>& passes,
+                         SDL_GPUTextureFormat format, std::array<SDL_GPUTexture*, 3> extras) {
+    SDL_GPUColorTargetInfo color{};
+    color.texture = target;
+    color.clear_color = {clear.r, clear.g, clear.b, clear.a};
+    color.load_op = SDL_GPU_LOADOP_CLEAR;
+    color.store_op = SDL_GPU_STOREOP_STORE;
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd_, &color, 1, nullptr);
+    if (!passes.empty()) draw_sprites(pass, passes, format, extras);
+    SDL_EndGPURenderPass(pass);
+}
+
+void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& passes, SDL_GPUTextureFormat format,
+                            std::array<SDL_GPUTexture*, 3> extras) {
     SDL_GPUGraphicsPipeline* bound = nullptr;
+    SDL_GPUBuffer* bound_buffer = nullptr;
     for (const Pass& p : passes) {
+        SDL_GPUBuffer* buffer = p.buffer ? p.buffer : sprite_buffer_;
+        if (!buffer) continue;
         const Shader* fs = sprite_fs_.get();
         if (p.material && p.material->fragment) fs = p.material->fragment.get();
         SDL_GPUGraphicsPipeline* pipe = pipeline(*sprite_vs_, *fs, format, p.blend);
         if (!pipe) continue;
         if (pipe != bound) {
             SDL_BindGPUGraphicsPipeline(pass, pipe);
-            SDL_BindGPUVertexStorageBuffers(pass, 0, &sprite_buffer_, 1);
             bound = pipe;
+            bound_buffer = nullptr;
+        }
+        if (buffer != bound_buffer) {
+            SDL_BindGPUVertexStorageBuffers(pass, 0, &buffer, 1);
+            bound_buffer = buffer;
         }
         struct {
             Mat4 view_projection;
@@ -290,8 +369,9 @@ void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& pa
             bindings[0] = {draw.texture->handle(), draw.texture->filter() == Filter::Nearest ? nearest_ : linear_};
             for (u32 b = 1; b < sampler_count; ++b) {
                 const Texture* extra = p.material ? p.material->textures[b - 1] : nullptr;
-                if (!extra) extra = white_.get();
-                bindings[b] = {extra->handle(), extra->filter() == Filter::Nearest ? nearest_ : linear_};
+                if (extra) bindings[b] = {extra->handle(), extra->filter() == Filter::Nearest ? nearest_ : linear_};
+                else if (extras[b - 1]) bindings[b] = {extras[b - 1], linear_};
+                else bindings[b] = {white_->handle(), nearest_};
             }
             SDL_BindGPUFragmentSamplers(pass, 0, bindings, sampler_count);
             camera.draw[0] = draw.first;
@@ -325,12 +405,12 @@ void Renderer::fullscreen(SDL_GPUTexture* target, bool clear, const Shader& frag
     else SDL_EndGPURenderPass(pass);
 }
 
-void Renderer::run_bloom() {
+void Renderer::run_bloom(SDL_GPUTexture* input) {
     if (!bloom_pre_fs_ || !bloom_down_fs_ || !bloom_up_fs_) return;
     PH_PROFILE_SCOPE("bloom");
     f32 params[4] = {1.0f / static_cast<f32>(target_w_), 1.0f / static_cast<f32>(target_h_), post_.bloom_threshold,
                      post_.bloom_knee};
-    const SDL_GPUTexture* scene_input[1] = {scene_};
+    const SDL_GPUTexture* scene_input[1] = {input};
     fullscreen(bloom_[0], true, *bloom_pre_fs_, hdr_format, BlendMode::Opaque, scene_input, params, sizeof params);
     for (int i = 1; i < bloom_levels; ++i) {
         f32 p[4] = {1.0f / static_cast<f32>(bloom_w_[i - 1]), 1.0f / static_cast<f32>(bloom_h_[i - 1]), 0, 0};
@@ -375,48 +455,122 @@ void Renderer::end_frame() {
         SDL_EndGPUCopyPass(copy);
     }
 
+    // Compute work, before anything that might draw what it writes.
+    for (const ComputeDispatch& job : compute_) {
+        std::vector<SDL_GPUStorageBufferReadWriteBinding> rw;
+        for (GpuBuffer* b : job.write) rw.push_back({b->handle(), false, {}});
+        SDL_GPUComputePass* pass =
+            SDL_BeginGPUComputePass(cmd_, nullptr, 0, rw.data(), static_cast<u32>(rw.size()));
+        SDL_BindGPUComputePipeline(pass, job.shader->handle());
+        if (!job.read.empty()) {
+            std::vector<SDL_GPUBuffer*> ro;
+            for (const GpuBuffer* b : job.read) ro.push_back(b->handle());
+            SDL_BindGPUComputeStorageBuffers(pass, 0, ro.data(), static_cast<u32>(ro.size()));
+        }
+        if (!job.uniforms.empty())
+            SDL_PushGPUComputeUniformData(cmd_, 0, job.uniforms.data(), static_cast<u32>(job.uniforms.size()));
+        if (job.groups[0] && job.groups[1] && job.groups[2])
+            SDL_DispatchGPUCompute(pass, job.groups[0], job.groups[1], job.groups[2]);
+        SDL_EndGPUComputePass(pass);
+    }
+
     if (swapchain_ && overlay_.prepare) overlay_.prepare(cmd_);
 
     u32 w = static_cast<u32>(target_size_.x), h = static_cast<u32>(target_size_.y);
     SDL_GPUTransferBuffer* readback = nullptr;
     if (swapchain_ && w && h && ensure_targets(w, h)) {
-        // Scene (HDR).
-        SDL_GPUColorTargetInfo color{};
-        color.texture = scene_;
-        color.clear_color = {clear_color_.r, clear_color_.g, clear_color_.b, clear_color_.a};
-        color.load_op = SDL_GPU_LOADOP_CLEAR;
-        color.store_op = SDL_GPU_STOREOP_STORE;
-        SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd_, &color, 1, nullptr);
-        if (count > 0) draw_sprites(pass, passes_, hdr_format);
-        SDL_EndGPURenderPass(pass);
-
-        // Light map.
-        if (post_.lighting) {
-            SDL_GPUColorTargetInfo light{};
-            light.texture = lightmap_;
-            light.clear_color = {0, 0, 0, 0};
-            light.load_op = SDL_GPU_LOADOP_CLEAR;
-            light.store_op = SDL_GPU_STOREOP_STORE;
-            SDL_GPURenderPass* lp = SDL_BeginGPURenderPass(cmd_, &light, 1, nullptr);
-            if (count > 0 && !light_passes_.empty()) draw_sprites(lp, light_passes_, hdr_format);
-            SDL_EndGPURenderPass(lp);
+        // Scene (HDR). Emissive sprites go in it too, so they bloom like any bright sprite.
+        draw_into(scene_, clear_color_, passes_, hdr_format);
+        if (!emissive_passes_.empty()) {
+            SDL_GPUColorTargetInfo again{};
+            again.texture = scene_;
+            again.load_op = SDL_GPU_LOADOP_LOAD;
+            again.store_op = SDL_GPU_STOREOP_STORE;
+            SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd_, &again, 1, nullptr);
+            draw_sprites(pass, emissive_passes_, hdr_format);
+            SDL_EndGPURenderPass(pass);
         }
+        SDL_GPUTexture* image = scene_; // the scene so far
+        auto other_scene = [&] { return image == scene_ ? lazy_target(scene2_, hdr_format, "scene 2") : scene_; };
 
-        if (post_.bloom) run_bloom();
+        // Light map, with normals and occluders for lights that use them.
+        if (post_.lighting) {
+            SDL_GPUTexture* normals = flat_normal_->handle();
+            SDL_GPUTexture* occluders = clear_->handle();
+            if (!normal_passes_.empty() && lazy_target(normals_, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, "normals")) {
+                draw_into(normals_, Color{0.5f, 0.5f, 1, 1}, normal_passes_, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
+                normals = normals_;
+            }
+            if (!occluder_passes_.empty() &&
+                lazy_target(occluders_, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM, "occluders")) {
+                draw_into(occluders_, Color::transparent(), occluder_passes_, SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM);
+                occluders = occluders_;
+            }
+            draw_into(lightmap_, Color::transparent(), light_passes_, hdr_format, {normals, occluders, nullptr});
+        }
+        SDL_GPUTexture* emissive = nullptr;
+        if (!emissive_passes_.empty() && lazy_target(emissive_, hdr_format, "emissive")) {
+            draw_into(emissive_, Color::transparent(), emissive_passes_, hdr_format);
+            emissive = emissive_;
+        }
+        // Lit scene: scene * (ambient + light), with emissive sprites over it.
+        if ((post_.lighting || emissive) && composite_fs_ && other_scene()) {
+            f32 u[4] = {post_.ambient.r, post_.ambient.g, post_.ambient.b, post_.lighting ? 1.0f : 0.0f};
+            const SDL_GPUTexture* in[3] = {image, post_.lighting ? lightmap_ : black_->handle(),
+                                           emissive ? emissive : clear_->handle()};
+            SDL_GPUTexture* out = other_scene();
+            fullscreen(out, true, *composite_fs_, hdr_format, BlendMode::Opaque, in, u, sizeof u);
+            image = out;
+        }
+        // Bloom comes from the scene's own bright pixels (HDR sprites, emissive ones), not from where lights overlap.
+        if (post_.bloom) run_bloom(scene_);
 
-        // Final pass into the displayed image, then the overlay on top.
+        // The game's effects, each reading the image so far and writing the other buffer.
+        auto run_effects = [&](PostStage stage, SDL_GPUTexture*& current, auto next, SDL_GPUTextureFormat format) {
+            for (const PostEffect& e : post_effects_) {
+                if (!e.enabled || e.stage != stage || !e.material || !e.material->fragment) continue;
+                SDL_GPUTexture* out = next();
+                if (!out) return;
+                const SDL_GPUTexture* in[4] = {current, white_->handle(), white_->handle(), white_->handle()};
+                for (int i = 0; i < 3; ++i)
+                    if (e.material->textures[i]) in[i + 1] = e.material->textures[i]->handle();
+                const auto& uniforms = e.material->uniforms;
+                usize samplers = std::clamp(e.material->fragment->samplers(), 1u, 4u);
+                fullscreen(out, true, *e.material->fragment, format, BlendMode::Opaque, std::span(in, samplers),
+                           uniforms.empty() ? nullptr : uniforms.data(), static_cast<u32>(uniforms.size()));
+                current = out;
+            }
+        };
+        run_effects(PostStage::Scene, image, other_scene, hdr_format);
+
+        // Final pass into the displayed image: grading, LUT, lens, vignette.
         struct {
-            f32 grade[4], tint[4], ambient[4], vignette[4];
+            f32 grade[4], tint[4], lens[4], vignette[4];
         } u = {{post_.exposure, post_.contrast, post_.saturation, post_.bloom ? post_.bloom_intensity : 0.0f},
-               {post_.tint.r, post_.tint.g, post_.tint.b, 1},
-               {post_.ambient.r, post_.ambient.g, post_.ambient.b, post_.lighting ? 1.0f : 0.0f},
+               {post_.tint.r, post_.tint.g, post_.tint.b, post_.lut ? std::clamp(post_.lut_strength, 0.0f, 1.0f) : 0.0f},
+               {post_.chromatic_aberration, post_.grain, static_cast<f32>(frame_ % 4096), 0},
                {post_.vignette, post_.vignette_radius, post_.vignette_softness, post_.tonemap ? 1.0f : 0.0f}};
-        const SDL_GPUTexture* inputs[3] = {scene_, post_.bloom ? bloom_[0] : black_->handle(),
-                                           post_.lighting ? lightmap_ : black_->handle()};
+        const SDL_GPUTexture* inputs[3] = {image, post_.bloom ? bloom_[0] : black_->handle(),
+                                           post_.lut ? post_.lut->handle() : white_->handle()};
+        SDL_GPUTextureFormat display = device_->swapchain_format();
+        bool final_effects = std::any_of(post_effects_.begin(), post_effects_.end(), [](const PostEffect& e) {
+            return e.enabled && e.stage == PostStage::Final && e.material && e.material->fragment;
+        });
         SDL_GPURenderPass* final_pass = nullptr;
-        fullscreen(final_, true, *final_fs_, device_->swapchain_format(), BlendMode::Opaque, inputs, &u, sizeof u,
-                   &final_pass);
-        if (count > 0 && !ui_passes_.empty()) draw_sprites(final_pass, ui_passes_, device_->swapchain_format());
+        fullscreen(final_, true, *final_fs_, display, BlendMode::Opaque, inputs, &u, sizeof u,
+                   final_effects ? nullptr : &final_pass);
+        SDL_GPUTexture* shown = final_;
+        if (final_effects) {
+            run_effects(PostStage::Final, shown,
+                        [&] { return shown == final_ ? lazy_target(final2_, display, "final 2") : final_; }, display);
+            SDL_GPUColorTargetInfo again{};
+            again.texture = shown;
+            again.load_op = SDL_GPU_LOADOP_LOAD;
+            again.store_op = SDL_GPU_STOREOP_STORE;
+            final_pass = SDL_BeginGPURenderPass(cmd_, &again, 1, nullptr);
+        }
+        // Then the UI and the overlay on top.
+        if (!ui_passes_.empty()) draw_sprites(final_pass, ui_passes_, display);
         if (overlay_.draw) overlay_.draw(cmd_, final_pass);
         SDL_EndGPURenderPass(final_pass);
 
@@ -425,7 +579,7 @@ void Renderer::end_frame() {
             readback = SDL_CreateGPUTransferBuffer(d, &tinfo);
             SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd_);
             SDL_GPUTextureRegion src{};
-            src.texture = final_;
+            src.texture = shown;
             src.w = w;
             src.h = h;
             src.d = 1;
@@ -435,7 +589,7 @@ void Renderer::end_frame() {
         }
 
         SDL_GPUBlitInfo blit{};
-        blit.source.texture = final_;
+        blit.source.texture = shown;
         blit.source.w = w;
         blit.source.h = h;
         blit.destination.texture = swapchain_;

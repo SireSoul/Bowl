@@ -19,7 +19,7 @@ enum class ShaderBlobFormat : u32 { SpirV = 1, Msl = 2, Dxil = 3, Dxbc = 4, Hlsl
 // Written by ph-shaderc (build time, or at runtime in dev builds); read by the renderer. Format: little-endian u32s.
 struct ShaderBundle {
     static constexpr u32 magic = 0x48534850; // "PHSH"
-    static constexpr u32 format_version = 1;
+    static constexpr u32 format_version = 2; // 2 added the compute fields; version 1 bundles still load
 
     struct Blob {
         ShaderBlobFormat format;
@@ -32,6 +32,10 @@ struct ShaderBundle {
     u32 storage_textures = 0;
     u32 storage_buffers = 0;
     u32 uniform_buffers = 0;
+    // Compute shaders: storage_textures/storage_buffers above count the read-only ones; these the read-write ones.
+    u32 readwrite_storage_textures = 0;
+    u32 readwrite_storage_buffers = 0;
+    u32 threads[3] = {1, 1, 1}; // local_size_x/y/z
     std::vector<Blob> blobs;
 
     const Blob* find(ShaderBlobFormat f) const {
@@ -54,6 +58,9 @@ struct ShaderBundle {
         put(storage_textures);
         put(storage_buffers);
         put(uniform_buffers);
+        put(readwrite_storage_textures);
+        put(readwrite_storage_buffers);
+        for (u32 t : threads) put(t);
         put(static_cast<u32>(blobs.size()));
         for (const Blob& b : blobs) {
             put(static_cast<u32>(b.format));
@@ -78,13 +85,20 @@ struct ShaderBundle {
             at += n;
             return s;
         };
-        if (get() != magic || get() != format_version) return std::nullopt;
+        if (get() != magic) return std::nullopt;
+        u32 version = get();
+        if (version < 1 || version > format_version) return std::nullopt;
         ShaderBundle b;
         b.stage = static_cast<ShaderStage>(get());
         b.samplers = get();
         b.storage_textures = get();
         b.storage_buffers = get();
         b.uniform_buffers = get();
+        if (version >= 2) {
+            b.readwrite_storage_textures = get();
+            b.readwrite_storage_buffers = get();
+            for (u32& t : b.threads) t = get();
+        }
         u32 count = get();
         for (u32 i = 0; ok && i < count; ++i) {
             Blob blob;

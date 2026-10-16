@@ -95,7 +95,8 @@ holds all of them.
 
 ## Documentation
 
-- The headers document the API. Update the comment when you change a function.
+- The headers document the API. Update the comment when you change a function, then regenerate the
+  [API reference](docs/reference/api/README.md): `cmake --build build/dev --target ph_api_docs`.
 - The guides in `docs/guides/` explain how to use each system. If you add a feature, add it to its guide; if you add a
   system, add a guide and link it from `docs/README.md`.
 - `docs/tutorial.md` follows `samples/tutorial/main.cpp`. Change them together.

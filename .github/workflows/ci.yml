@@ -44,8 +44,11 @@ jobs:
           if [ "$RUNNER_OS" != "Windows" ]; then
             launcher="-DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache"
           fi
+          # The optional parts (Box2D, Tracy) are built in dev, so they keep compiling everywhere.
+          optional=""
+          if [ "${{ matrix.preset }}" = "dev" ]; then optional="-DPH_BOX2D=ON -DPH_TRACY=ON -DPH_OPUS=ON"; fi
           cmake --preset ${{ matrix.preset }} -DPH_FETCH_SDL=ON \
-            -DPH_WARNINGS_AS_ERRORS=${{ runner.os != 'Windows' && 'ON' || 'OFF' }} $launcher
+            -DPH_WARNINGS_AS_ERRORS=${{ runner.os != 'Windows' && 'ON' || 'OFF' }} $launcher $optional
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel 4
@@ -62,6 +65,33 @@ jobs:
           $exe = Get-ChildItem -Recurse -Filter isometric.exe build/${{ matrix.preset }}/samples | Select-Object -First 1
           & $exe.FullName --driver direct3d12 --night --frames 30 --screenshot "$PWD/d3d12-${{ matrix.preset }}.png"
           if (-not (Test-Path "d3d12-${{ matrix.preset }}.png")) { exit 1 }
+
+      # Game-code hot reload end to end: run the sprites sample, save its source, and wait for the game to rebuild
+      # its code library and swap it in.
+      - name: Hot reload on Windows
+        if: runner.os == 'Windows' && matrix.preset == 'dev'
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse -Filter sprites.exe build/dev/samples | Select-Object -First 1
+          $game = Start-Process $exe.FullName -ArgumentList '--driver','direct3d12','--frames','1000000' `
+            -RedirectStandardOutput hot.log -RedirectStandardError hot.err -NoNewWindow -PassThru
+          function Wait-Log($pattern, $seconds) {
+            $deadline = (Get-Date).AddSeconds($seconds)
+            while ((Get-Date) -lt $deadline) {
+              if ((Test-Path hot.log) -and (Select-String -Path hot.log -Pattern $pattern -Quiet)) { return $true }
+              if ($game.HasExited) { return $false }
+              Start-Sleep -Seconds 1
+            }
+            return $false
+          }
+          $ok = Wait-Log 'auto-build: .* watched' 120
+          if ($ok) {
+            (Get-Item samples/sprites/main.cpp).LastWriteTime = Get-Date
+            $ok = Wait-Log 'hot reload #1' 900
+          }
+          if (-not $game.HasExited) { Stop-Process -Id $game.Id }
+          Get-Content hot.log, hot.err -ErrorAction SilentlyContinue
+          if (-not $ok) { exit 1 }
 
       - name: Upload screenshot
         if: runner.os == 'Windows'

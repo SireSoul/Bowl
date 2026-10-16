@@ -30,10 +30,15 @@ folder; check that their license allows embedding in a game.
 | `size` | 16 | Font size (ascent to descent) in world units; for a screen camera, logical pixels |
 | `color` | white | |
 | `align` | `Left` | `Left`, `Center` or `Right`: which point of each line `position.x` refers to |
+| `direction` | `Auto` | Which way paragraphs run: from their first letter, or `LeftToRight`/`RightToLeft`; see [right-to-left text](#right-to-left-text-and-shaping) |
 | `max_width` | 0 | When above 0, wrap words to this width |
 | `line_spacing` | 1 | Multiplier on the font's line height |
 | `raster_scale` | 1 | Screen pixels per world unit, so glyphs are rasterized at screen resolution |
 | `max_glyphs` | -1 | Draw only the first N visible characters (with the full text's layout); -1 for all |
+| `outline`, `outline_color` | 0, black | An outline this many world units thick around each letter |
+| `shadow`, `shadow_color` | (0, 0), black at 60% | A copy of the text moved by this offset, drawn underneath |
+| `markup`, `time` | false, 0 | Read color and effect tags in the text; see below |
+| `sdf` | false | Draw from distance fields; see below |
 
 `position` is the top of the text block: its top-left corner for left-aligned text, its top center for centered text,
 its top-right for right-aligned.
@@ -47,8 +52,8 @@ unit covers:
 - **Text in the world**: also multiply by the camera's zoom: `pixel_density() * camera.zoom`.
 
 A `raster_scale` too low looks blurry; too high wastes atlas space. Sizes are rounded to whole pixels, so text that
-smoothly changes size (a zoom animation) rasterizes a new size every pixel step. That's fine for a moment, but avoid
-animating text size continuously for long periods.
+smoothly changes size (a zoom animation) rasterizes a new size every pixel step. For text whose size keeps changing,
+use [distance-field text](#distance-field-text) instead.
 
 ## Wrapping and alignment
 
@@ -76,24 +81,140 @@ if (line.done()) { /* show a "continue" marker */ }
 
 See [ui.md](ui.md#dialogue).
 
+## Outlines and shadows
+
+```cpp
+gfx::TextStyle title{.size = 32, .raster_scale = engine.window().pixel_density()};
+title.outline = 1.5f;              // world units
+title.outline_color = Color::hex(0x1a1f3d);
+title.shadow = {2, 3};
+gfx::draw_text(hud, *font, "Day 1", {24, 20}, title);
+```
+
+The shadow is drawn first, then the outline, then the letters, all in the same batch. Outlines are copies of the
+letters drawn around them (8 copies, or 16 for outlines wider than a pixel and a half), which looks right up to a few
+pixels. For thick outlines use distance-field text. Neither changes the layout or the size `draw_text` returns.
+
+## Rich text markup
+
+With `markup = true`, tags in the text change how parts of it look:
+
+```cpp
+style.markup = true;
+style.time = static_cast<f32>(engine.time());   // drives the effects
+gfx::draw_text(ui, *font, "You found [color=#ffcc00]a gold key[/color]! [wave]Wonderful.[/wave]", at, style);
+```
+
+| Tag | |
+| --- | --- |
+| `[color=#rgb]`, `[color=#rrggbb]`, `[color=#rrggbbaa]` ... `[/color]` | Text color (multiplied by `style.color`'s alpha) |
+| `[wave]` ... `[/wave]` | Letters bob up and down |
+| `[shake]` ... `[/shake]` | Letters jitter in place |
+| `[[` | A literal `[` |
+
+Tags nest. Anything in brackets that isn't a known tag is drawn as text. Tags take no space, and `max_glyphs` counts
+only the characters that are drawn, so typewriter reveals work with markup. `gfx::strip_markup(text)` returns the text
+without tags.
+
+## Distance-field text
+
+With `sdf = true`, glyphs come from signed distance fields made once at 48 pixels. They stay sharp at any size,
+scale and rotation without rasterizing again, which suits titles that pulse, text in a zooming world, and thick
+outlines. Draw them in a batch begun with `gfx::sdf_text_material`:
+
+```cpp
+// once
+gfx::Material sdf_look = gfx::sdf_text_material(engine.assets(), {.outline_color = Color::black(), .outline = 0.25f});
+
+// every frame
+titles.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None, gfx::BlendMode::Alpha, &sdf_look);
+gfx::TextStyle big{.size = 40 + 8 * std::sin(t * 2), .color = Color::hex(0xffe066)};
+big.sdf = true;
+gfx::draw_text(titles, *font, "Bowl", {24, 92}, big);
+engine.renderer().submit_ui(titles);
+```
+
+The material's `outline` is a fraction of the glyph's falloff (0 to about 0.4) and `softness` blurs the edge for
+glows. `raster_scale` isn't needed. Below about 12 pixels, bitmap text is crisper; use SDF for large and moving text.
+
+## Fallback fonts
+
+A font only has the characters its designer drew. For Japanese, Chinese, Korean, emoji or symbols, give it fonts to
+fall back on:
+
+```cpp
+font->set_fallbacks({engine.assets().load<gfx::Font>("fonts/NotoSansJP-Regular.otf"),
+                     engine.assets().load<gfx::Font>("fonts/NotoColorEmoji.ttf")});
+```
+
+Each character comes from the first font that has it, scaled to match. Characters none of them have are drawn as `?`.
+`font->has_glyph(cp)` tells you whether a character will draw.
+
+### Color emoji
+
+Color emoji fonts work like any other: a color font's characters are drawn in their own colors, and the text color
+only fades them (its alpha applies; its red, green and blue don't). All three kinds of color font are read:
+
+| Kind | Fonts |
+| --- | --- |
+| PNG pictures, `CBDT` | Noto Color Emoji |
+| PNG pictures, `sbix` | Apple Color Emoji |
+| Layers of shapes, `COLR` version 0 | Segoe UI Emoji (Windows), Twemoji Mozilla |
+
+Pictures are scaled from the nearest size the font has, so very large emoji soften a little. `COLR` layers marked
+"text color" draw in white. Color glyphs show in bitmap text, not in distance-field text. `glyph.color` (and
+`PlacedGlyph::color_glyph` in `layout_text`) says which characters are color glyphs.
+
+Check an emoji font's license before shipping it: Noto Color Emoji's (the SIL Open Font License) allows it; the
+emoji fonts that come with macOS and Windows can't be shipped with a game.
+
+## Right-to-left text and shaping
+
+Hebrew and Arabic run right to left, and lines often mix them with left-to-right words and numbers. Text is put in
+reading order by itself: each paragraph takes its direction from its first letter (or from `style.direction`), runs
+of the other direction are turned around inside it, numbers keep their digits in order, and brackets in right-to-left
+runs are mirrored. `max_glyphs` reveals characters in reading order, and `PlacedGlyph::index` counts that way too.
+`ph/gfx/bidi.hpp` has the pieces (character types, levels, visual order) for laying out text your own way. It follows
+the Unicode bidirectional algorithm, without explicit direction controls (U+202A..U+202E, U+2066..U+2069).
+
+Some scripts need more than order. Arabic letters join, and change shape depending on their neighbours; Devanagari and
+other Indic scripts rearrange and combine characters; many fonts have ligatures ("fi") and kerning only in their
+OpenType tables. That's *shaping*, done by [HarfBuzz](https://harfbuzz.github.io) in builds with `PH_HARFBUZZ`:
+
+```bash
+cmake --preset dev -DPH_HARFBUZZ=ON
+```
+
+| | Without `PH_HARFBUZZ` | With it |
+| --- | --- | --- |
+| Latin, Cyrillic, Greek, CJK | yes (kerning from the font's `kern` table) | yes, with OpenType kerning and ligatures |
+| Hebrew | yes | yes, with vowel marks placed |
+| Arabic, Persian, Urdu | letters in order, but unjoined | yes |
+| Devanagari, Thai, other complex scripts | no | yes |
+
+`gfx::text_shaping()` says whether the build has it. HarfBuzz adds about 1 MB to the game. Shaping applies to bitmap
+text; distance-field text (`sdf`) puts characters in order but doesn't shape them.
+
+`Left` and `Right` alignment mean the left and right edges, whichever way the text runs: right-to-left interfaces
+usually want `TextAlign::Right`.
+
 ## Fonts in more detail
 
 ```cpp
 gfx::Font& f = *font;
 gfx::Font::Metrics m = f.metrics(24);    // ascent, descent (negative), line_gap, line_height()
 f32 k = f.kerning('A', 'V', 24);
+f32 w = f.advance('A', 24);              // without rasterizing
 const gfx::Font::Glyph& g = f.glyph('A', 24);
 ```
 
 Glyphs are packed into 1024x1024 atlas pages, added as needed. When new glyphs appear, only the rectangle they
-occupy is uploaded to the GPU. A missing glyph is drawn as `?`.
+occupy is uploaded to the GPU. Distance-field glyphs have their own pages.
+
+`gfx::layout_text` returns the characters `draw_text` would draw (page, source rectangle, position, size and color for
+each), for drawing text your own way: per-letter animation, text on a curve, a custom shader.
 
 ## Localized text
 
 Get strings from the localization tables rather than hard-coding them: `engine.i18n().tr("menu.start")`. See
 [localization.md](localization.md).
-
-## Limitations
-
-No outlines, shadows or signed-distance-field rendering yet, and no fallback fonts for characters the font lacks.
-Both are on the [roadmap](../roadmap.md). For a shadow today, draw the text twice, offset and darker first.

@@ -80,11 +80,11 @@ mesa-libEGL-devel alsa-lib-devel pulseaudio-libs-devel pipewire-devel dbus-devel
 ## Build
 
 ```bash
-git clone https://github.com/SireSoul/PLACEHOLDERENGINENAME.git
+git clone https://github.com/SireSoul/BOWL.git
 ```
 
 ```bash
-cd PLACEHOLDERENGINENAME
+cd BOWL
 ```
 
 ```bash

@@ -1,6 +1,6 @@
 # Documentation
 
-Everything about using and working on PLACEHOLDERENGINENAME. If you're new, read these in order:
+Everything about using and working on Bowl. If you're new, read these in order:
 
 1. [Getting started](getting-started.md): install a toolchain, build, run the samples and tests
 2. [Tutorial](tutorial.md): build a complete small game, one feature at a time
@@ -30,11 +30,13 @@ One page per system.
 | [Scenes](guides/scenes.md) | The scene stack, transparency, fades |
 | [Collision](guides/collision.md) | Shapes, contacts, sweeps, raycasts, `move_and_slide`, the spatial hash |
 | [Saving and loading](guides/saving.md) | Reflection, serialization, world files, prefabs, player settings |
+| [Networking](guides/networking.md) | Connections over UDP, reliable and unreliable messages, lockstep, rollback |
 | [Localization](guides/localization.md) | String tables, fallbacks, placeholders, plurals |
 | [Jobs, logging and profiling](guides/jobs-and-profiling.md) | `JobSystem`, `parallel_for`, logging, profiler zones |
 | [Dev tools](guides/dev-tools.md) | The F1 overlay, the inspector, your own tool windows |
 | [Hot reload](guides/hot-reload.md) | Assets, shaders and game code while the game runs |
-| [Packaging and shipping](guides/packaging.md) | Release builds, install layouts, macOS bundles |
+| [Bowl Editor](guides/editor.md) | Laying out levels: placing art, groups, the inspector, the game's own components |
+| [Packaging and shipping](guides/packaging.md) | Release builds, icons, signing and notarization, installers, AppImage, Flatpak, Steam Deck |
 | [Platforms](guides/platforms.md) | Backends, OS support, what's planned |
 | [Performance](guides/performance.md) | Where time goes and how to keep it low |
 
@@ -46,9 +48,10 @@ One page per system.
 | [Command line](reference/command-line.md) | Flags every game understands, and `ph-shaderc`'s |
 | [Project layout](reference/project-layout.md) | Every folder and what lives there; what a built game looks like on disk |
 | [Conventions](reference/conventions.md) | Coordinates, units, colors, naming, threading, error handling |
+| [API](reference/api/README.md) | Every public header: types, functions and their comments |
 
-The headers are the API reference. Each public type and function has a comment saying what it does; start with
-`engine/app/include/ph/app/engine.hpp`.
+The [API reference](reference/api/README.md) lists every public header with its types and functions, made from the
+headers' own comments. Start with [`ph/app/engine.hpp`](reference/api/app.md#phappenginehpp).
 
 ## Help
 

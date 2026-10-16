@@ -135,7 +135,11 @@ Schedule::Builder Schedule::par_each(std::string name, F f, QueryFilter filter, 
         if constexpr (detail::takes_context<F, Ts...>) {
             usize count = state->query->count();
             usize chunks = count == 0 ? 0 : (count + JobSystem::chunk_size(count, min_chunk) - 1) / JobSystem::chunk_size(count, min_chunk);
-            while (state->chunk_commands.size() < chunks) state->chunk_commands.emplace_back(ctx.world);
+            while (state->chunk_commands.size() < chunks) {
+                state->chunk_commands.emplace_back(ctx.world);
+                // Stand-in ids per chunk: real ids are handed out in chunk order when the commands are applied.
+                state->chunk_commands.back().use_placeholders(2048 + static_cast<u32>(state->chunk_commands.size() - 1) % 2048);
+            }
             state->query->par_each_chunked(ctx.jobs, min_chunk, [&](usize chunk, Entity e, Ts&... cs) {
                 SystemContext local{ctx.world, state->chunk_commands[chunk], ctx.jobs, ctx.dt};
                 fn(local, e, cs...);

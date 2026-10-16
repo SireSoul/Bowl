@@ -44,6 +44,15 @@ ComponentId detail::register_component(const ComponentInfo& info) {
     for (usize i = 0; i < count; ++i)
         if (r.names[i] == info.name) {
             if (r.infos[i].dormant) {
+                const ComponentInfo& old = r.infos[i];
+                bool may_hold_data = old.size > 0 && old.trivially_relocatable; // kept in place across a reload
+                if (may_hold_data && (old.size != info.size || old.align != info.align || !info.trivially_relocatable)) {
+                    // The type changed shape while entities still hold the old one: that data stays under a renamed
+                    // type nothing asks for, and the name gets a fresh id.
+                    r.names[i] += " (before reload)";
+                    r.infos[i].name = r.names[i];
+                    continue;
+                }
                 r.infos[i] = info;
                 r.infos[i].name = r.names[i];
                 r.infos[i].dormant = false;
@@ -75,10 +84,15 @@ std::vector<std::pair<ComponentId, ComponentInfo>> mark_components_dormant(bool 
         ComponentInfo& info = r.infos[i];
         if (info.dormant || !owned(info, user)) continue;
         before.emplace_back(static_cast<ComponentId>(i), info);
-        std::string_view name = info.name;
-        info = ComponentInfo{};
-        info.name = name;
-        info.dormant = true;
+        // The code goes; the layout stays, since trivially copyable components keep their data in place (they're
+        // copied and dropped without calling any of their code).
+        ComponentInfo kept;
+        kept.name = info.name;
+        kept.size = info.size;
+        kept.align = info.align;
+        kept.trivially_relocatable = info.trivially_relocatable;
+        kept.dormant = true;
+        info = kept;
     }
     return before;
 }

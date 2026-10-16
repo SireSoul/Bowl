@@ -245,6 +245,8 @@ entities; a `bool` field is often better than a tag that comes and goes.
 ## Limits
 
 - 256 component types by default. Define `PH_ECS_MAX_COMPONENTS` (a multiple of 64) to raise it.
-- Archetypes are never freed; fine for games, which have a bounded set of component combinations.
-- Entities created inside `par_each` get ids that depend on thread timing (their data doesn't); see
-  [systems.md](systems.md#determinism).
+- An archetype stays after its last entity leaves, so it's ready when the combination comes back. A world that goes
+  through many combinations can free the unused ones with `world.compact()` now and then (between levels, say);
+  queries made before carry on correctly.
+- Entities created through a system's commands get stand-in ids until the commands are applied, so ids stay the same
+  from run to run; see [systems.md](systems.md#determinism).

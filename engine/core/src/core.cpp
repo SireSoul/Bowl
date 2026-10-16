@@ -3,6 +3,10 @@
 #include "ph/core/time.hpp"
 #include "ph/core/type_id.hpp"
 
+#if PH_TRACY
+#include <tracy/TracyC.h>
+#endif
+
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -72,6 +76,11 @@ void logging::write(LogLevel level, std::string_view text) {
     std::fprintf(out, "[%9.3f] %s | %.*s\n", t, level_name(level), static_cast<int>(text.size()), text.data());
     std::fflush(out);
     for (const Sink& sink : s.sinks) sink.fn(level, text, sink.user);
+#if PH_TRACY
+    // Log lines show up on Tracy's timeline next to the zones around them; warnings and errors in color.
+    u32 color = level == LogLevel::Error ? 0xff5050 : level == LogLevel::Warn ? 0xffc040 : 0;
+    if (___tracy_connected()) ___tracy_emit_messageC(text.data(), text.size(), color, 0);
+#endif
     s.recent.push_back({level, t, std::string(text)});
     if (s.recent.size() > 2048) s.recent.pop_front();
 }

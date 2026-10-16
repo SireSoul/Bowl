@@ -83,6 +83,8 @@ public:
     // then `init` fills it in (init gets nullptr for tags). Replaces an existing one. Returns false if the type isn't
     // savable (see SavableComponent), since only those can be default-constructed this way.
     bool add_component(Entity e, ComponentId c, FunctionRef<void(void*)> init);
+    // Removes a component by id. Returns false if the entity is dead or doesn't have it.
+    bool remove_component(Entity e, ComponentId c);
 
     // Queries
 
@@ -116,8 +118,14 @@ public:
     // Applies deferred() commands. The App calls this between schedules.
     void flush();
     // Back to a brand-new world: entities, archetypes, hooks and resources all go (no hooks run). Game-code hot
-    // reload calls this while the old game library is still loaded, since its destructors live there.
+    // reload calls this at shutdown, while the game library is still loaded, since its destructors live there.
     void reset();
+    // Drops every hook, resource and pending deferred command, keeping entities and components. Hot reload uses it to
+    // let go of game code while the world itself stays.
+    void forget_code();
+    // While a command buffer is being applied: the real entity for one of its stand-in ids (made on first use). Null
+    // outside of that. Other ids come back unchanged.
+    Entity resolve_placeholder(Entity e);
     bool locked() const { return lock_.load(std::memory_order_relaxed) > 0; }
 
     // Introspection
@@ -125,6 +133,13 @@ public:
     std::span<const std::unique_ptr<Archetype>> archetypes() const { return archetypes_; }
     // Bumped whenever a new archetype appears; queries use it to refresh their caches.
     usize archetype_generation() const { return archetypes_.size(); }
+    // Bumped by compact(), which removes archetypes: queries start their caches over when it changes.
+    u64 layout_epoch() const { return layout_epoch_; }
+
+    // Frees the archetypes (component combinations) no entity uses any more. Each one costs a little memory and a
+    // little time in queries, so a world that goes through many combinations (between levels, after a big cleanup)
+    // can call this now and then. Returns how many were freed.
+    usize compact();
 
     struct LockGuard {
         World& w;
@@ -172,6 +187,17 @@ private:
     void run_add_hooks(ComponentId c, Entity e);
     void run_remove_hooks(ComponentId c, Entity e);
 
+    // Stand-in ids (CommandBuffer::create) becoming real entities while a buffer is applied.
+    Entity resolve(Entity e);
+    reflect::FieldVisitor& placeholder_fixer();
+    template <class T> void fix_placeholders(T& value) {
+        if (!placeholders_) return;
+        if constexpr (std::is_same_v<T, Entity>) value = resolve(value);
+        else if constexpr (reflect::Reflected<T>) reflect::visit(placeholder_fixer(), "", value);
+    }
+    std::unordered_map<u32, Entity>* placeholders_ = nullptr;
+    std::unique_ptr<reflect::FieldVisitor> placeholder_fixer_;
+
     std::vector<Record> records_;
     std::vector<u32> free_;
     std::atomic<i64> free_cursor_{0};
@@ -181,6 +207,8 @@ private:
     std::vector<std::unique_ptr<Archetype>> archetypes_;
     std::unordered_map<ComponentMask, Archetype*, ComponentMaskHash> by_mask_;
     Archetype* empty_ = nullptr;
+    u64 layout_epoch_ = 0;
+    u32 next_archetype_id_ = 0;
 
     std::vector<std::unique_ptr<Hooks>> hooks_;
     std::unordered_map<TypeId, std::unique_ptr<ResourceBase>> resources_;
@@ -319,6 +347,11 @@ public:
 
 private:
     void refresh() {
+        if (epoch_ != world_->layout_epoch()) { // archetypes were freed: start over
+            epoch_ = world_->layout_epoch();
+            matches_.clear();
+            seen_ = 0;
+        }
         auto archetypes = world_->archetypes();
         for (; seen_ < archetypes.size(); ++seen_) {
             Archetype* a = archetypes[seen_].get();
@@ -331,6 +364,7 @@ private:
     std::vector<Archetype*> matches_;
     std::vector<usize> offsets_;
     usize seen_ = 0;
+    u64 epoch_ = 0;
 };
 
 // World templates
@@ -418,11 +452,17 @@ template <class T> T* World::try_resource() const {
 // CommandBuffer templates
 
 template <class T> void CommandBuffer::AddCommand<T>::apply(World& w) {
-    if (w.alive(e)) w.add<T>(e, std::move(value));
+    Entity target = w.resolve(e);
+    if (!w.alive(target)) return;
+    w.fix_placeholders(value);
+    w.add<T>(target, std::move(value));
 }
 template <class... Ts> void CommandBuffer::InsertCommand<Ts...>::apply(World& w) {
-    if (w.alive(e)) std::apply([&](auto&... vs) { w.insert(e, std::move(vs)...); }, values);
+    Entity target = w.resolve(e);
+    if (!w.alive(target)) return;
+    std::apply([&](auto&... vs) { (w.fix_placeholders(vs), ...); }, values);
+    std::apply([&](auto&... vs) { w.insert(target, std::move(vs)...); }, values);
 }
-template <class T> void CommandBuffer::RemoveCommand<T>::apply(World& w) { w.remove<T>(e); }
+template <class T> void CommandBuffer::RemoveCommand<T>::apply(World& w) { w.remove<T>(w.resolve(e)); }
 
 } // namespace ph::ecs

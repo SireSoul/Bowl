@@ -19,6 +19,8 @@ struct Context {
     AssetManager* assets = nullptr;                     // to reload Asset<T> fields by path
     std::unordered_map<u64, u64>* entity_map = nullptr; // runtime entity <-> file id (see ecs/world_io.hpp)
     std::vector<std::string> warnings;                  // problems that didn't stop the load
+    // The game's own save version, written into world files as "game_version" when above 0 (see ecs::Migrations).
+    i32 game_version = 0;
     void warn(std::string message) { warnings.push_back(std::move(message)); }
 };
 

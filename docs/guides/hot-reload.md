@@ -7,7 +7,7 @@ game's own C++ code. The goal is that you rarely need to restart the game to see
 | --- | --- | --- |
 | Textures, sprite sheets, maps, sounds, music, fonts, string tables | Save the file | All |
 | Shaders | Save the `.glsl` file | All |
-| Game code | Rebuild the game's code library | macOS, Linux |
+| Game code | Save a source file | All (dev builds) |
 
 ## Assets and shaders
 
@@ -34,45 +34,67 @@ add_executable(my_game main.cpp)
 ph_add_game(my_game ASSETS assets HOT_RELOAD)
 ```
 
-It needs CMake 3.27 or newer and takes effect only in dev builds on macOS and Linux. Elsewhere (release builds,
-Windows, older CMake) the game builds as an ordinary executable, so the same `CMakeLists.txt` works everywhere.
+It needs CMake 3.27 or newer and takes effect only in dev builds. Elsewhere (release builds, older CMake) the game
+builds as an ordinary executable, so the same `CMakeLists.txt` works everywhere.
 
 With hot reload on, the build produces two things:
 
 - `my_game`: the engine plus a small host that loads your code;
-- `my_game_code`: your game, as a loadable library (`libmy_game_code.so` on Linux and macOS).
+- `my_game_code`: your game, as a loadable library (`libmy_game_code.so` on Linux and macOS, `my_game_code.dll` on
+  Windows).
 
 ### Using it
 
-1. Run `my_game` as usual.
-2. Change your code.
-3. Rebuild only the library:
+Run `my_game`, edit your code, save. That's it: the game notices the saved file, rebuilds `my_game_code` in the
+background and swaps the new code in. The log shows each step:
 
-   ```bash
-   cmake --build --preset dev --target my_game_code
-   ```
+```
+auto-build: source changed, building
+auto-build: built in 2.9 s
+hot reload #1: new code running, 1512 entities restored in 216 ms
+```
 
-4. Within a second of the build finishing, the log says something like
-   `hot reload #1: new code running, 1512 entities restored in 214 ms`.
+If the code doesn't compile, the compiler's errors appear in the log (and the overlay's **Log** panel) and the game
+keeps running the previous code. Fix the error, save, and it carries on.
 
-Many editors can run that build command on save, which makes the loop: save, wait a moment, look.
+The game watches the folders that hold the game's source files, and everything below them, for C and C++ files.
+Hidden folders and build folders are skipped. Headers that live somewhere else (an `include/` folder next to `src/`)
+aren't watched; saving a source file picks up their changes too.
+
+You can still build by hand, from your editor or the command line:
+
+```bash
+cmake --build --preset dev --target my_game_code
+```
+
+Start the game with `--no-auto-build` to turn automatic builds off, for example while your editor builds on save
+itself (two builds of the same target at once can trip over each other).
 
 ### Writing reloadable code
 
 A few rules make reloads work well. They're good structure anyway.
 
 **Setup goes in `init`, world creation in `start`.** After a reload, the engine runs the new code's `init()` again,
-but not `start()`, because the world is restored from before the reload. So:
+but not `start()`, because the world is still there from before the reload. So:
 
 - `init`: register systems, bind input, load assets, set resources. It must not create entities.
 - `start`: spawn the initial world, push the first scene. It runs once per session.
 
-**Use `PH_COMPONENT` for components.** The world survives a reload by being saved and loaded, so components need to be
-savable. `PH_COMPONENT` also registers the type as soon as the library loads, which the restore relies on.
+**Know which of your components survive.** The world stays across a reload: entities, their ids, and everything the
+engine owns. Of your own component types:
 
-**Rebuild what isn't saved in `init`.** Components that aren't savable, such as an animator holding runtime state,
-don't survive. Recreate them in `init` or in a system that adds them where missing. The sprites sample does this for
-its banner animations:
+- **Plain data** (trivially copyable: numbers, vectors, colors, entity references, fixed arrays) stays exactly where
+  it is, reflected or not. Most components are this.
+- **Savable** ones (`PH_COMPONENT`, or serialization hooks) that hold strings, vectors or assets are saved, and loaded
+  back through the new code. `PH_COMPONENT` registers the type as soon as the library loads, which that relies on.
+- **Anything else** (not plain data and not savable) is dropped, with a warning naming it.
+
+Plain data should hold no pointers into game code (string literals, function pointers): the code they point at is
+unloaded. A plain-data type whose size or alignment changes in the edit loses its old values (the entities keep everything
+else). Reordering or retyping fields without changing the size reads the old bytes in the new layout: restart after
+edits like that.
+
+**Rebuild what didn't survive.** Recreate dropped components in `init` or in a system that adds them where missing:
 
 ```cpp
 // in init(): give every Banner an animator if it doesn't have one
@@ -93,26 +115,30 @@ a score kept in `int score_;` on the `Game` doesn't.
 ### What happens during a reload
 
 1. The host notices the library file changed and waits until the linker has finished writing it.
-2. It saves the world.
-3. It tears down everything the old code created, *while that code is still loaded* (destructors live in the
-   library): scenes, systems, input bindings, the world's entities, hooks and resources, and every asset and loader
-   registered since the game started.
+2. It goes through the components whose code is in the old library: plain data stays put, savable ones are saved
+   and removed, others are removed.
+3. It tears down everything else the old code created, *while that code is still loaded* (destructors live in the
+   library): scenes, systems, input bindings, the world's hooks and resources, and every asset and loader registered
+   since the game started. Entities stay.
 4. It loads a fresh copy of the new library. If that fails, the old code is brought back up with the world and the
    game keeps running; the log says why.
-5. It creates the new `Game`, runs `init()`, applies the player's saved controls again, and loads the world.
+5. It creates the new `Game`, runs `init()`, applies the player's saved controls again, and loads the saved
+   components back onto their entities.
 
-Entity ids change in the process, but references between saved entities are remapped, so a follower still follows
-its leader.
+Entity ids don't change, so every reference between entities, in components or anywhere else, stays right. The log
+says how many entities and components were kept: `hot reload #1: new code running; 1512 entities kept, 5018
+components kept in place, 0 reloaded through their savers, in 211 ms`.
 
 ### What can't change
 
 Some changes need a restart, because the world's saved form or the engine's state can't absorb them:
 
-- Removing or renaming a component type: entities lose that component (with a warning).
+- Removing or renaming a savable component type: entities lose that component (with a warning).
 - Changes to `configure()`: the window and engine are already set up.
 - Changes to the engine itself: the engine is in the host executable. Rebuild and restart `my_game`.
 
-Adding fields to components is fine: new fields get their default values.
+Adding fields to savable components is fine: new fields get their default values. Adding fields to a plain-data
+component changes its size, so entities lose it until something adds it back.
 
 ### Debugging
 
@@ -122,5 +148,10 @@ original while the game runs.
 
 ### Windows
 
-Not supported yet. It needs the engine's functions exported from the executable, which on Windows means annotating
-the engine's API for `dllexport`. It's on the [roadmap](../roadmap.md). Asset and shader hot reload work on Windows.
+Works the same way. Two differences: the code library links against the game executable's import library, so building
+only `my_game` doesn't build `my_game_code` (build everything, or the library itself, which saving a file does for
+you); and the executable must not be rebuilt while it runs, since Windows locks a running program's file. Changes to
+game code only rebuild the library, so this only matters when the engine changes.
+
+CI runs a real reload on Windows on every push: it starts the sprites sample, saves its source, and waits for the new
+code.

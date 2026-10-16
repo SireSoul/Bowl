@@ -11,6 +11,9 @@ cmake/
   PhCompiler.cmake        ph_configure_target, ph_optimize_debug: flags and warnings
   PhDependencies.cmake    third-party libraries, pinned by URL and SHA-256
   PhShaders.cmake         ph_compile_shaders, ph_add_game, game-code hot reload
+  PhPackaging.cmake       icons, signing, ph_package (installers)
+  PhAppImage.cmake        script: an AppImage from an install
+  PhNotarize.cmake        script: Apple notarization
 engine/
   CMakeLists.txt          one static library per module, and ph::engine
   assets/                 engine assets, mounted as "engine/"
@@ -23,10 +26,17 @@ engine/
   audio/                  mixer, sounds, music
   physics/                collision
   ui/                     game UI
+  net/                    UDP connections, lockstep, rollback
   app/                    Engine, Game, scenes, the main loop, dev tools, hot reload host
 tools/
   shaderc/                ph-shaderc: library and command-line tool
+  atlas/                  ph-atlas: packs pictures into an atlas with sprite-sheet JSON
+  icon/                   ph-icon: application icons from one picture
+  pack/                   ph-pack: asset archives (.phpak)
+  apidoc/                 ph-apidoc: the API reference from the headers
+editor/                   Bowl Editor
 samples/
+  icon.png                the samples' application icon
   tutorial/               Fireflies, the game docs/tutorial.md builds
   isometric/              y-sorted isometric map, night lighting, menu, dialogue
   sprites/                ECS stress test, custom shader, animation, hot-reloadable
@@ -34,7 +44,7 @@ tests/
   test_*.cpp              unit tests, one file per area
   bench_ecs.cpp           ECS benchmark (not a test)
   data/                   test fixtures (small OGG files) and how they were made
-docs/                     this documentation; images/ holds the screenshots
+docs/                     this documentation; images/ holds the screenshots, reference/api/ is generated (ph_api_docs)
 ```
 
 Every module follows the same shape:
@@ -60,6 +70,7 @@ engine/<module>/
 | | `file.hpp` | Reading and writing files, `FileWatcher` |
 | | `assets.hpp` | `AssetManager`, `Asset<T>`, `AssetLoadContext` |
 | | `json.hpp` | `json::Value`, `parse`, `stringify` |
+| | `xml.hpp` | `xml::Element`, `xml::parse` (enough XML for tool formats) |
 | | `reflect.hpp` | `PH_REFLECT`, field visitors |
 | | `serialize.hpp` | `serial::to_json`, `serial::from_json`, `serial::Context` |
 | | `settings.hpp` | `Settings` |
@@ -79,11 +90,11 @@ engine/<module>/
 | platform | `window.hpp` | `Window`, `WindowDesc` |
 | | `input.hpp` | `Input`, `Key`, `MouseButton`, gamepad enums, `InputBinding` |
 | gfx | `device.hpp` | `GpuDevice`, `Texture`, `Shader`, `TextureDesc` |
-| | `sprites.hpp` | `SpriteBatch`, `SpriteInstance`, `Camera2D`, `Material`, `BlendMode`, `SpriteSort` |
+| | `sprites.hpp` | `SpriteBatch`, `StaticSprites`, `SpriteInstance`, `Camera2D`, `Material`, `BlendMode`, `SpriteSort` |
 | | `renderer.hpp` | `Renderer`, `PostSettings`, `write_png` |
 | | `text.hpp` | `Font`, `draw_text`, `measure_text`, `TextStyle` |
 | | `sprite_sheet.hpp` | `SpriteSheet`, `SpriteAnimator`, `draw_frame` |
-| | `tilemap.hpp` | `Tilemap`, `draw_tilemap` |
+| | `tilemap.hpp` | `Tilemap`, `draw_tilemap`, `TilemapCache` |
 | | `particles.hpp` | `ParticleSystem`, `ParticleEmitter` |
 | audio | `audio.hpp` | `AudioEngine`, `Sound`, `Music`, buses |
 | physics | `collision.hpp` | Shapes, `collide`, `sweep`, `raycast`, `move_and_slide`, `SpatialHash` |
@@ -106,7 +117,7 @@ my_game/
   CMakeLists.txt
   CMakePresets.json        copied from the engine and adjusted
   external/
-    PLACEHOLDERENGINENAME/ the engine, as a Git submodule
+    Bowl/ the engine, as a Git submodule
   src/
     main.cpp               PH_MAIN and the Game class
     components.hpp         PH_COMPONENT structs

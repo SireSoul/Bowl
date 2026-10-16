@@ -71,6 +71,70 @@ TEST_CASE("shaderc: HLSL for D3D12 uses SDL's register spaces") {
         CHECK(fsrc.find(reg) != std::string::npos);
 }
 
+TEST_CASE("shaderc: compute shaders use SDL's compute layout") {
+    auto r = compile_engine_shader("particles.comp.glsl");
+    INFO(r.log);
+    REQUIRE(r.ok);
+    CHECK(r.bundle.stage == ShaderStage::Compute);
+    CHECK(r.bundle.readwrite_storage_buffers == 2);
+    CHECK(r.bundle.storage_buffers == 0);
+    CHECK(r.bundle.uniform_buffers == 1);
+    CHECK(r.bundle.threads[0] == 64);
+    CHECK(r.bundle.threads[1] == 1);
+    for (auto f : {ShaderBlobFormat::SpirV, ShaderBlobFormat::Msl, ShaderBlobFormat::Hlsl}) CHECK(r.bundle.find(f));
+    const auto* h = r.bundle.find(ShaderBlobFormat::Hlsl);
+    REQUIRE(h);
+    std::string hlsl(h->code.begin(), h->code.end());
+    for (const char* reg : {"register(u0, space1)", "register(u1, space1)", "register(b0, space2)"})
+        CHECK(hlsl.find(reg) != std::string::npos);
+
+    // Read-only and read-write storage, and a wrong set.
+    const char* both = R"(#version 450
+layout(local_size_x = 8, local_size_y = 4) in;
+layout(std430, set = 0, binding = 0) readonly buffer In { float a[]; };
+layout(std430, set = 1, binding = 0) buffer Out { float b[]; };
+void main() { b[gl_GlobalInvocationID.x] = a[gl_GlobalInvocationID.x] * 2.0; })";
+    shaderc::CompileOptions options;
+    options.name = "double.comp";
+    options.stage = ShaderStage::Compute;
+    auto d = shaderc::compile_glsl(both, options);
+    INFO(d.log);
+    REQUIRE(d.ok);
+    CHECK(d.bundle.storage_buffers == 1);
+    CHECK(d.bundle.readwrite_storage_buffers == 1);
+    CHECK(d.bundle.threads[1] == 4);
+    auto again = ShaderBundle::parse(d.bundle.serialize());
+    REQUIRE(again);
+    CHECK(again->readwrite_storage_buffers == 1);
+    CHECK(again->threads[0] == 8);
+
+    std::string wrong = both;
+    wrong.replace(wrong.find("set = 1"), 7, "set = 0");
+    auto w = shaderc::compile_glsl(wrong, options);
+    CHECK_FALSE(w.ok);
+    CHECK(w.log.find("set = 1") != std::string::npos);
+}
+
+TEST_CASE("shaderc: game shaders include the engine's through an include root") {
+    const char* source = R"(#version 450
+#include "engine/shaders/common.glsl"
+layout(location = 0) in vec4 v_color;
+layout(location = 0) out vec4 out_color;
+void main() { out_color = premultiply(v_color); })";
+    shaderc::CompileOptions options;
+    options.name = "game.frag";
+    options.stage = ShaderStage::Fragment;
+    options.source_path = fs::temp_directory_path() / "game.frag.glsl"; // not next to the engine's shaders
+    auto without = shaderc::compile_glsl(source, options);
+    CHECK_FALSE(without.ok);
+    options.include_roots.emplace_back("engine/shaders/", fs::path(PH_ENGINE_ASSET_SOURCE_DIR) / "shaders");
+    auto with = shaderc::compile_glsl(source, options);
+    INFO(with.log);
+    CHECK(with.ok);
+    REQUIRE(with.includes.size() == 1);
+    CHECK(with.includes[0].filename() == "common.glsl");
+}
+
 TEST_CASE("shaderc: errors are reported, not thrown") {
     shaderc::CompileOptions options;
     options.name = "broken.frag.glsl";

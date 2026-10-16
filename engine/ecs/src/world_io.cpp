@@ -46,6 +46,7 @@ json::Value save_entities(const World& world, std::span<const Entity> entities, 
     json::Value doc;
     doc.set("format", world_format);
     doc.set("version", world_format_version);
+    if (ctx.game_version > 0) doc.set("game_version", ctx.game_version);
     doc.set("entities", std::move(list));
     return doc;
 }
@@ -123,6 +124,123 @@ Entity spawn_prefab(World& world, const json::Value& entity, serial::Context& ct
     load_components(world, e, entity["components"], ctx, unknown);
     ctx.entity_map = previous;
     return e;
+}
+
+std::vector<Entity> instantiate(World& world, const Prefab& prefab, serial::Context& ctx) {
+    return load_entities(world, prefab.document, ctx);
+}
+
+namespace {
+
+// Reads a text or binary document for a loader; null (with the error logged) if it can't.
+std::optional<json::Value> read_document(AssetLoadContext& ctx, std::string_view type) {
+    auto bytes = ctx.read(ctx.path());
+    if (!bytes) {
+        log_asset_error(ctx.path(), type, "file not found");
+        return std::nullopt;
+    }
+    auto parsed = json::parse_any(*bytes);
+    if (!parsed) {
+        log_asset_error(ctx.path(), type,
+                        json::is_binary(*bytes)
+                            ? std::format("byte {}: {}", parsed.error->column, parsed.error->message)
+                            : std::format("{}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message));
+        return std::nullopt;
+    }
+    return std::move(parsed.value);
+}
+
+} // namespace
+
+void register_world_file_loader(AssetManager& assets) {
+    assets.register_loader<WorldFile>([](AssetLoadContext& ctx) -> std::unique_ptr<WorldFile> {
+        auto doc = read_document(ctx, "WorldFile");
+        if (!doc) return nullptr;
+        if ((*doc)["format"].as_string() != world_format) {
+            log_asset_error(ctx.path(), "WorldFile", "not a saved world (missing \"format\")");
+            return nullptr;
+        }
+        return std::make_unique<WorldFile>(WorldFile{std::move(*doc)});
+    });
+    assets.register_loader<Prefab>([](AssetLoadContext& ctx) -> std::unique_ptr<Prefab> {
+        auto doc = read_document(ctx, "Prefab");
+        if (!doc) return nullptr;
+        if ((*doc)["format"].as_string() == world_format) return std::make_unique<Prefab>(Prefab{std::move(*doc)});
+        if (!doc->contains("components")) {
+            log_asset_error(ctx.path(), "Prefab", "expected {\"components\": {...}} or a saved world");
+            return nullptr;
+        }
+        // One entity: wrap it in a world document.
+        json::Value world_doc;
+        world_doc.set("format", world_format);
+        world_doc.set("version", world_format_version);
+        json::Value entities;
+        entities.push(std::move(*doc));
+        world_doc.set("entities", std::move(entities));
+        return std::make_unique<Prefab>(Prefab{std::move(world_doc)});
+    });
+}
+
+// Migrations
+
+void Migrations::add(i32 from_version, Step step) { steps_[from_version] = std::move(step); }
+
+i32 Migrations::latest() const { return steps_.empty() ? 0 : steps_.rbegin()->first + 1; }
+
+i32 game_version_of(const json::Value& document) { return static_cast<i32>(document["game_version"].as_int(0)); }
+
+bool Migrations::upgrade(json::Value& document, serial::Context& ctx) const {
+    i32 version = game_version_of(document);
+    i32 target = latest();
+    if (version > target) {
+        ctx.warn(std::format("saved by a newer version of the game (save version {}, this game knows up to {})", version,
+                             target));
+        return false;
+    }
+    for (; version < target; ++version) {
+        auto step = steps_.find(version);
+        if (step == steps_.end()) {
+            ctx.warn(std::format("no migration from save version {}", version));
+            return false;
+        }
+        step->second(document);
+        document.set("game_version", version + 1);
+    }
+    return true;
+}
+
+void for_each_saved(json::Value& document, std::string_view component, const std::function<void(json::Value&)>& change) {
+    json::Value* entities = document.find("entities");
+    if (!entities || !entities->is_array()) return;
+    for (json::Value& entity : entities->make_array())
+        if (json::Value* components = entity.find("components"))
+            if (json::Value* c = components->find(component)) change(*c);
+}
+
+void rename_component(json::Value& document, std::string_view from, std::string_view to) {
+    json::Value* entities = document.find("entities");
+    if (!entities || !entities->is_array()) return;
+    for (json::Value& entity : entities->make_array()) {
+        json::Value* components = entity.find("components");
+        if (!components || !components->is_object()) continue;
+        for (auto& [name, data] : components->make_object())
+            if (name == from) name = std::string(to); // in place, so the order in the file stays the same
+    }
+}
+
+void remove_component(json::Value& document, std::string_view name) {
+    json::Value* entities = document.find("entities");
+    if (!entities || !entities->is_array()) return;
+    for (json::Value& entity : entities->make_array())
+        if (json::Value* components = entity.find("components")) components->erase(name);
+}
+
+void rename_field(json::Value& document, std::string_view component, std::string_view from, std::string_view to) {
+    for_each_saved(document, component, [&](json::Value& data) {
+        if (!data.is_object()) return;
+        for (auto& [name, value] : data.make_object())
+            if (name == from) name = std::string(to);
+    });
 }
 
 } // namespace ph::ecs

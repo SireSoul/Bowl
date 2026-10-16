@@ -145,3 +145,213 @@ TEST_CASE("audio: crossfading to a new track") {
     // Only the new mono track remains: both channels carry the same signal.
     for (usize i = 0; i < 480; i += 37) CHECK(chunk[i * 2] == doctest::Approx(chunk[i * 2 + 1]).epsilon(0.001));
 }
+
+// Bus effects and positional sound
+
+namespace {
+
+std::unique_ptr<Sound> sine(f32 hz, f32 seconds, f32 amplitude = 0.5f) {
+    std::vector<f32> mono(static_cast<usize>(seconds * Sound::sample_rate));
+    for (usize i = 0; i < mono.size(); ++i)
+        mono[i] = amplitude * std::sin(2 * pi * hz * static_cast<f32>(i) / Sound::sample_rate);
+    return Sound::from_mono(mono);
+}
+
+f32 peak_of(const std::vector<f32>& v, usize from = 0) {
+    f32 p = 0;
+    for (usize i = from; i < v.size(); ++i) p = std::max(p, std::abs(v[i]));
+    return p;
+}
+
+} // namespace
+
+TEST_CASE("audio: a low-pass bus muffles high notes and leaves low ones") {
+    auto high = sine(6000, 0.5f), low = sine(100, 0.5f);
+    std::vector<f32> out(2 * 4800);
+    for (int pass = 0; pass < 2; ++pass) {
+        AudioEngine audio;
+        audio.set_bus_effects(Bus::Effects, {.low_pass = 500});
+        audio.play(pass == 0 ? *high : *low);
+        audio.mix(out.data(), 4800);
+        audio.mix(out.data(), 4800); // the cutoff has glided down by now
+        if (pass == 0) CHECK(peak_of(out) < 0.05f);
+        else CHECK(peak_of(out) > 0.4f);
+    }
+    AudioEngine audio;
+    audio.set_bus_effects(Bus::Effects, {.high_pass = 2000});
+    audio.play(*low);
+    audio.mix(out.data(), 4800);
+    audio.mix(out.data(), 4800);
+    CHECK(peak_of(out) < 0.05f);
+    CHECK(audio.bus_effects(Bus::Effects).high_pass == 2000);
+}
+
+TEST_CASE("audio: reverb rings on after the sound stops") {
+    auto blip = sine(440, 0.05f);
+    std::vector<f32> out(2 * 4800);
+    AudioEngine dry, wet;
+    wet.set_bus_effects(Bus::Effects, {.reverb = 0.6f, .room_size = 0.8f});
+    dry.play(*blip);
+    wet.play(*blip);
+    dry.mix(out.data(), 4800);
+    wet.mix(out.data(), 4800);
+    dry.mix(out.data(), 4800);
+    CHECK(peak_of(out) == 0.0f);
+    wet.mix(out.data(), 4800); // 100-200 ms later: only the reverb is left
+    CHECK(peak_of(out) > 0.001f);
+}
+
+TEST_CASE("audio: positional sounds fade with distance and pan to their side") {
+    Attenuation a{.near = 100, .far = 1000, .pan_distance = 500};
+    CHECK(spatialize({50, 0}, {}, a).gain == 1.0f);
+    CHECK(spatialize({2000, 0}, {}, a).gain == 0.0f);
+    f32 mid = spatialize({550, 0}, {}, a).gain;
+    CHECK(mid > 0.0f);
+    CHECK(mid < 1.0f);
+    CHECK(spatialize({-600, 0}, {}, a).pan == -1.0f);
+    CHECK(spatialize({250, 0}, {}, a).pan == doctest::Approx(0.5f));
+
+    AudioEngine audio;
+    Sound loud(std::vector<f32>(2 * 2000, 1.0f));
+    Voice v = audio.play_at(loud, {400, 0}, {.loop = true}, {.near = 0, .far = 800, .pan_distance = 400});
+    std::vector<f32> out(2 * 16);
+    audio.mix(out.data(), 16);
+    CHECK(out[0] == doctest::Approx(0.0f).epsilon(1e-4)); // fully right
+    CHECK(out[1] > 0.3f);
+    audio.set_listener({400, 0}); // walk up to it
+    audio.mix(out.data(), 16);
+    CHECK(out[0] == doctest::Approx(out[1]));
+    CHECK(out[0] == doctest::Approx(1.0f).epsilon(0.01));
+    audio.set_position(v, {400, 900}); // it moves out of earshot
+    audio.mix(out.data(), 16);
+    CHECK(peak_of(out) == 0.0f);
+}
+
+#if PH_OPUS
+#include <ogg/ogg.h>
+#include <opus.h>
+
+namespace {
+
+// An Ogg Opus file made in memory: a stereo tone, 440 Hz left and 660 Hz right.
+std::vector<u8> make_opus(f32 seconds) {
+    int error = 0;
+    OpusEncoder* enc = opus_encoder_create(48000, 2, OPUS_APPLICATION_AUDIO, &error);
+    REQUIRE(enc);
+    opus_int32 lookahead = 0;
+    opus_encoder_ctl(enc, OPUS_GET_LOOKAHEAD(&lookahead));
+    ogg_stream_state os;
+    ogg_stream_init(&os, 1);
+    std::vector<u8> file;
+    auto write_pages = [&](bool flush) {
+        ogg_page page;
+        while (flush ? ogg_stream_flush(&os, &page) : ogg_stream_pageout(&os, &page)) {
+            file.insert(file.end(), page.header, page.header + page.header_len);
+            file.insert(file.end(), page.body, page.body + page.body_len);
+        }
+    };
+    auto packet = [&](std::vector<u8> data, ogg_int64_t granule, long number, bool bos, bool eos) {
+        ogg_packet p{data.data(), static_cast<long>(data.size()), bos ? 1L : 0L, eos ? 1L : 0L, granule, number};
+        ogg_stream_packetin(&os, &p);
+    };
+    std::vector<u8> head = {'O', 'p', 'u', 's', 'H', 'e', 'a', 'd', 1, 2,
+                            static_cast<u8>(lookahead), static_cast<u8>(lookahead >> 8), 0x80, 0xBB, 0, 0, 0, 0, 0};
+    packet(head, 0, 0, true, false);
+    write_pages(true);
+    std::vector<u8> tags = {'O', 'p', 'u', 's', 'T', 'a', 'g', 's', 4, 0, 0, 0, 'b', 'o', 'w', 'l', 0, 0, 0, 0};
+    packet(tags, 0, 1, false, false);
+    write_pages(true);
+
+    const int frame = 960; // 20 ms
+    int frames = static_cast<int>(seconds * 48000) / frame;
+    std::vector<f32> pcm(frame * 2);
+    std::vector<u8> out(4000);
+    for (int f = 0; f < frames; ++f) {
+        for (int i = 0; i < frame; ++i) {
+            f32 t = static_cast<f32>(f * frame + i) / 48000.0f;
+            pcm[i * 2] = 0.5f * std::sin(2 * pi * 440 * t);
+            pcm[i * 2 + 1] = 0.5f * std::sin(2 * pi * 660 * t);
+        }
+        int bytes = opus_encode_float(enc, pcm.data(), frame, out.data(), static_cast<opus_int32>(out.size()));
+        REQUIRE(bytes > 0);
+        packet(std::vector<u8>(out.begin(), out.begin() + bytes), lookahead + (f + 1) * frame, f + 2, false,
+               f == frames - 1);
+        write_pages(false);
+    }
+    write_pages(true);
+    ogg_stream_clear(&os);
+    opus_encoder_destroy(enc);
+    return file;
+}
+
+} // namespace
+
+TEST_CASE("audio: Opus sounds and music") {
+    CHECK(opus_supported());
+    std::vector<u8> file = make_opus(0.5f);
+    auto path = std::filesystem::temp_directory_path() / "ph_test_tone.opus";
+    REQUIRE(write_file_bytes(path, file.data(), file.size()));
+    AssetManager assets;
+    assets.mount("", path.parent_path());
+    register_asset_loaders(assets);
+    auto sound = assets.load<Sound>("ph_test_tone.opus");
+    REQUIRE(sound);
+    CHECK(sound->seconds() == doctest::Approx(0.5).epsilon(0.02));
+    CHECK(frequency(*sound->samples(), 0, 4000, 16000) == doctest::Approx(440).epsilon(0.03));
+    CHECK(frequency(*sound->samples(), 1, 4000, 16000) == doctest::Approx(660).epsilon(0.03));
+
+    auto music = Music::from_memory(file);
+    REQUIRE(music);
+    CHECK(music->codec() == Music::Codec::Opus);
+    CHECK(music->seconds() == doctest::Approx(0.5).epsilon(0.02));
+    AudioEngine audio;
+    audio.play_music(*music, {.loop = false});
+    std::vector<f32> chunk(2 * 480), all;
+    for (int i = 0; i < 200 && audio.music_playing(); ++i) {
+        audio.mix(chunk.data(), 480);
+        all.insert(all.end(), chunk.begin(), chunk.end());
+    }
+    CHECK_FALSE(audio.music_playing());
+    CHECK(frequency(all, 1, 4000, 16000) == doctest::Approx(660).epsilon(0.03));
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+}
+#else
+TEST_CASE("audio: without PH_OPUS, Opus files are refused clearly") { CHECK_FALSE(opus_supported()); }
+#endif
+
+TEST_CASE("audio: a voice's own filters, and changing them while it plays") {
+    auto high = sine(6000, 0.5f);
+    std::vector<f32> out(2 * 4800);
+    AudioEngine audio;
+    Voice muffled = audio.play(*high, {.loop = true, .low_pass = 500});
+    audio.mix(out.data(), 4800);
+    audio.mix(out.data(), 4800);
+    CHECK(peak_of(out) < 0.05f); // only this voice is filtered
+    Voice clear = audio.play(*high, {.loop = true});
+    audio.mix(out.data(), 4800);
+    CHECK(peak_of(out) > 0.4f);
+    audio.stop(clear);
+    audio.set_filters(muffled, 0); // off again: it glides back
+    audio.mix(out.data(), 4800);
+    audio.mix(out.data(), 4800);
+    CHECK(peak_of(out) > 0.4f);
+}
+
+TEST_CASE("audio: music ducks under dialogue and comes back") {
+    auto tone = sine(200, 2.0f, 0.3f);
+    auto line = sine(300, 0.3f, 0.3f);
+    std::vector<f32> out(2 * 960);
+    AudioEngine audio;
+    audio.set_ducking(Bus::Music, Ducking{.trigger = Bus::Voice, .depth = 0.6f, .attack = 0.02f, .release = 0.1f});
+    audio.play(*tone, {.loop = true, .bus = Bus::Music});
+    audio.mix(out.data(), 960);
+    CHECK(audio.duck_level(Bus::Music) == doctest::Approx(1.0f));
+    audio.play(*line, {.bus = Bus::Voice});
+    for (int i = 0; i < 10; ++i) audio.mix(out.data(), 960); // 0.2 s of talking
+    CHECK(audio.duck_level(Bus::Music) == doctest::Approx(0.4f).epsilon(0.05));
+    for (int i = 0; i < 50; ++i) audio.mix(out.data(), 960); // the line is over; a second later
+    CHECK(audio.duck_level(Bus::Music) > 0.95f);
+    audio.set_ducking(Bus::Music, std::nullopt);
+    CHECK(audio.duck_level(Bus::Music) == 1.0f);
+}

@@ -5,8 +5,9 @@
 #   ph_platform  window and input                                               (core, SDL3)
 #   ph_gfx       GPU device, textures, shaders, sprite batching, renderer        (core, ecs, SDL3, stb)
 #   ph_audio     mixer, sounds, streamed music                                   (core, SDL3, stb)
-#   ph_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide (core)
+#   ph_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide, colliders and triggers (core, ecs)
 #   ph_ui        immediate-mode game UI: panels, widgets, focus navigation, dialogue (gfx, platform)
+#   ph_net       UDP sockets, connections with reliable messages, lockstep and rollback   (core)
 #   ph_app       Engine/Game, main loop, dev tools                               (everything)
 
 set(PH_ENGINE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}" CACHE INTERNAL "")
@@ -28,15 +29,22 @@ find_package(Threads REQUIRED)
 
 ph_module(core
     SOURCES
+        core/src/archive.cpp
         core/src/assets.cpp
         core/src/core.cpp
         core/src/file.cpp
         core/src/jobs.cpp
         core/src/json.cpp
+        core/src/json_text.cpp
         core/src/localization.cpp
         core/src/profiler.cpp
         core/src/settings.cpp
+        core/src/xml.cpp
     PUBLIC_DEPS Threads::Threads)
+if(PH_TRACY)
+    target_link_libraries(ph_core PRIVATE Tracy::TracyClient)
+    target_compile_definitions(ph_core PRIVATE PH_TRACY=1)
+endif()
 
 ph_module(ecs
     SOURCES
@@ -50,15 +58,20 @@ ph_module(ecs
 ph_module(platform
     SOURCES
         platform/src/input.cpp
+        platform/src/system.cpp
         platform/src/window.cpp
     PUBLIC_DEPS ph_core SDL3::SDL3)
 
 ph_module(gfx
     SOURCES
+        gfx/src/bidi.cpp
+        gfx/src/color_glyphs.cpp
         gfx/src/device.cpp
+        gfx/src/gpu_particles.cpp
         gfx/src/loaders.cpp
         gfx/src/particles.cpp
         gfx/src/renderer.cpp
+        gfx/src/sprite.cpp
         gfx/src/sprite_sheet.cpp
         gfx/src/sprites.cpp
         gfx/src/text.cpp
@@ -72,27 +85,57 @@ endif()
 if(WIN32)
     target_link_libraries(ph_gfx PRIVATE d3dcompiler) # HLSL -> DXBC for the D3D12 backend
 endif()
+if(PH_HARFBUZZ)
+    target_link_libraries(ph_gfx PRIVATE ph_harfbuzz)
+    target_compile_definitions(ph_gfx PRIVATE PH_HARFBUZZ=1)
+else()
+    target_compile_definitions(ph_gfx PRIVATE PH_HARFBUZZ=0)
+endif()
 
 ph_module(audio
     SOURCES
         audio/src/audio.cpp
+        audio/src/opus.cpp
         audio/src/vorbis.cpp
     PUBLIC_DEPS ph_core SDL3::SDL3
     PRIVATE_DEPS ph_stb)
+if(PH_OPUS)
+    target_link_libraries(ph_audio PRIVATE opusfile)
+    target_compile_definitions(ph_audio PRIVATE PH_OPUS=1)
+endif()
 
 ph_module(physics
-    SOURCES physics/src/collision.cpp
-    PUBLIC_DEPS ph_core)
+    SOURCES
+        physics/src/colliders.cpp
+        physics/src/collision.cpp
+        physics/src/shapes.cpp
+    PUBLIC_DEPS ph_core ph_ecs)
+if(PH_BOX2D)
+    target_sources(ph_physics PRIVATE physics/src/rigid_bodies.cpp)
+    target_link_libraries(ph_physics PRIVATE box2d)
+    target_compile_definitions(ph_physics PUBLIC PH_BOX2D=1)
+endif()
 
 ph_module(ui
     SOURCES ui/src/ui.cpp
     PUBLIC_DEPS ph_gfx ph_platform)
 
+ph_module(net
+    SOURCES
+        net/src/host.cpp
+        net/src/socket.cpp
+    PUBLIC_DEPS ph_core)
+if(WIN32)
+    target_link_libraries(ph_net PRIVATE ws2_32)
+endif()
+
 ph_module(app
     SOURCES
         app/src/app.cpp
         app/src/dev_tools.cpp
+        app/src/icon.cpp
         app/src/hot_reload.cpp
+        app/src/inspector.cpp
         app/src/scene.cpp
     PUBLIC_DEPS ph_core ph_ecs ph_platform ph_gfx ph_audio ph_physics ph_ui)
 target_compile_definitions(ph_app PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}")
@@ -102,7 +145,7 @@ endif()
 
 add_library(ph_engine INTERFACE)
 add_library(ph::engine ALIAS ph_engine)
-target_link_libraries(ph_engine INTERFACE ph_app)
+target_link_libraries(ph_engine INTERFACE ph_app ph_net)
 # Dev builds expose Dear ImGui to games so they can draw their own tool windows in Game::dev_ui.
 if(PH_DEV_TOOLS)
     target_link_libraries(ph_engine INTERFACE ph_imgui)

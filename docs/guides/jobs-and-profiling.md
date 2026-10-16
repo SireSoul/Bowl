@@ -89,7 +89,22 @@ The overlay's **Profiler** panel shows the last frame's zones, sorted by time, w
 shows recent frame times. From code: `profiler::last_frame()` returns the zones and `profiler::frame_history()` the
 frame times.
 
-For timelines (when did each thread do what), a Tracy integration is on the [roadmap](../roadmap.md).
+### Tracy
+
+For a timeline of what every thread did and when, build with `-DPH_TRACY=ON` and connect the
+[Tracy](https://github.com/wolfpld/tracy) profiler (version 0.12) to the running game:
+
+```bash
+cmake --preset dev -DPH_TRACY=ON -B build/tracy
+```
+
+Everything the overlay's profiler measures also goes to Tracy, with the file and line of each `PH_PROFILE_SCOPE`:
+engine phases, every system, your own zones. On top of that you get one frame mark per frame, named worker threads,
+log lines (sent while Tracy is connected) and plots of entities, sprites, draw calls and fixed ticks per frame. Add
+your own plots with `profiler::plot("enemies", count)`; the name must be a string literal.
+
+Tracy runs on demand: until the profiler connects, zones cost about what they cost without it. It only accepts
+connections from the same machine. GPU timings aren't available, because SDL_GPU doesn't expose timestamp queries.
 
 ## Timing small things
 

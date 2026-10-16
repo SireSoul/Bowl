@@ -27,7 +27,12 @@ struct Entity {
     u32 index = 0;
     u32 generation = 0;
 
+    // Systems' command buffers hand out stand-in ids with this generation (never a real one); they become real
+    // entities, in a fixed order, when the commands are applied. See CommandBuffer::create.
+    static constexpr u32 placeholder_generation = 0xFFFFFFFFu;
+
     constexpr bool is_null() const { return generation == 0; }
+    constexpr bool is_placeholder() const { return generation == placeholder_generation; }
     constexpr explicit operator bool() const { return generation != 0; }
     constexpr u64 bits() const { return (static_cast<u64>(generation) << 32) | index; }
     static constexpr Entity from_bits(u64 b) { return {static_cast<u32>(b), static_cast<u32>(b >> 32)}; }
@@ -60,7 +65,11 @@ inline bool ph_from_json(const json::Value& j, Entity& e, serial::Context& ctx) 
     }
     return true;
 }
-inline void ph_visit(reflect::FieldVisitor& v, std::string_view name, Entity& e) { v.entity(name, e.bits()); }
+inline void ph_visit(reflect::FieldVisitor& v, std::string_view name, Entity& e) {
+    u64 bits = e.bits();
+    v.entity_ref(name, bits);
+    e = Entity::from_bits(bits);
+}
 
 using ComponentId = u16;
 inline constexpr usize max_components = PH_ECS_MAX_COMPONENTS;

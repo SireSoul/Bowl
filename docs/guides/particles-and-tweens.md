@@ -90,7 +90,31 @@ sparks.clear();
 
 Each system has its own seeded random generator, so the same seed and the same calls give the same particles.
 Particles are simulated on the CPU, stored as parallel arrays and drawn as sprites: thousands are cheap, but they're
-visual effects, not physics. GPU particles are on the [roadmap](../roadmap.md).
+visual effects, not physics.
+
+### GPU particles
+
+For hundreds of thousands of particles, `gfx::GpuParticles` simulates and draws them entirely on the GPU: one compute
+dispatch and one draw call a frame, with nothing sent from the CPU but the settings.
+
+```cpp
+#include "ph/gfx/gpu_particles.hpp"
+
+gfx::GpuParticles fountain;
+fountain.init(engine.gpu(), engine.assets(), 200000);   // capacity
+
+// render, every frame
+gfx::GpuParticleSettings s{.rate = 60000, .position = {0, 200}, .velocity = {0, -520}, .speed_spread = 160,
+                           .gravity = {0, 420}, .life_min = 1.5f, .life_max = 3, .size_start = 5, .size_end = 1,
+                           .color_start = {0.5f, 0.8f, 2.0f, 1}, .color_end = {0.9f, 0.3f, 1.4f, 0}};
+fountain.update(engine.renderer(), engine.delta(), s);
+fountain.draw(engine.renderer(), engine.camera(), &engine.renderer().light_texture());
+```
+
+`burst(n)` adds particles at the next update and `clear()` removes them all. When the emitter makes more particles
+than its capacity holds, the oldest are reused. All particles share one texture and one depth, and draw in
+submission order with the scene. They're not deterministic and can't be read back by game code; use
+`ParticleEmitter` for that. The sprites sample shows a fountain with `--gpu-particles`.
 
 ## Easing and tweens
 

@@ -74,6 +74,11 @@ public:
     void begin(const Camera2D& camera, SpriteSort sort = SpriteSort::Depth, BlendMode blend = BlendMode::Alpha,
                const Material* material = nullptr);
     void draw(const Texture& texture, const SpriteInstance& sprite);
+    // Null texture: a solid quad in sprite.color.
+    void draw(const Texture* texture, const SpriteInstance& sprite) {
+        sprites_.push_back(sprite);
+        textures_.push_back(texture);
+    }
     // Convenience: a texture at its pixel size, centered at position.
     void draw(const Texture& texture, Vec2 position, Color color = Color::white(), f32 depth = 0);
     // A sub-rectangle of a texture (pixel coordinates), e.g. a sprite sheet frame.
@@ -86,12 +91,17 @@ public:
     // Nine-slice: corners stay their size, edges stretch one way, the middle both. insets = left, top, right, bottom
     // border sizes in texture pixels (drawn at that many world units).
     void draw_nine_slice(const Texture& texture, Rect dest, Vec4 insets, Color color = Color::white(), f32 depth = 0);
+    // The same, from a part of a texture (an atlas or sprite sheet frame) given in pixels.
+    void draw_nine_slice(const Texture& texture, Rect source, Rect dest, Vec4 insets, Color color = Color::white(),
+                         f32 depth = 0);
 
     usize size() const { return sprites_.size(); }
     const Camera2D& camera() const { return camera_; }
 
 private:
     friend class Renderer;
+    friend class StaticSprites;
+    friend void sprite_order(const SpriteBatch&, std::vector<u32>&);
     Camera2D camera_;
     SpriteSort sort_ = SpriteSort::Depth;
     BlendMode blend_ = BlendMode::Alpha;
@@ -99,5 +109,36 @@ private:
     std::vector<SpriteInstance> sprites_;
     std::vector<const Texture*> textures_; // nullptr = the renderer's white texture
 };
+
+// Sprites uploaded to GPU memory once and then drawn every frame without being sent again: the ground of a big map,
+// a static backdrop. Build it from a filled batch (its sort order is kept); rebuild it when the sprites change.
+// Textures are kept by pointer, so rebuild after they hot-reload too. Draw it with Renderer::submit.
+class StaticSprites : NonCopyable {
+public:
+    StaticSprites() = default;
+    ~StaticSprites();
+
+    bool build(GpuDevice& device, const SpriteBatch& batch);
+    void clear();
+    usize size() const { return count_; }
+    bool empty() const { return count_ == 0; }
+    // World rectangle around every sprite, for culling.
+    Rect bounds() const { return bounds_; }
+
+private:
+    friend class Renderer;
+    struct Run {
+        u32 first, count;
+        const Texture* texture; // null: the white texture
+    };
+    GpuDevice* device_ = nullptr;
+    SDL_GPUBuffer* buffer_ = nullptr;
+    u32 count_ = 0;
+    std::vector<Run> runs_;
+    Rect bounds_;
+};
+
+// The order a batch draws its sprites in (indices into it), per its SpriteSort.
+void sprite_order(const SpriteBatch& batch, std::vector<u32>& order);
 
 } // namespace ph::gfx

@@ -1,4 +1,5 @@
-// Shared helpers for engine and game shaders: #include "common.glsl"
+// Shared helpers for engine and game shaders. Engine shaders: #include "common.glsl"; game shaders:
+// #include "engine/shaders/common.glsl".
 
 vec4 premultiply(vec4 c) { return vec4(c.rgb * c.a, c.a); }
 

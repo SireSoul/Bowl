@@ -21,10 +21,32 @@ Asset<gfx::Font> font = engine.assets().load<gfx::Font>("engine/fonts/Roboto-Med
 ```
 
 `load` returns the cached asset if it's already loaded, so asking twice is cheap and both handles share one copy.
-Loading happens synchronously on the main thread. Load what a scene needs when it starts (in `init` or
-`Scene::enter`), not in the middle of gameplay.
+`load` finishes before it returns. Load what a scene needs when it starts (in `init` or `Scene::enter`), or load it
+in the background.
 
 The asset manager is main-thread only; don't load from systems running on workers.
+
+### Loading in the background
+
+`load_async` returns the handle at once and does the slow part on a loading thread: reading the file, and for
+pictures and sounds, decoding it. What has to happen on the main thread (creating the texture on the GPU) happens
+when the App finishes the load, at the start of a frame. The handle is empty until then.
+
+```cpp
+// a loading screen
+for (const char* path : level_art) art.push_back(engine.assets().load_async<gfx::Texture>(path));
+music = engine.assets().load_async<audio::Music>("music/forest.ogg");
+
+// every frame
+if (engine.assets().loading() == 0) engine.scenes().replace(...);   // everything's in
+draw_progress_bar(1.0f - engine.assets().loading() / f32(total));
+```
+
+- Check the handle before using it (`if (art[i])`). Calling `load` for an asset still loading finishes it on the spot,
+  so code that needs it right away still gets it.
+- Files load one at a time, in the order asked, so the first requested arrive first.
+- Every type can load in the background. Types with a *decoder* (textures and sounds) do their decoding on the
+  loading thread too; others only read the file there. Your own types can have one: see below.
 
 ## Virtual paths and mounts
 
@@ -35,15 +57,36 @@ The engine sets up these mounts:
 
 | Prefix | Dev builds | All builds |
 | --- | --- | --- |
-| `engine/` | `<engine source>/engine/assets/` first | `<exe dir>/engine/` |
-| (none) | your game's `ASSETS` folder first | `<exe dir>/assets/` |
+| `engine/` | `<engine source>/engine/assets/` first | `<exe dir>/engine.phpak` if it's there, else `<exe dir>/engine/` |
+| (none) | your game's `ASSETS` folder first | `<exe dir>/assets.phpak` if it's there, else `<exe dir>/assets/` |
 
 So `"characters/hero.png"` is `assets/characters/hero.png` in your source tree, and `"engine/fonts/Roboto-Medium.ttf"`
 is the engine's font. Because dev builds read the source folders directly, saving a file there is all it takes to
 update the game. Release builds read only the copies next to the executable.
 
-Add your own mounts with `assets.mount(prefix, folder)` (for mods or downloadable content, for example);
-`assets.resolve(path)` returns the real file a path maps to, if any.
+Add your own mounts with `assets.mount(prefix, folder)` (for mods or downloadable content, for example), or
+`assets.mount_archive(prefix, file)` for an archive. `assets.read(path)` reads a file's bytes from whichever mount
+has it, and `assets.exists(path)` says whether one does. `assets.resolve(path)` returns the real file a path maps to,
+for code that needs a file on disk; files inside archives have none.
+
+### Archives
+
+An archive (`.phpak`) holds a whole folder in one file. Shipping builds made with `PH_PACK_ASSETS` (on in the
+`release` preset) put `engine/` and `assets/` into `engine.phpak` and `assets.phpak`, and the engine mounts those
+instead: fewer files to install, and nothing for players to poke at by accident. The `ph-pack` tool makes and lists
+them:
+
+```bash
+ph-pack assets -o assets.phpak
+```
+
+```bash
+ph-pack --list assets.phpak
+```
+
+Files are stored as they are, without compression; pictures and sounds are compressed already. Archives are read
+only and never hot-reload. In code, `ph::Archive` (`ph/core/archive.hpp`) opens one and `ph::write_archive` makes
+one.
 
 ## Asset handles
 
@@ -154,6 +197,19 @@ which files the asset depends on, so editing any of them reloads it. A loader th
 (`ctx.assets().load<gfx::Texture>(...)`) gets those reloaded on their own.
 
 Register loaders in `Game::init`, before loading. Registering a loader for a type that already has one replaces it.
+
+For background loads, a type can also have a decoder: a thread-safe function that turns the file's bytes into
+something that saves the loader work. The loader finds it in `ctx.prepared<T>()`:
+
+```cpp
+engine.assets().register_decoder<Dialogue>([](std::string_view, std::span<const u8> bytes) -> std::shared_ptr<void> {
+    return std::make_shared<json::ParseResult>(json::parse({reinterpret_cast<const char*>(bytes.data()), bytes.size()}));
+});
+// in the loader:
+if (auto* parsed = ctx.prepared<json::ParseResult>()) { /* use it instead of reading and parsing */ }
+```
+
+A plain `load` never calls the decoder, so the loader must still work without it.
 
 ## Errors
 

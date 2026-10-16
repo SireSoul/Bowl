@@ -1,6 +1,7 @@
 // ph-shaderc: compiles a GLSL shader into a .phsh bundle (SPIR-V + MSL + HLSL).
 //
 //     ph-shaderc sprite.frag.glsl -o sprite.frag.phsh [--depfile sprite.frag.phsh.d] [-g] [--print-msl|--print-hlsl]
+//                [--include <prefix>=<folder>]...
 
 #include "ph/core/file.hpp"
 #include "ph/shaderc/shaderc.hpp"
@@ -8,6 +9,8 @@
 #include <cstdio>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -24,16 +27,21 @@ static std::string depfile_escape(const fs::path& p) {
 int main(int argc, char** argv) {
     fs::path input, output, depfile;
     bool debug = false, print_msl = false, print_hlsl = false;
+    std::vector<std::pair<std::string, fs::path>> include_roots;
     for (int i = 1; i < argc; ++i) {
         std::string_view arg = argv[i];
         if (arg == "-o" && i + 1 < argc) output = argv[++i];
         else if (arg == "--depfile" && i + 1 < argc) depfile = argv[++i];
-        else if (arg == "-g") debug = true;
+        else if (arg == "--include" && i + 1 < argc) { // engine/shaders/=/path/to/engine/assets/shaders
+            std::string_view spec = argv[++i];
+            std::size_t eq = spec.find('=');
+            if (eq != std::string_view::npos) include_roots.emplace_back(spec.substr(0, eq), fs::path(spec.substr(eq + 1)));
+        } else if (arg == "-g") debug = true;
         else if (arg == "--print-msl") print_msl = true;
         else if (arg == "--print-hlsl") print_hlsl = true;
         else if (arg == "-h" || arg == "--help") {
             std::puts("usage: ph-shaderc <input.(vert|frag).glsl> -o <output.phsh> [--depfile <file>] [-g] "
-                      "[--print-msl] [--print-hlsl]");
+                      "[--print-msl] [--print-hlsl] [--include <prefix>=<folder>]");
             return 0;
         } else input = arg;
     }
@@ -59,6 +67,7 @@ int main(int argc, char** argv) {
     options.stage = *stage;
     options.source_path = fs::absolute(input);
     options.debug_info = debug;
+    options.include_roots = include_roots;
     auto result = ph::shaderc::compile_glsl(*source, options);
     if (!result.log.empty()) std::fputs(result.log.c_str(), result.ok ? stdout : stderr);
     if (!result.ok) return 1;

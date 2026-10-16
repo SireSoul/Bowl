@@ -4,14 +4,17 @@
 
 #if PH_DEV_TOOLS
 
+#include "ph/app/inspector.hpp"
 #include "ph/core/file.hpp"
 #include "ph/core/profiler.hpp"
+#include "ph/ecs/hierarchy.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlgpu3.h>
 
 #include <algorithm>
+#include <cstring>
 #include <format>
 
 namespace ph {
@@ -30,8 +33,11 @@ DevTools::DevTools(Engine& engine) : engine_(engine) {
     style.FontScaleDpi = scale;
     style.WindowRounding = 6;
     style.FrameRounding = 4;
-    if (auto font = engine.assets().resolve("engine/fonts/Roboto-Medium.ttf"))
-        io.Fonts->AddFontFromFileTTF(font->string().c_str(), 15.0f);
+    if (auto font = engine.assets().read("engine/fonts/Roboto-Medium.ttf")) {
+        void* data = IM_ALLOC(font->size()); // the atlas owns and frees it
+        std::memcpy(data, font->data(), font->size());
+        io.Fonts->AddFontFromMemoryTTF(data, static_cast<int>(font->size()), 15.0f);
+    }
 
     ImGui_ImplSDL3_InitForSDLGPU(engine.window().handle());
     ImGui_ImplSDLGPU3_InitInfo init{};
@@ -59,12 +65,14 @@ DevTools::~DevTools() {
 }
 
 void DevTools::handle_event(const SDL_Event& event) {
-    if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F1 && !event.key.repeat) visible_ = !visible_;
+    // Tools built on the engine (dev_ui_always) keep F1 for themselves; their overlay key is F12.
+    SDL_Scancode toggle = engine_.config().dev_ui_always ? SDL_SCANCODE_F12 : SDL_SCANCODE_F1;
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == toggle && !event.key.repeat) visible_ = !visible_;
     ImGui_ImplSDL3_ProcessEvent(&event);
 }
 
 void DevTools::begin_frame() {
-    frame_open_ = visible_;
+    frame_open_ = visible_ || engine_.config().dev_ui_always;
     if (!frame_open_) {
         engine_.input().set_blocked(false, false);
         return;
@@ -78,8 +86,10 @@ void DevTools::begin_frame() {
 
 void DevTools::end_frame(Game& game) {
     if (!frame_open_) return;
-    draw_main();
-    draw_inspector();
+    if (visible_) {
+        draw_main();
+        draw_inspector();
+    }
     game.dev_ui(engine_);
     engine_.scenes().dev_ui(engine_);
     ImGui::Render();
@@ -88,7 +98,7 @@ void DevTools::end_frame(Game& game) {
 void DevTools::draw_main() {
     ImGui::SetNextWindowPos({12, 12}, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize({420, 560}, ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("PLACEHOLDERENGINENAME")) {
+    if (!ImGui::Begin("Bowl")) {
         ImGui::End();
         return;
     }
@@ -197,61 +207,6 @@ void DevTools::draw_systems(const char* label, ecs::Schedule& schedule) {
     ImGui::PopID();
 }
 
-namespace {
-
-// Edits reflected fields with ImGui widgets.
-class ImGuiFieldEditor final : public reflect::FieldVisitor {
-public:
-    explicit ImGuiFieldEditor(ecs::Entity* select) : select_(select) {}
-
-    void boolean(std::string_view name, bool& v) override {
-        ImGui::Checkbox(label(name), &v);
-    }
-    void integer(std::string_view name, i64& v, i64 min, i64 max) override {
-        if (ImGui::DragScalar(label(name), ImGuiDataType_S64, &v, 0.2f, &min, &max)) v = std::clamp(v, min, max);
-    }
-    void real(std::string_view name, f64& v) override {
-        ImGui::DragScalar(label(name), ImGuiDataType_Double, &v, 0.05f);
-    }
-    void text(std::string_view name, std::string& v) override {
-        char buffer[512];
-        std::snprintf(buffer, sizeof buffer, "%s", v.c_str());
-        if (ImGui::InputText(label(name), buffer, sizeof buffer)) v = buffer;
-    }
-    void vector(std::string_view name, f32* values, int count) override {
-        ImGui::DragScalarN(label(name), ImGuiDataType_Float, values, count, 0.25f);
-    }
-    void color(std::string_view name, Color& c) override {
-        ImGui::ColorEdit4(label(name), &c.r, ImGuiColorEditFlags_Float);
-    }
-    void entity(std::string_view name, u64 bits) override {
-        ecs::Entity e = ecs::Entity::from_bits(bits);
-        if (!e) {
-            ImGui::TextDisabled("%.*s: none", static_cast<int>(name.size()), name.data());
-            return;
-        }
-        std::string text = std::format("{}: entity {}:{}##{}", name, e.index, e.generation, name);
-        if (ImGui::SmallButton(text.c_str()) && select_) *select_ = e; // jump to it
-    }
-    bool begin_group(std::string_view name) override {
-        return ImGui::TreeNodeEx(label(name), ImGuiTreeNodeFlags_DefaultOpen);
-    }
-    void end_group() override { ImGui::TreePop(); }
-    void unsupported(std::string_view name, std::string_view type) override {
-        ImGui::TextDisabled("%.*s: %.*s", static_cast<int>(name.size()), name.data(), static_cast<int>(type.size()),
-                            type.data());
-    }
-
-private:
-    const char* label(std::string_view name) {
-        label_.assign(name);
-        return label_.c_str();
-    }
-    std::string label_;
-    ecs::Entity* select_;
-};
-
-} // namespace
 
 void DevTools::draw_entities() {
     auto& world = engine_.world();
@@ -272,23 +227,34 @@ void DevTools::draw_entities() {
             for (const auto& w : ctx.warnings) warn("  {}", w);
         }
     }
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##filter", "filter: component or name words, #index", filter_, sizeof filter_);
+    std::string_view filter = filter_;
+    std::vector<ecs::Entity> shown;
     for (const auto& a : world.archetypes()) {
         if (a->empty()) continue;
+        shown.clear();
+        for (ecs::Entity e : a->entities())
+            if (filter.empty() || inspector::matches(world, e, filter)) shown.push_back(e);
+        if (shown.empty()) continue;
         std::string name;
         for (ecs::ComponentId c : a->components()) {
             if (!name.empty()) name += ", ";
             name += ecs::component_info(c).name;
         }
         if (name.empty()) name = "(no components)";
-        std::string label = std::format("{} x{}##{}", name, a->size(), a->id());
+        std::string label = std::format("{} x{}##{}", name, shown.size(), a->id());
+        if (!filter.empty()) ImGui::SetNextItemOpen(true, ImGuiCond_Appearing);
         if (ImGui::TreeNode(label.c_str())) {
-            usize shown = std::min<usize>(a->size(), 64);
-            for (usize i = 0; i < shown; ++i) {
-                ecs::Entity e = a->entities()[i];
+            usize count = std::min<usize>(shown.size(), 64);
+            for (usize i = 0; i < count; ++i) {
+                ecs::Entity e = shown[i];
                 std::string item = std::format("entity {} (gen {})", e.index, e.generation);
+                if (const auto* n = world.try_get<ecs::Name>(e)) item += "  " + n->value;
+                item += std::format("##{}", e.bits());
                 if (ImGui::Selectable(item.c_str(), selected_ == e)) selected_ = e;
             }
-            if (a->size() > shown) ImGui::TextDisabled("... %zu more", a->size() - shown);
+            if (shown.size() > count) ImGui::TextDisabled("... %zu more", shown.size() - count);
             ImGui::TreePop();
         }
     }
@@ -324,25 +290,7 @@ void DevTools::draw_inspector() {
         world.destroy(e);
         selected_ = {};
     }
-    if (world.alive(e)) {
-        std::vector<ecs::ComponentId> comps(world.components_of(e).begin(), world.components_of(e).end());
-        for (ecs::ComponentId c : comps) {
-            const ecs::ComponentInfo& info = ecs::component_info(c);
-            std::string header(info.name);
-            if (!ImGui::CollapsingHeader(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) continue;
-            ImGui::PushID(c);
-            if (info.visit) {
-                ImGuiFieldEditor editor(&selected_);
-                info.visit(world.component_ptr(e, c), editor);
-            } else if (info.size == 0) {
-                ImGui::TextDisabled("tag");
-            } else {
-                ImGui::TextDisabled("not reflected: add PH_REFLECT(%.*s, fields...) to edit it here",
-                                    static_cast<int>(info.name.size()), info.name.data());
-            }
-            ImGui::PopID();
-        }
-    }
+    inspector::components(world, e, engine_.assets(), &selected_);
     ImGui::End();
     if (!open) selected_ = {};
 }

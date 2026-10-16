@@ -6,6 +6,99 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- iOS and iPadOS: the `ios` preset (Xcode project, iOS 17+; `ios-simulator` and `ios-device` build presets) and
+  `host-tools`; `ph_add_game` makes app bundles with an Info.plist, an asset-catalog icon and packed assets
+  (`ORIENTATION`, `PH_IOS_TEAM`). `PH_HOST_TOOLS` for cross builds. `Input::touches()` and `Device::Touch`,
+  `Window::safe_area()`, and `Engine::suspended()`: games stop updating and drawing in the background.
+- Right-to-left text: paragraphs mixing Hebrew or Arabic with left-to-right text are drawn in reading order, with
+  mirrored brackets (`ph/gfx/bidi.hpp`, `TextStyle::direction`); typewriter reveals follow reading order.
+- Text shaping with HarfBuzz (`PH_HARFBUZZ`, `gfx::text_shaping()`): joined Arabic, Devanagari and other complex
+  scripts, ligatures and OpenType kerning. `PlacedGlyph::glyph_index`.
+- Color emoji: fonts with `sbix`, `CBDT`/`CBLC` or `COLR`/`CPAL` (v0) tables draw their characters in color
+  (`Font::Glyph::color`, `PlacedGlyph::color_glyph`); `Font::page_pixels`.
+- API reference: `docs/reference/api`, one page per module made from the headers' comments by `ph-apidoc`
+  (`ph_api_docs` target).
+- Asset archives: `ph::Archive`, `write_archive`, `AssetManager::mount_archive`, `read` and `exists`; the `ph-pack`
+  tool; `PH_PACK_ASSETS` (on in the `release` preset) ships `engine.phpak` and `assets.phpak`, which the App mounts
+  when they're next to the game.
+- Packaging: `ph_add_game(... NAME <name> ICON <png> [ICON_PIXEL_ART])` makes the `.icns`, the `.ico` (built into the
+  `.exe`), Linux PNG and desktop files, and the window icon (`ph::embedded_icon`, `Window::set_icon`); the `ph-icon`
+  tool. Installing signs macOS bundles (`PH_MACOS_SIGN_IDENTITY`, ad hoc by default; `PH_MACOS_ENTITLEMENTS`) and,
+  with `PH_WINDOWS_SIGN_COMMAND`, Windows executables; `cmake/PhNotarize.cmake` notarizes and staples. `ph_package`
+  makes installers with `cpack` (DMG, NSIS, ZIP, TGZ), an AppImage (`<game>_appimage`) and a Flatpak manifest
+  (`PH_LINUX_SHARE`).
+- Steam Deck: `ph::is_steam_deck()`, fullscreen there by default (`AppConfig::fullscreen_on_steam_deck`), and
+  `--deck` to preview a game in a 1280 x 800 window. `Input::last_device()` for keyboard or gamepad prompts.
+- `gfx::decode_png`.
+- Networking (`ph_net`, guide in docs/guides/networking.md): `net::Host`, connections over UDP with reliable ordered
+  messages (resent until acknowledged, up to 64 KB) and unreliable ones, timeouts, stats and a simulated bad network;
+  `net::Lockstep` and `net::Rollback` (guessed inputs, saved states, re-running ticks when a guess was wrong).
+- Tilemaps: Tiled object templates (`.tj`, `.tx`) are filled in when maps load, tile templates mapped onto the
+  map's tilesets; terrain sets as data (`WangSet`, `Tileset::wang_sets`, `corner_tile`, `fill_from_corners`).
+- Box2D: `physics::Joint` (distance and rope, revolute, prismatic, weld, wheel; springs, limits, motors) and the
+  `ContactEvents` resource (touches began and ended, impacts with point and speed; `PhysicsSettings::hit_speed`).
+- Audio: per-voice filters (`PlayParams::low_pass`, `high_pass`, `set_filters`) and ducking (`set_ducking`, `Ducking`,
+  `duck_level`).
+- Background asset loading: `AssetManager::load_async`, `loading`, `finish_loads` (the App calls it every frame) and
+  `register_decoder`. Textures and sounds decode on the loading thread; other types read their file there.
+- `ecs::World::compact` frees archetypes no entity uses; queries notice (`World::layout_epoch`) and refresh.
+- Game shaders can `#include "engine/shaders/common.glsl"`: ph-shaderc takes include roots (`--include
+  <prefix>=<folder>`, `CompileOptions::include_roots`), and builds and dev reloads pass the engine's.
+- Bowl Editor: Level, Data and Paint workspaces. Data edits every JSON file in the assets folder as a tree and as text,
+  keeping comments and layout; Paint is a pixel-art canvas (pencil, eraser, fill, picker, palette, undo); the Brush
+  tool paints on art where it stands in the level; the Region tool and handles draw and resize trigger regions and
+  colliders, which are all shown on the level. `--game` works on Windows through `<game>_editor_code.dll`.
+- `json::TextDocument`: edits JSON text in place (set, insert, erase) without disturbing comments or layout.
+- Inspector: `std::vector` and `std::array` fields are editable (`FieldVisitor::begin_list`), components can be removed
+  and added (`inspector::add_component_menu`), and the overlay's entity list has a filter (`inspector::matches`).
+- Compute shaders: `ph-shaderc` compiles `.comp.glsl` for every backend in SDL_GPU's compute layout;
+  `gfx::ComputeShader` assets, `gfx::GpuBuffer`, `Renderer::dispatch` (`ComputeDispatch`), and
+  `Renderer::submit` for sprites a compute shader wrote. `gfx::GpuParticles`: particles simulated and drawn on the GPU
+  (the sprites sample's `--gpu-particles`).
+- Direct3D 12 keeps the DXBC it compiles from HLSL in `shader-cache/` in the user data folder
+  (`GpuDeviceDesc::shader_cache`, `load_cached_shader`, `store_cached_shader`).
+- Look: your own full-screen effects (`Renderer::post_effects`, `PostEffect`, `PostStage::Scene` and `Final`),
+  color-grading lookup tables (`PostSettings::lut`, `make_neutral_lut`), chromatic aberration and film grain;
+  emissive sprites (`submit_emissive`); normal-mapped lighting and shadows from occluders (`light_material`,
+  `submit_normals`, `submit_occluders`). The isometric sample's torch casts shadows; the sprites sample has `--film`.
+- Saving: `ecs::Prefab` assets (`.prefab`, one entity or several) and `ecs::instantiate`; a binary document form
+  (`json::encode_binary`, `decode_binary`, `parse_any`) read by every world loader and Bowl Editor; save-file
+  migrations (`ecs::Migrations`, `serial::Context::game_version`, `rename_component`, `rename_field`,
+  `remove_component`, `for_each_saved`). `json::Value::find` (mutable) and `erase`.
+- Audio: bus effects (`set_bus_effects`: low-pass, high-pass, reverb, all smoothed), positional sounds (`play_at`,
+  `set_position`, `set_listener`, `Attenuation`, `spatialize`), and Ogg Opus sounds and music with `-DPH_OPUS=ON`.
+- Tilemaps: Tiled XML maps and tilesets (`.tmx`, `.tsx`, `Tilemap::parse_tmx`), staggered and hexagonal maps
+  (`Tilemap::cell_at`, `pixel_size`), and `TilemapCache`, which keeps the flat layers of big maps in GPU memory as
+  chunks. `TilemapDrawOptions::layers` draws only the flat or the y-sorted layers.
+- `gfx::StaticSprites` and `Renderer::submit(StaticSprites, camera)`: sprites uploaded once and drawn every frame
+  without being sent again. `gfx::sprite_order`.
+- `ph/core/xml.hpp`: a small XML reader.
+- Text: outlines and shadows (`TextStyle::outline`, `shadow`), rich text markup (`[color=#hex]`, `[wave]`, `[shake]`),
+  fallback fonts (`Font::set_fallbacks`, `has_glyph`), distance-field text (`TextStyle::sdf`, `sdf_text_material`), and
+  `layout_text` for drawing laid-out characters yourself. `Font::advance` measures without rasterizing.
+- Sprite sheets: Aseprite slices (`SpriteSlice`, `slice_rect`, `draw_nine_slice` from a slice), animation events from
+  tag user data (`SpriteAnimator::fired`), frame names (`frame_index`). `SpriteBatch::draw_nine_slice` from part of a
+  texture.
+- `ph-atlas`: packs a folder of PNGs into an atlas with sprite-sheet JSON (trimming, padding, numbered files become
+  animations). The packer is the `ph_atlas` library.
+- Collision: `Capsule` and convex `Polygon` shapes, and `Shape` (any of the four) with `collide`, `overlaps`,
+  `contains`, `raycast` and `bounds` for every pair.
+- `physics::Collider` component, `update_triggers` and the `TriggerEvents` resource (entered, inside, exited, with
+  layers), and `overlapping` queries. `ph_physics` now depends on `ph_ecs`.
+- Optional Box2D v3 rigid bodies (`-DPH_BOX2D=ON`): `RigidBody`, `PhysicsSettings`, `step_physics`, `apply_impulse`.
+- Bowl Editor (`bowl-editor`): lays out levels in `.world` files. Art shelf with thumbnails, place and select tools,
+  box select, groups, align, copy and paste, undo and redo, autosave, an inspector with cards, and the game's own
+  components through `--game`. Unknown components are kept as JSON so saving never loses data.
+- `gfx::Sprite`, `gfx::draw_sprites` and `gfx::sprite_bounds`: art on an entity, drawn at its `GlobalTransform2D`.
+- `ecs::WorldFile`: `.world` files as hot-reloading assets. `ecs::Name`: a readable name for an entity.
+- `World::remove_component` by id. Asset fields are editable through reflection (`FieldVisitor::asset`).
+- `ph/app/inspector.hpp`: the overlay's component editor, shared with tools. `AppConfig::dev_ui_always` for tools
+  built on the engine (their overlay key moves to F12).
+- Game-code hot reload on Windows; CI runs a real reload there on every push.
+- Game-code hot reload rebuilds the code by itself when a source file is saved; compile errors go to the log and the
+  previous code keeps running. `--no-auto-build` turns it off. `AutoBuilder` does the watching and building.
+- Tracy support (`-DPH_TRACY=ON`): profiler zones with source locations, frame marks, worker thread names, log
+  lines and plots show up in the Tracy profiler. `profiler::plot` and `profiler::set_thread_name`.
 - `tutorial` sample: Fireflies, the game `docs/tutorial.md` builds step by step. CI compiles it, so the tutorial stays
   correct.
 - `update_particle_emitters` and `draw_particle_emitters` run every `gfx::ParticleEmitter` in a world. The component
@@ -17,6 +110,21 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- The tools a build makes (`ph-shaderc`, `ph-icon`, `ph-pack`, `ph-atlas`, `ph-apidoc`) are in its `bin` folder.
+- Systems' command buffers hand out stand-in ids (`Entity::is_placeholder`) that become real entities, in system and
+  chunk order, when applied: entity ids are now the same every run whatever the thread count. Stand-ins in the
+  buffer's commands and in reflected components' entity fields are swapped for the real ids.
+  `reflect::FieldVisitor::entity_ref` lets a visitor change entity references.
+- **Breaking:** game-code hot reload keeps the world instead of saving and reloading it. Entity ids no longer change,
+  and plain-data components survive whether or not they're reflected; savable components that aren't plain data are
+  saved and loaded back as before. The engine registers its own component types at startup.
+- `ecs::World::forget_code` drops hooks, resources and deferred commands but keeps entities. Dormant component types
+  keep their layout, and a type that comes back with a different layout gets a new id.
+- `.phsh` bundles are format version 2 (compute fields); version 1 bundles still load.
+- Lighting is applied in its own pass before bloom (so scene effects see the lit image); bloom still comes from the
+  scene's own bright pixels.
+- **Breaking:** `audio::Music`'s constructor takes the codec (`Music::Codec`). Loading through assets is unchanged.
+- The mixer sums each bus separately before applying its gain, so bus effects can work on it.
 - Font atlases upload only the rectangle holding newly added glyphs, instead of the whole 4 MB page.
 - `ph_gfx` depends on `ph_ecs` (for the particle emitter helpers).
 - Every engine target carries C++20 as a usage requirement, so games that add the engine with `add_subdirectory`
@@ -25,6 +133,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 - Comments throughout the code were rewritten to say plainly what the code does, and outdated ones corrected.
 
 ### Fixed
+- Game-code hot reload on Windows: each loaded copy of the game library gets its own `.pdb`, so a profiler or
+  debugger holding the previous one no longer stops the next build from linking (LNK1201).
+- Engine components (sprites, animators, colliders) registered first by a game library no longer count as the
+  library's, so they survive game-code hot reload.
 - Game-code hot reload no longer duplicates input bindings each time `init` runs again; a changed default binding
   now replaces the old one.
 - The `ph_tests` executable no longer links every module twice (a macOS linker warning).
@@ -61,5 +173,5 @@ The first version: everything needed to start making a game.
 - **Samples:** `isometric` and `sprites`.
 - **CI:** Windows, macOS and Linux, `dev` and `release`, tests, and a Direct3D 12 render on Windows.
 
-[Unreleased]: https://github.com/SireSoul/PLACEHOLDERENGINENAME/compare/main...develop
-[0.1.0]: https://github.com/SireSoul/PLACEHOLDERENGINENAME/tree/main
+[Unreleased]: https://github.com/SireSoul/BOWL/compare/main...develop
+[0.1.0]: https://github.com/SireSoul/BOWL/tree/main

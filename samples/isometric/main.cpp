@@ -42,12 +42,14 @@ class IsometricGame final : public Game {
 public:
     AppConfig configure() override {
         AppConfig config;
-        config.window.title = "PLACEHOLDERENGINENAME: isometric";
+        config.window.title = "Bowl: isometric";
         return config;
     }
 
     void init(Engine& engine) override {
         font_ = engine.assets().load<gfx::Font>("engine/fonts/Roboto-Medium.ttf");
+        // The torch uses the built-in light shader, so the pillars it passes cast shadows.
+        torch_look_ = gfx::light_material(engine.assets(), {.normals = false, .shadows = true});
         Input& in = engine.input();
         in.bind("left", {InputBinding::key(Key::A), InputBinding::key(Key::Left), InputBinding::axis(GamepadAxis::LeftX, -1)});
         in.bind("right", {InputBinding::key(Key::D), InputBinding::key(Key::Right), InputBinding::axis(GamepadAxis::LeftX, +1)});
@@ -105,8 +107,12 @@ public:
     }
 
     void render(Engine& engine) override {
+        // The ground comes from chunks cached in GPU memory; the pillars sort with the player every frame.
+        gfx::TilemapDrawOptions tiles{.time = static_cast<f32>(engine.time()), .y_sort = true};
+        ground_.submit(engine.renderer(), engine.gpu(), engine.camera(), *map_, tiles);
         batch_.begin(engine.camera());
-        gfx::draw_tilemap(batch_, *map_, {.time = static_cast<f32>(engine.time()), .y_sort = true});
+        tiles.layers = gfx::TilemapDrawOptions::Layers::Sorted;
+        gfx::draw_tilemap(batch_, *map_, tiles);
         // The player's depth is its feet's y, so it sorts against the pillars' bases.
         Vec2 feet = map_->cell_to_world(player_cell(engine).x, player_cell(engine).y);
         gfx::SpriteInstance s;
@@ -140,12 +146,30 @@ public:
                     pool.color = {0.62f, 0.38f, 0.18f, 1};
                     lights_.draw(glow, pool);
                 }
+            engine.renderer().submit_light(lights_);
+
+            // The torch, and the pillars' footprints as the shadow casters it sees.
+            occluders_.begin(engine.camera(), gfx::SpriteSort::None);
+            for (i32 y = 0; y < static_cast<i32>(map_size); ++y)
+                for (i32 x = 0; x < static_cast<i32>(map_size); ++x)
+                    if ((objects.at(x, y) & gfx::tile_gid_mask) == Pillar) {
+                        Vec2 base = map_->cell_to_world(static_cast<f32>(x), static_cast<f32>(y)) + Vec2{0, tile_h};
+                        // The pillar standing up: marked faintly, so its own shadow doesn't fall on it.
+                        occluders_.draw_rect({base.x - tile_w * 0.3f, base.y - image_h, tile_w * 0.6f, f32(image_h)},
+                                             Color::white().with_alpha(0.25f));
+                        // Its footprint blocks the light.
+                        occluders_.draw_rect(Rect::from_center(base - Vec2{0, tile_h * 0.5f}, {tile_w * 0.45f, tile_h * 0.45f}),
+                                             Color::white());
+                    }
+            engine.renderer().submit_occluders(occluders_);
+            torch_.begin(engine.camera(), gfx::SpriteSort::None, gfx::BlendMode::Additive,
+                         torch_look_.fragment ? &torch_look_ : nullptr);
             gfx::SpriteInstance torch;
             torch.position = feet - Vec2{0, 20};
             torch.size = {420, 300};
             torch.color = {0.7f, 0.66f, 0.55f, 1};
-            lights_.draw(glow, torch);
-            engine.renderer().submit_light(lights_);
+            torch_.draw(glow, torch);
+            engine.renderer().submit_light(torch_);
 
             // Fireflies: a particle system drawn additively with over-bright colors, so they bloom.
             fireflies_.update(firefly_settings_, map_->cell_to_world(map_size / 2.0f, map_size / 2.0f), engine.delta());
@@ -321,9 +345,11 @@ private:
     }
 
     Asset<gfx::Tilemap> map_;
+    gfx::TilemapCache ground_;
     Asset<gfx::Texture> player_tex_;
     Asset<gfx::Font> font_;
-    gfx::SpriteBatch batch_, ui_, lights_, sparks_;
+    gfx::SpriteBatch batch_, ui_, lights_, sparks_, torch_, occluders_;
+    gfx::Material torch_look_;
     gfx::ParticleSystem fireflies_;
     gfx::ParticleSettings firefly_settings_ = [] {
         gfx::ParticleSettings s;

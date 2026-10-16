@@ -1,4 +1,4 @@
-# PLACEHOLDERENGINENAME
+# BOWL
 
 A code-first 2D game engine in C++20, built on SDL3. One renderer for Vulkan, Metal and Direct3D 12, a parallel
 archetype ECS, hot reload for assets, shaders and game code, and dev tools that run inside the game.
@@ -14,9 +14,6 @@ change a texture, a shader, a Tiled map or the game's own code while it runs, an
 
 It's built for 2D games with a lot going on, top-down and isometric included, that want to look good and save and
 load their worlds without a pile of boilerplate.
-
-(The name is a placeholder. It only shows up in `CMakeLists.txt`, the docs and a couple of log and window strings;
-the code uses the namespace `ph`.)
 
 ## Features
 
@@ -58,7 +55,10 @@ the code uses the namespace `ph`.)
 **Workflow**
 - F1 dev overlay: frame graph, profiler, systems (timing, parallel batches, on/off), entity browser and inspector,
   assets with reload buttons, log, pause, single-step, slow motion
-- Game-code hot reload on macOS and Linux: rebuild, and the new code takes over with the world kept
+- Game-code hot reload on Windows, macOS and Linux: save a source file, and the new code takes over with the world
+  kept
+- Bowl Editor: lay out levels with the game's own renderer, art shelf, groups, undo, and the game's own components
+- Tracy support for timeline profiling
 - Release builds with static SDL, precompiled shaders, `.app` bundles on macOS and `cmake --install` layouts
 
 ## Quick start
@@ -68,11 +68,11 @@ All other dependencies are downloaded at pinned versions and checked against a S
 there is one; otherwise SDL3 is built from source.
 
 ```bash
-git clone https://github.com/SireSoul/PLACEHOLDERENGINENAME.git
+git clone https://github.com/SireSoul/BOWL.git
 ```
 
 ```bash
-cd PLACEHOLDERENGINENAME
+cd BOWL
 ```
 
 ```bash

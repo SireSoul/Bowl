@@ -1,8 +1,11 @@
+#include "ph/core/archive.hpp"
 #include "ph/core/assets.hpp"
 #include "ph/core/file.hpp"
 
 #include <doctest/doctest.h>
 
+#include <atomic>
+#include <cctype>
 #include <chrono>
 #include <filesystem>
 #include <thread>
@@ -126,4 +129,112 @@ TEST_CASE("assets: rollback drops what came after a mark and restores replaced l
     CHECK(assets.load<Text>("c.txt")->value == "c"); // the original loader is back
     assets.reload("a.txt");
     CHECK(calls == 0); // the callback went with the rollback
+}
+
+namespace {
+struct Shouted {
+    std::string value;
+};
+} // namespace
+
+TEST_CASE("assets: background loads read and decode on another thread, then finish on this one") {
+    fs::path dir = temp_dir("async");
+    write(dir / "a.txt", "hello");
+    write(dir / "b.txt", "world");
+    AssetManager assets;
+    assets.mount("", dir);
+    std::thread::id main = std::this_thread::get_id(), decoded_on;
+    std::atomic<int> decodes{0};
+    // The decoder does the slow part off the main thread; the loader just takes the result.
+    assets.register_decoder<Shouted>([&](std::string_view, std::span<const u8> bytes) -> std::shared_ptr<void> {
+        decoded_on = std::this_thread::get_id();
+        ++decodes;
+        std::string s(bytes.begin(), bytes.end());
+        for (char& c : s) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        return std::make_shared<std::string>(s);
+    });
+    assets.register_loader<Shouted>([&](AssetLoadContext& ctx) -> std::unique_ptr<Shouted> {
+        CHECK(std::this_thread::get_id() == main);
+        if (auto* done = ctx.prepared<std::string>()) return std::make_unique<Shouted>(Shouted{*done});
+        auto text = ctx.read_text(ctx.path());
+        return text ? std::make_unique<Shouted>(Shouted{*text}) : nullptr;
+    });
+
+    Asset<Shouted> a = assets.load_async<Shouted>("a.txt");
+    Asset<Shouted> b = assets.load_async<Shouted>("b.txt");
+    CHECK(assets.load_async<Shouted>("a.txt") == a); // asked twice: one load
+    for (int i = 0; i < 500 && assets.loading() > 0; ++i) {
+        assets.finish_loads();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CHECK(assets.loading() == 0);
+    REQUIRE(a);
+    REQUIRE(b);
+    CHECK(a->value == "HELLO");
+    CHECK(b->value == "WORLD");
+    CHECK(decodes == 2);
+    CHECK(decoded_on != main);
+
+    // load() doesn't wait: a pending asset is finished on the spot.
+    write(dir / "c.txt", "now");
+    Asset<Shouted> c = assets.load_async<Shouted>("c.txt");
+    Asset<Shouted> c_now = assets.load<Shouted>("c.txt");
+    REQUIRE(c_now);
+    CHECK(c == c_now);
+    CHECK(c->value == "now"); // loaded directly, without the decoder
+    for (int i = 0; i < 500 && assets.loading() > 0; ++i) {
+        assets.finish_loads();
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    CHECK(c->value == "now"); // the late background result is ignored
+
+    // A missing file fails at once, like load().
+    CHECK_FALSE(assets.load_async<Shouted>("missing.txt"));
+    CHECK(assets.loading() == 0);
+}
+
+TEST_CASE("assets: archives hold a folder and mount like one") {
+    fs::path src = temp_dir("archive_src"), out = temp_dir("archive_out");
+    write(src / "a.txt", "alpha");
+    write(src / "sub" / "b.txt", "beta");
+    fs::create_directories(src / "empty");
+    REQUIRE(write_archive(out / "pack.phpak", src));
+
+    auto archive = Archive::open(out / "pack.phpak");
+    REQUIRE(archive);
+    CHECK(archive->names() == std::vector<std::string>{"a.txt", "sub/b.txt"});
+    CHECK(archive->contains("sub/b.txt"));
+    CHECK_FALSE(archive->contains("b.txt"));
+    auto b = archive->read("sub/b.txt");
+    REQUIRE(b);
+    CHECK(std::string(b->begin(), b->end()) == "beta");
+    CHECK_FALSE(archive->read("missing"));
+    write(out / "not.phpak", "PHPK but not really");
+    CHECK_FALSE(Archive::open(out / "not.phpak"));
+    CHECK_FALSE(Archive::open(out / "missing.phpak"));
+
+    // The same folder makes the same archive.
+    REQUIRE(write_archive(out / "again.phpak", src));
+    CHECK(read_file_bytes(out / "pack.phpak") == read_file_bytes(out / "again.phpak"));
+
+    // Mounted: loads, sync and in the background; earlier mounts still win.
+    fs::path loose = temp_dir("archive_loose");
+    write(loose / "a.txt", "loose alpha");
+    AssetManager assets;
+    register_text(assets);
+    REQUIRE(assets.mount_archive("data/", out / "pack.phpak"));
+    assets.mount("data/", loose);
+    CHECK_FALSE(assets.mount_archive("", out / "not.phpak"));
+    CHECK(assets.load<Text>("data/a.txt")->value == "alpha");
+    auto later = assets.load_async<Text>("data/sub/b.txt");
+    for (int i = 0; i < 500 && assets.loading(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        assets.finish_loads();
+    }
+    REQUIRE(later);
+    CHECK(later->value == "beta");
+    CHECK(assets.exists("data/sub/b.txt"));
+    CHECK_FALSE(assets.resolve("data/sub/b.txt")); // no real file to point at
+    CHECK(assets.read("data/a.txt") == std::optional<std::vector<u8>>(std::vector<u8>{'a', 'l', 'p', 'h', 'a'}));
+    CHECK_FALSE(assets.exists("data/nothing.txt"));
 }

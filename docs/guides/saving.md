@@ -130,7 +130,7 @@ The format:
 
 ```json
 {
-  "format": "PLACEHOLDERENGINENAME.world",
+  "format": "Bowl.world",
   "version": 1,
   "entities": [
     { "id": 0, "components": { "Health": { "current": 80, "max": 100 }, "Player": {} } },
@@ -167,8 +167,21 @@ ecs::Entity slime = ecs::spawn_prefab(engine.world(), prefab_json, ctx);
 world.get<Position>(slime).value = spawn_point;
 ```
 
-Prefabs as hot-reloadable asset files are on the [roadmap](../roadmap.md); for now, load the JSON yourself or wrap it
-in a [custom asset type](assets.md#custom-asset-types).
+#### Prefab files
+
+Saved as `.prefab` files, prefabs are assets that hot-reload like any other:
+
+```cpp
+Asset<ecs::Prefab> slime = engine.assets().load<ecs::Prefab>("prefabs/slime.prefab");
+
+std::vector<ecs::Entity> spawned = ecs::instantiate(engine.world(), *slime, ctx);   // spawned[0] is the root
+```
+
+A prefab file holds one entity (`{"components": {...}}`, as above) or a whole world document with several entities
+that refer to each other, such as a cart and its wheels, or a door and its switch: save them with
+`ecs::save_entities` and write the result to a `.prefab` file. Each `instantiate` makes fresh copies with the
+references pointing at the new entities. Editing the file changes the copies spawned after it; ones already in the
+world stay as they are.
 
 ### From the overlay
 
@@ -223,3 +236,57 @@ write_file_bytes(engine.user_data_path() / "slot1.json", text.data(), text.size(
 ```
 
 Load the header alone to show slot details in a menu without loading the world.
+
+## Big worlds: the binary form
+
+Text is easy to read and diff, but a world with tens of thousands of entities makes a big file that takes a while to
+parse. `json::encode_binary` writes the same document in a compact binary form: every key and string is stored once
+and numbers take only the bytes they need. A world of many similar entities comes out several times smaller, and reading
+it skips text parsing.
+
+```cpp
+std::vector<u8> bytes = json::encode_binary(ecs::save_world(world, ctx));
+write_file_bytes(engine.user_data_path() / "slot1.save", bytes.data(), bytes.size());
+
+if (auto bytes = read_file_bytes(engine.user_data_path() / "slot1.save"))
+    if (auto doc = json::parse_any(*bytes))       // text or binary
+        ecs::load_entities(world, doc.value, ctx);
+```
+
+`json::parse_any` reads either form, and so do the `WorldFile` and `Prefab` loaders and Bowl Editor (which saves a
+binary file back as binary). The binary form decodes back to exactly the same document. A damaged or truncated file
+fails to load with an error; it never crashes.
+
+## Changing the save format: migrations
+
+Games change after release: a component gets renamed, a field splits in two. Give your saves a version number and
+write one small step per change, so old saves still load:
+
+```cpp
+constexpr i32 save_version = 3;
+
+ecs::Migrations migrations;
+migrations.add(0, [](json::Value& doc) { ecs::rename_component(doc, "game::Hp", "game::Health"); });
+migrations.add(1, [](json::Value& doc) { ecs::rename_field(doc, "game::Health", "hp", "current"); });
+migrations.add(2, [](json::Value& doc) {
+    ecs::for_each_saved(doc, "game::Health", [](json::Value& health) {
+        health.set("max", health["current"].as_int() * 2);   // a new field worked out from old data
+    });
+});
+
+// saving
+serial::Context ctx{.assets = &engine.assets(), .game_version = save_version};
+json::Value doc = ecs::save_world(world, ctx);         // writes "game_version": 3
+
+// loading
+if (!migrations.upgrade(doc, ctx)) { /* newer than this game, or a step is missing: see ctx.warnings */ }
+ecs::load_entities(world, doc, ctx);
+```
+
+`add(n, step)` turns a version `n` document into version `n + 1`. `upgrade` runs every step from the file's
+`game_version` (0 if the file has none) up to `latest()` and records the new version, so upgrading twice is
+harmless. A file from a newer version of the game is refused rather than half-loaded.
+
+The helpers work on every saved entity: `rename_component`, `remove_component`, `rename_field`, and
+`for_each_saved` for anything else. Documents are plain `json::Value`s, so a step can also change them directly
+(`find`, `set`, `erase`).

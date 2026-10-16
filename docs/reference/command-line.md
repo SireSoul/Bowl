@@ -14,6 +14,8 @@ The engine reads these before the game starts. All arguments, including these, a
 | `--no-vsync` | Don't wait for the display's refresh; useful for measuring frame times |
 | `--driver <name>` | GPU backend: `vulkan`, `metal` or `direct3d12` |
 | `--lang <code>` | Language for localized strings, such as `es` |
+| `--deck` | Pretend to be a Steam Deck, in a 1280 x 800 window (see [packaging](../guides/packaging.md#steam-deck)) |
+| `--no-auto-build` | Hot-reload builds: don't rebuild the game code when a source file is saved |
 
 Together, `--frames` and `--screenshot` make visual checks scriptable. CI uses them to render a sample on Direct3D 12:
 
@@ -36,7 +38,8 @@ Games add their own the same way: `if (engine.has_arg("--skip-intro")) ...`.
 ## ph-shaderc
 
 ```bash
-ph-shaderc <input.vert.glsl | input.frag.glsl> -o <output.phsh> [--depfile <file>] [-g] [--print-msl] [--print-hlsl]
+ph-shaderc <input.(vert|frag|comp).glsl> -o <output.phsh> [--depfile <file>] [-g] [--print-msl] [--print-hlsl]
+           [--include <prefix>=<folder>]
 ```
 
 | Option | |
@@ -46,10 +49,32 @@ ph-shaderc <input.vert.glsl | input.frag.glsl> -o <output.phsh> [--depfile <file
 | `-g` | Keep debug information in the SPIR-V |
 | `--print-msl` | Print the generated Metal source to stdout |
 | `--print-hlsl` | Print the generated HLSL to stdout |
+| `--include <prefix>=<folder>` | Look for includes that start with `prefix` in `folder`; repeatable. `ph_add_game` passes `engine/shaders/=<engine shader folder>` |
 | `-h`, `--help` | Usage |
 
 Exit codes: 0 on success, 1 for compile or file errors, 2 for bad arguments. The executable is in
 `build/<preset>/tools/shaderc/`. See [shaders.md](../guides/shaders.md#ph-shaderc).
+
+## ph-atlas
+
+```bash
+ph-atlas <folder or images...> -o <atlas.png> [--padding N] [--max N] [--no-trim] [--fps N]
+```
+
+Packs PNGs into one atlas image and writes sprite-sheet JSON with the same name next to it. See
+[sprite-animation.md](../guides/sprite-animation.md#packing-pictures-into-an-atlas-ph-atlas).
+
+| Option | Default | |
+| --- | --- | --- |
+| `-o <file>` | | The atlas PNG; the JSON goes next to it |
+| `--padding N` | 1 | Transparent pixels between pictures |
+| `--max N` | 4096 | Largest width or height |
+| `--no-trim` | | Keep transparent edges |
+| `--fps N` | 10 | Speed of animations made from numbered files |
+
+## BOWL Editor
+
+See [editor.md](../guides/editor.md#starting-it).
 
 ## Test runner
 

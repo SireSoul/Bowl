@@ -17,9 +17,6 @@ struct Position {
 struct Velocity {
     f32 x = 0, y = 0;
 };
-struct Name {
-    std::string value;
-};
 struct Frozen {}; // tag
 
 // Counts live instances, to prove every constructed component is destroyed exactly once.
@@ -231,4 +228,39 @@ TEST_CASE("const and non-const component types share one id") {
     CHECK(component_id<Position>() == component_id<const Position>());
     CHECK(component_info(component_id<Position>()).name.find("Position") != std::string_view::npos);
     CHECK(component_info(component_id<Frozen>()).size == 0);
+}
+
+TEST_CASE("compact frees unused archetypes; queries and moves keep working") {
+    World w;
+    auto positions = w.query<Position>();
+    Entity keep = w.create(Position{1, 2}, Velocity{});
+    {
+        // Pass through many combinations, then leave them.
+        Entity e = w.create(Position{});
+        w.add<Frozen>(e);
+        w.add<Tracked>(e, 3);
+        w.remove<Frozen>(e);
+        w.add<Name>(e, Name{"temp"});
+        w.destroy(e);
+    }
+    CHECK(positions.count() == 1);
+    usize before = w.archetypes().size();
+    usize freed = w.compact();
+    CHECK(freed > 0);
+    CHECK(w.archetypes().size() == before - freed);
+    CHECK(w.compact() == 0); // nothing left to free
+    CHECK(Tracked::alive == 0);
+
+    // The query made before still counts right, and the edges that led to freed archetypes are rebuilt on use.
+    CHECK(positions.count() == 1);
+    w.add<Frozen>(keep);
+    w.remove<Frozen>(keep);
+    Entity again = w.create(Position{}, Frozen{});
+    CHECK(positions.count() == 2);
+    CHECK(w.get<Position>(keep).y == 2);
+    CHECK(w.has<Frozen>(again));
+    w.destroy(again);
+    w.destroy(keep);
+    w.compact();
+    CHECK(positions.count() == 0);
 }

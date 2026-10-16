@@ -8,6 +8,7 @@
 // Run with --frames N to quit after N frames (used for automated smoke runs).
 
 #include "ph/app/main.hpp"
+#include "ph/gfx/gpu_particles.hpp"
 #include "ph/gfx/sprite_sheet.hpp"
 #include "ph/gfx/text.hpp"
 
@@ -74,7 +75,7 @@ class SpritesGame final : public Game {
 public:
     AppConfig configure() override {
         AppConfig config;
-        config.window.title = "PLACEHOLDERENGINENAME: sprites";
+        config.window.title = "Bowl: sprites";
         return config;
     }
 
@@ -92,7 +93,11 @@ public:
 
         font_ = engine.assets().load<gfx::Font>("engine/fonts/Roboto-Medium.ttf");
         hologram_.fragment = engine.assets().load<gfx::Shader>("shaders/hologram.frag");
+        sdf_look_ = gfx::sdf_text_material(engine.assets(), {.outline_color = Color::hex(0x1a1f3d), .outline = 0.25f});
+        if (engine.has_arg("--film")) film(engine);
         ball_ = engine.assets().add("generated/ball", make_ball_texture(engine.gpu()));
+        // --gpu-particles: a fountain simulated entirely on the GPU, under the sprites.
+        if (engine.has_arg("--gpu-particles")) fountain_.init(engine.gpu(), engine.assets(), 200000);
         blip_ = engine.assets().add("generated/blip", make_blip());
 
         // Fixed-rate simulation. Each of these runs in parallel across entities; the scheduler also runs systems with
@@ -177,6 +182,14 @@ public:
         });
         const Rect& b = engine.world().resource<Arena>().bounds;
         batch_.draw_rect({b.x - 4, b.bottom(), b.w + 8, 4}, Color::hex(0x6b7cff), 1e9f);
+        if (fountain_.capacity() > 1) {
+            gfx::GpuParticleSettings fountain{.rate = 60000, .position = {0, 200}, .radius = 6, .velocity = {0, -520},
+                                              .speed_spread = 160, .gravity = {0, 420}, .drag = 0.3f, .life_min = 1.5f,
+                                              .life_max = 3, .size_start = 5, .size_end = 1,
+                                              .color_start = {0.5f, 0.8f, 2.0f, 1}, .color_end = {0.9f, 0.3f, 1.4f, 0}};
+            fountain_.update(engine.renderer(), engine.delta(), fountain);
+            fountain_.draw(engine.renderer(), engine.camera(), ball_.get());
+        }
         engine.renderer().submit(batch_);
 
         // Screen-space HUD on its own camera, drawn after the world.
@@ -184,11 +197,14 @@ public:
         Vec2 screen = engine.window().size();
         ui_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None);
         gfx::TextStyle title{.size = 28, .color = Color::white(), .raster_scale = engine.window().pixel_density()};
-        gfx::draw_text(ui_, *font_, "PLACEHOLDERENGINENAME", {24, 20}, title);
+        title.shadow = {2, 2};
+        gfx::draw_text(ui_, *font_, "Bowl", {24, 20}, title);
         gfx::TextStyle body = title;
         body.size = 16;
         body.color = Color::hex(0xb8c0ff);
-        std::string stats = std::format("{} sprites  ·  {} draw calls  ·  tick {}", engine.world().query<const Look>().count(),
+        body.markup = true;
+        body.time = static_cast<f32>(engine.time());
+        std::string stats = std::format("[color=#ffffff]{}[/color] sprites  ·  [color=#ffffff]{}[/color] draw calls  ·  [wave]tick {}[/wave]", engine.world().query<const Look>().count(),
                                         engine.renderer().stats().draw_calls, engine.tick());
         gfx::draw_text(ui_, *font_, stats, {24, 58}, body);
         // The spinners use a custom material (assets/shaders/hologram.frag.glsl) with a time uniform.
@@ -213,6 +229,14 @@ public:
                        "the wheel zooms, C clears, F1 opens the dev overlay.",
                        {screen.x * 0.5f, screen.y - 46}, help);
         engine.renderer().submit_ui(ui_);
+
+        // Distance-field text stays sharp while its size changes every frame.
+        sdf_.begin(gfx::Camera2D::screen(screen), gfx::SpriteSort::None, gfx::BlendMode::Alpha,
+                   sdf_look_.fragment ? &sdf_look_ : nullptr);
+        gfx::TextStyle pulse{.size = 40 + 8 * std::sin(static_cast<f32>(engine.time()) * 2), .color = Color::hex(0xffe066)};
+        pulse.sdf = true;
+        gfx::draw_text(sdf_, *font_, "Bowl", {24, 92}, pulse);
+        engine.renderer().submit_ui(sdf_);
     }
 
     void dev_ui(Engine& engine) override {
@@ -229,6 +253,29 @@ public:
     }
 
 private:
+    // --film: a graded, grainy, slightly split old-screen look, from the post settings and one effect of our own.
+    void film(Engine& engine) {
+        std::vector<u8> lut = gfx::make_neutral_lut(16);
+        for (usize i = 0; i < lut.size(); i += 4) { // warm the shadows, cool the highlights
+            f32 l = (lut[i] + lut[i + 1] + lut[i + 2]) / (3.0f * 255);
+            lut[i] = static_cast<u8>(std::clamp(lut[i] + (1 - l) * 18, 0.0f, 255.0f));
+            lut[i + 2] = static_cast<u8>(std::clamp(lut[i + 2] + l * 14 - 10, 0.0f, 255.0f));
+        }
+        film_lut_ = engine.gpu().create_texture(
+            {.width = 256, .height = 16, .rgba8 = lut.data(), .premultiplied = true, .mipmaps = false, .name = "film lut"});
+        gfx::PostSettings& post = engine.renderer().post();
+        post.lut = film_lut_.get();
+        post.grain = 0.06f;
+        post.chromatic_aberration = 0.006f;
+        post.vignette = 0.35f;
+        scanlines_.fragment = engine.assets().load<gfx::Shader>("shaders/scanlines.frag");
+        struct {
+            f32 strength, lines, pad[2];
+        } params{0.18f, 360, {}};
+        scanlines_.set_uniforms(params);
+        engine.renderer().post_effects().push_back({&scanlines_, gfx::PostStage::Final});
+    }
+
     void spawn(Engine& engine, Vec2 at, int count) {
         World& world = engine.world();
         Rng& rng = world.resource<Rng>();
@@ -295,7 +342,11 @@ private:
     Asset<gfx::Font> font_;
     Asset<gfx::SpriteSheet> spinner_;
     gfx::Material hologram_;
-    gfx::SpriteBatch holo_;
+    gfx::SpriteBatch holo_, sdf_;
+    gfx::Material sdf_look_;
+    std::unique_ptr<gfx::Texture> film_lut_;
+    gfx::Material scanlines_;
+    gfx::GpuParticles fountain_;
     Asset<audio::Sound> blip_;
     gfx::SpriteBatch batch_, ui_;
     int spawn_rate_ = 40;

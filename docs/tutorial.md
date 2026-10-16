@@ -33,7 +33,7 @@ Make a folder for the game next to the engine checkout:
 
 ```
 games/
-  PLACEHOLDERENGINENAME/      the engine repository
+  Bowl/      the engine repository
   fireflies/
     CMakeLists.txt
     main.cpp
@@ -46,7 +46,7 @@ games/
 cmake_minimum_required(VERSION 3.25)
 project(fireflies LANGUAGES C CXX)
 
-add_subdirectory(../PLACEHOLDERENGINENAME engine)
+add_subdirectory(../Bowl engine)
 
 add_executable(fireflies main.cpp)
 ph_add_game(fireflies ASSETS assets)

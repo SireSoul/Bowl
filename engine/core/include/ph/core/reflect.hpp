@@ -1,14 +1,17 @@
 #pragma once
 
+#include "ph/core/assets.hpp"
 #include "ph/core/math.hpp"
 #include "ph/core/type_id.hpp"
 #include "ph/core/types.hpp"
 
+#include <array>
 #include <limits>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <vector>
 
 // Reflection without code generation. After a struct, at namespace scope (in the struct's own namespace):
 //
@@ -43,10 +46,43 @@ public:
     virtual void vector(std::string_view name, f32* values, int count) = 0;
     virtual void color(std::string_view name, Color& value) = 0;
     virtual void entity(std::string_view name, u64 bits) = 0; // read-only
+    // The same, for visitors that change entity references (the ECS swaps stand-in ids for real ones this way).
+    virtual void entity_ref(std::string_view name, u64& bits) { entity(name, bits); }
     virtual bool begin_group(std::string_view name) = 0;      // false: skip its fields
     virtual void end_group() = 0;
     virtual void unsupported(std::string_view name, std::string_view type) = 0;
+    // Asset<T> fields. `path` is the asset's path ("" for none); change it and return true to load that path instead,
+    // which needs assets() to return the manager to load from.
+    virtual bool asset(std::string_view name, std::string& path, std::string_view type) {
+        (void)path;
+        unsupported(name, type);
+        return false;
+    }
+    virtual AssetManager* assets() { return nullptr; }
+    // std::vector and std::array fields. `size` is how many items there are; a visitor may change it for resizable
+    // lists (vectors) to add or remove items at the end. Return false to skip the items.
+    virtual bool begin_list(std::string_view name, usize& size, bool resizable) {
+        (void)size;
+        (void)resizable;
+        unsupported(name, "list");
+        return false;
+    }
+    virtual void end_list() {}
 };
+
+namespace detail {
+template <class T> struct list_traits {
+    static constexpr bool is_list = false;
+};
+template <class T, class A> struct list_traits<std::vector<T, A>> {
+    static constexpr bool is_list = true;
+    static constexpr bool resizable = std::is_default_constructible_v<T>;
+};
+template <class T, usize N> struct list_traits<std::array<T, N>> {
+    static constexpr bool is_list = true;
+    static constexpr bool resizable = false;
+};
+} // namespace detail
 
 template <class T> void visit(FieldVisitor& v, std::string_view name, T& value);
 
@@ -96,6 +132,28 @@ template <class T> void visit(FieldVisitor& v, std::string_view name, T& value) 
         v.vector(name, reinterpret_cast<f32*>(&value), static_cast<int>(sizeof(T) / sizeof(f32)));
     } else if constexpr (std::is_same_v<T, Color>) {
         v.color(name, value);
+    } else if constexpr (ph::is_asset_handle<T>::value) {
+        std::string path(value.path());
+        if (v.asset(name, path, type_name<typename T::value_type>())) {
+            if (path.empty()) value = {};
+            else if (AssetManager* assets = v.assets()) value = assets->template load<typename T::value_type>(path);
+        }
+    } else if constexpr (detail::list_traits<T>::is_list) {
+        usize size = value.size();
+        if (v.begin_list(name, size, detail::list_traits<T>::resizable)) {
+            if constexpr (detail::list_traits<T>::resizable)
+                if (size != value.size()) value.resize(size);
+            for (usize i = 0; i < value.size(); ++i) {
+                if constexpr (std::is_same_v<T, std::vector<bool>>) { // its items are proxies, not bools
+                    bool item = value[i];
+                    visit(v, "[" + std::to_string(i) + "]", item);
+                    value[i] = item;
+                } else {
+                    visit(v, "[" + std::to_string(i) + "]", value[i]);
+                }
+            }
+            v.end_list();
+        }
     } else if constexpr (Reflected<T>) {
         if (v.begin_group(name)) {
             for_each_field(value, [&](std::string_view field, auto& member) { visit(v, field, member); });

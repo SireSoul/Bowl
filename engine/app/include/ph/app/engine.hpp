@@ -10,6 +10,7 @@
 #include "ph/ecs/ecs.hpp"
 #include "ph/gfx/renderer.hpp"
 #include "ph/platform/input.hpp"
+#include "ph/platform/system.hpp"
 #include "ph/platform/window.hpp"
 
 #include <memory>
@@ -31,9 +32,13 @@ struct AppConfig {
     std::string language = "en";     // lang/<language>.json, falling back to fallback_language
     std::string fallback_language = "en";
     // Where settings and saves live: the OS's per-user app data folder for <organization>/<application>.
-    std::string organization = "PLACEHOLDERENGINENAME";
+    std::string organization = "Bowl";
     std::string application;         // empty: the window title
     std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
+    bool fullscreen_on_steam_deck = true; // see is_steam_deck() in ph/platform/system.hpp
+    // For tools built on the engine, like the editor: Game::dev_ui is always shown, not only while the F1 overlay
+    // is open, and the engine's own windows move from F1 to F12. Dev builds only.
+    bool dev_ui_always = false;
 };
 
 class Engine;
@@ -118,6 +123,9 @@ public:
     f32 time_scale() const { return time_scale_; }
 
     void quit() { quit_ = true; }
+    // In the background (phones and tablets): nothing updates or draws until the game comes back. Save the game when
+    // SDL_EVENT_WILL_ENTER_BACKGROUND reaches Game::event, since the system may close it from there without warning.
+    bool suspended() const { return suspended_; }
 
 private:
     friend struct AppRunner;
@@ -144,7 +152,7 @@ private:
     f64 time_ = 0, accumulator_ = 0;
     f32 delta_ = 0, alpha_ = 0, time_scale_ = 1;
     u64 frame_ = 0, tick_ = 0;
-    bool paused_ = false, step_ = false, quit_ = false;
+    bool paused_ = false, step_ = false, quit_ = false, suspended_ = false;
 };
 
 } // namespace ph

@@ -16,11 +16,11 @@ entities while the game runs. An optional editor built on the engine is on the [
 the primary way to make games.
 
 **Is there scripting?**
-Not yet. Game code is C++, and game-code hot reload (macOS, Linux) makes it quick to iterate on. A scripting language
-(Lua or Luau) is on the roadmap.
+No, and none is planned. Game code is C++, and game-code hot reload rebuilds and swaps it in when you save a file,
+which is the quick iteration a scripting language would otherwise be for.
 
-**What does "PLACEHOLDERENGINENAME" mean?**
-Nothing: it's a placeholder until the engine gets a real name. Code uses the short namespace `ph`.
+**Why "Bowl"?**
+The full name is Bowl Engine; everyone calls it Bowl. In code it's the namespace `ph`.
 
 ## Design
 

@@ -1,8 +1,17 @@
 #include "ph/app/entry.hpp"
 
 #include "dev_tools.hpp"
+#include "ph/app/icon.hpp"
 #include "ph/core/profiler.hpp"
 #include "ph/core/time.hpp"
+#include "ph/ecs/hierarchy.hpp"
+#include "ph/gfx/particles.hpp"
+#include "ph/gfx/sprite.hpp"
+#include "ph/gfx/sprite_sheet.hpp"
+#include "ph/physics/colliders.hpp"
+#if PH_BOX2D
+#include "ph/physics/rigid_bodies.hpp"
+#endif
 
 #include <SDL3/SDL.h>
 
@@ -28,6 +37,14 @@ struct AppRunner {
 
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
+        profiler::set_thread_name("main");
+        // The engine's own components are registered by engine code before any game library loads (a hot-reloadable
+        // game is loaded by configure()), so their code never belongs to a library that gets unloaded.
+        ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
+                                 gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, physics::Collider>();
+#if PH_BOX2D
+        ecs::register_components<physics::RigidBody, physics::Joint>();
+#endif
         e.config_ = game->configure();
         for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);
         for (int i = 1; i < argc; ++i) {
@@ -49,11 +66,21 @@ struct AppRunner {
                 e.config_.gpu_driver = argv[++i];
             } else if (arg == "--lang" && i + 1 < argc) {
                 e.config_.language = argv[++i];
+            } else if (arg == "--deck") { // a Steam Deck's screen, in a window
+                set_steam_deck(true);
+                e.config_.window.width = 1280;
+                e.config_.window.height = 800;
+                e.config_.window.fullscreen = false;
+                e.config_.fullscreen_on_steam_deck = false;
             }
+        }
+        if (is_steam_deck()) {
+            info("running on a Steam Deck");
+            if (e.config_.fullscreen_on_steam_deck) e.config_.window.fullscreen = true;
         }
         if (e.config_.game_asset_dir.empty() && game_asset_dir) e.config_.game_asset_dir = game_asset_dir;
         logging::set_level(e.config_.log_level);
-        info("PLACEHOLDERENGINENAME starting: {} on {}", e.config_.window.title, SDL_GetPlatform());
+        info("Bowl starting: {} on {}", e.config_.window.title, SDL_GetPlatform());
 
         SDL_SetAppMetadata(e.config_.window.title.c_str(), "0.1.0", nullptr);
         if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
@@ -74,9 +101,11 @@ struct AppRunner {
 
         e.jobs_ = std::make_unique<JobSystem>(e.config_.worker_threads);
         if (!e.window_.create(e.config_.window)) return false;
+        set_window_icon(e.window_);
         gfx::GpuDeviceDesc gpu_desc;
         gpu_desc.vsync = e.config_.vsync;
         gpu_desc.driver = e.config_.gpu_driver;
+        gpu_desc.shader_cache = e.user_data_ / "shader-cache";
         if (!e.gpu_.init(e.window_.handle(), gpu_desc)) return false;
         e.audio_.init();
 
@@ -84,7 +113,8 @@ struct AppRunner {
         gfx::register_asset_loaders(e.assets_, e.gpu_, e.config_.pixel_art ? gfx::Filter::Nearest : gfx::Filter::Linear);
         audio::register_asset_loaders(e.assets_);
         register_string_table_loader(e.assets_);
-        if (e.assets_.resolve("lang/" + e.config_.fallback_language + ".json")) {
+        ecs::register_world_file_loader(e.assets_);
+        if (e.assets_.exists("lang/" + e.config_.fallback_language + ".json")) {
             e.i18n_.set_fallback(e.config_.fallback_language);
             e.i18n_.set_language(e.config_.language);
         }
@@ -111,6 +141,19 @@ struct AppRunner {
         return true;
     }
 
+    // The game's ICON on the window. An .app bundle's Dock icon comes from its .icns, which is sharper.
+    static void set_window_icon(Window& window) {
+        auto png = embedded_icon();
+        if (png.empty()) return;
+#if defined(__APPLE__)
+        const char* base = SDL_GetBasePath();
+        if (base && std::string_view(base).find(".app/Contents/") != std::string_view::npos) return;
+#endif
+        u32 w = 0, h = 0;
+        std::vector<u8> rgba;
+        if (gfx::decode_png(png, w, h, rgba)) window.set_icon(w, h, rgba);
+    }
+
     void mount_assets(Engine& e) {
         namespace fs = std::filesystem;
         const char* base_path = SDL_GetBasePath();
@@ -120,18 +163,29 @@ struct AppRunner {
         e.assets_.mount("engine/", PH_ENGINE_ASSET_SOURCE_DIR);
         if (!e.config_.game_asset_dir.empty()) e.assets_.mount("", e.config_.game_asset_dir);
 #endif
-        e.assets_.mount("engine/", base / "engine");
-        e.assets_.mount("", base / "assets");
+        // Shipping builds may have their folders packed into archives (PH_PACK_ASSETS).
+        auto mount = [&](const char* prefix, const char* name) {
+            std::error_code ec;
+            fs::path archive = base / (std::string(name) + ".phpak");
+            if (!fs::is_regular_file(archive, ec) || !e.assets_.mount_archive(prefix, archive)) e.assets_.mount(prefix, base / name);
+        };
+        mount("engine/", "engine");
+        mount("", "assets");
     }
 
     SDL_AppResult iterate() {
         Engine& e = *engine;
+        if (e.suspended_) { // in the background: nothing to update, and no drawing allowed
+            SDL_Delay(50);
+            return e.quit_ ? SDL_APP_SUCCESS : SDL_APP_CONTINUE;
+        }
         profiler::begin_frame();
         u64 now = SDL_GetTicksNS();
         f64 real_dt = std::min(static_cast<f64>(now - last_ticks) / 1e9, 0.25);
         last_ticks = now;
 
         e.input_.end_events();
+        e.assets_.finish_loads(); // background loads that are ready
         if (e.assets_.hot_reload() && now_seconds() - last_asset_poll > 0.25) {
             PH_PROFILE_SCOPE("assets.poll");
             last_asset_poll = now_seconds();
@@ -192,6 +246,13 @@ struct AppRunner {
 
         e.scenes_.apply_pending(e);
         e.input_.begin_frame();
+        if (profiler::tracy_enabled()) {
+            const auto& stats = e.renderer_.stats();
+            profiler::plot("entities", static_cast<f64>(e.world_.entity_count()));
+            profiler::plot("sprites", stats.sprites);
+            profiler::plot("draw calls", stats.draw_calls);
+            profiler::plot("fixed ticks this frame", steps);
+        }
         profiler::end_frame();
         ++e.frame_;
         if (e.quit_ || (frame_limit && e.frame_ >= frame_limit)) return SDL_APP_SUCCESS;
@@ -201,6 +262,19 @@ struct AppRunner {
     SDL_AppResult event(SDL_Event& ev) {
         Engine& e = *engine;
         if (ev.type == SDL_EVENT_QUIT) return SDL_APP_SUCCESS;
+        // Phones and tablets: in the background the GPU is off limits (iOS ends apps that use it), and the system may
+        // close the app without warning, so settings are saved on the way out.
+        if (ev.type == SDL_EVENT_WILL_ENTER_BACKGROUND) {
+            e.suspended_ = true;
+            e.settings_.save();
+            info("app: in the background");
+        } else if (ev.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
+            e.suspended_ = false;
+            last_ticks = SDL_GetTicksNS(); // the time away isn't a frame
+            info("app: back in the foreground");
+        } else if (ev.type == SDL_EVENT_LOW_MEMORY) {
+            warn("app: the system is low on memory");
+        }
         dev->handle_event(ev);
         e.input_.handle_event(ev);
         game->event(e, ev);

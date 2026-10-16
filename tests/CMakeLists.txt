@@ -2,27 +2,40 @@ add_executable(ph_tests
     main.cpp
     test_assets.cpp
     test_audio.cpp
+    test_bidi.cpp
     test_collision.cpp
     test_ecs.cpp
+    test_apidoc.cpp
     test_hierarchy.cpp
+    test_icon.cpp
     test_input.cpp
     test_jobs.cpp
     test_localization.cpp
     test_json.cpp
     test_math.cpp
+    test_net.cpp
     test_particles.cpp
     test_reflect.cpp
     test_scene.cpp
     test_settings.cpp
     test_schedule.cpp
     test_shaderc.cpp
+    test_sprite.cpp
     test_sprite_sheet.cpp
     test_text.cpp
     test_tilemap.cpp
+    test_xml.cpp
     test_ui.cpp)
-target_link_libraries(ph_tests PRIVATE ph::engine doctest::doctest)
+target_link_libraries(ph_tests PRIVATE ph::engine ph_atlas ph_icon ph_apidoc doctest::doctest)
 target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"
     PH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+if(PH_BOX2D)
+    target_sources(ph_tests PRIVATE test_rigid_bodies.cpp)
+endif()
+if(PH_OPUS)
+    target_link_libraries(ph_tests PRIVATE ogg opus)
+    target_compile_definitions(ph_tests PRIVATE PH_OPUS=1)
+endif()
 if(TARGET ph_shaderc)
     target_link_libraries(ph_tests PRIVATE ph_shaderc)
     target_compile_definitions(ph_tests PRIVATE PH_TEST_SHADERC=1)
