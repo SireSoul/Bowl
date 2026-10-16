@@ -4,7 +4,7 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
 
 ## M1: make a game with it (content basics)
 - ~~Sprite sheets and animation: Aseprite JSON (tags, durations, ping-pong, repeat, trimming), `SpriteAnimator`,
-  slices (hitboxes, nine-slice, pivots), animation events by name, frames by name, the `ph-atlas` packer~~ (done)
+  slices (hitboxes, nine-slice, pivots), animation events by name, frames by name, the `bowl-atlas` packer~~ (done)
 - ~~Text: TTF fonts, `draw_text`, UTF-8, kerning, wrapping, alignment, outlines and shadows, rich text markup,
   font fallback chains, SDF text, color emoji, right-to-left text, shaping of complex scripts (HarfBuzz)~~ (done)
 - ~~Tilemaps: Tiled `.tmj`/`.tsj` and `.tmx`/`.tsx`, orthogonal, isometric, staggered and hexagonal, infinite
@@ -17,7 +17,7 @@ Ordered by what a real game needs first. Each milestone should leave the engine 
   and contact events~~ (done)
 
 ## M2: worlds that persist
-- ~~Reflection: `PH_REFLECT(Type, fields...)`~~ (done). Later: switch to C++26 reflection when compilers ship it
+- ~~Reflection: `BOWL_REFLECT(Type, fields...)`~~ (done). Later: switch to C++26 reflection when compilers ship it
 - ~~Serialization: JSON for reflected types, world save/load, prefabs, entity references remapped on load, prefab and
   world files as hot-reloading assets, a binary form for big worlds, save-file migrations~~ (done)
 - ~~Entity inspector: select, edit fields live, duplicate, destroy, copy as JSON, save/load the world~~ (done)
@@ -65,4 +65,4 @@ would otherwise be for.
 - ~~Inspector: edit `std::vector` and `std::array` fields, add and remove components, filter entities~~ (done)
 
 ## Known limitations
-- Max 256 component types (`PH_ECS_MAX_COMPONENTS` raises it)
+- Max 256 component types (`BOWL_ECS_MAX_COMPONENTS` raises it)

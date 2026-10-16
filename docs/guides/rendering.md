@@ -106,7 +106,7 @@ Sorting happens per batch. Batches always draw in submission order.
 
 ## Color and blending
 
-Colors are `ph::Color`, four floats:
+Colors are `bowl::Color`, four floats:
 
 ```cpp
 Color a = Color::hex(0xffcf5c);            // from 0xRRGGBB

@@ -1,14 +1,14 @@
-#include "ph/core/file.hpp"
-#include "ph/core/utf8.hpp"
-#include "ph/gfx/text.hpp"
-#include "ph/icon/icon.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/utf8.hpp"
+#include "bowl/gfx/text.hpp"
+#include "bowl/icon/icon.hpp"
 
 #include <doctest/doctest.h>
 
 #include <array>
 #include <filesystem>
 
-using namespace ph;
+using namespace bowl;
 
 TEST_CASE("utf8: decode and encode") {
     std::string s = "a\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80"; // a é € 😀
@@ -35,7 +35,7 @@ TEST_CASE("utf8: malformed input decodes as U+FFFD and always advances") {
 
 namespace {
 std::unique_ptr<gfx::Font> engine_font() {
-    auto bytes = read_file_bytes(std::filesystem::path(PH_ENGINE_ASSET_SOURCE_DIR) / "fonts" / "Roboto-Medium.ttf");
+    auto bytes = read_file_bytes(std::filesystem::path(BOWL_ENGINE_ASSET_SOURCE_DIR) / "fonts" / "Roboto-Medium.ttf");
     REQUIRE(bytes);
     auto font = gfx::Font::from_memory(nullptr, std::move(*bytes), "Roboto");
     REQUIRE(font);

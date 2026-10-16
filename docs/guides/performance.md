@@ -10,7 +10,7 @@ usually goes and what to do about it.
 - `renderer().stats()` (also in the overlay) shows sprites, draw calls, batches and pipelines per frame.
 - Measure `dev` or `release` builds. `debug` builds are slow in different places.
 
-Add `PH_PROFILE_SCOPE("name")` around anything you suspect.
+Add `BOWL_PROFILE_SCOPE("name")` around anything you suspect.
 
 ## CPU: the simulation
 
@@ -69,9 +69,9 @@ map) cost fill rate. Draw lights into the light map, where they're cheaper.
 
 ## The ECS benchmark
 
-`ph_bench_ecs` measures entity creation, iteration, parallel iteration and add/remove on a million entities. Run it
+`bowl_bench_ecs` measures entity creation, iteration, parallel iteration and add/remove on a million entities. Run it
 from a `release` build when changing the ECS, and compare before and after:
 
 ```bash
-./build/release/tests/ph_bench_ecs
+./build/release/tests/bowl_bench_ecs
 ```

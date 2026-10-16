@@ -1,20 +1,20 @@
 # ecs
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/ecs/archetype.hpp](#phecsarchetypehpp)
-- [ph/ecs/commands.hpp](#phecscommandshpp)
-- [ph/ecs/component.hpp](#phecscomponenthpp)
-- [ph/ecs/ecs.hpp](#phecsecshpp)
-- [ph/ecs/hierarchy.hpp](#phecshierarchyhpp)
-- [ph/ecs/schedule.hpp](#phecsschedulehpp)
-- [ph/ecs/world.hpp](#phecsworldhpp)
-- [ph/ecs/world_io.hpp](#phecsworld_iohpp)
+- [bowl/ecs/archetype.hpp](#bowlecsarchetypehpp)
+- [bowl/ecs/commands.hpp](#bowlecscommandshpp)
+- [bowl/ecs/component.hpp](#bowlecscomponenthpp)
+- [bowl/ecs/ecs.hpp](#bowlecsecshpp)
+- [bowl/ecs/hierarchy.hpp](#bowlecshierarchyhpp)
+- [bowl/ecs/schedule.hpp](#bowlecsschedulehpp)
+- [bowl/ecs/world.hpp](#bowlecsworldhpp)
+- [bowl/ecs/world_io.hpp](#bowlecsworld_iohpp)
 
-## ph/ecs/archetype.hpp
+## bowl/ecs/archetype.hpp
 
-`#include "ph/ecs/archetype.hpp"` · namespace `ph::ecs`
+`#include "bowl/ecs/archetype.hpp"` · namespace `bowl::ecs`
 
 ### Archetype
 
@@ -76,9 +76,9 @@ std::unordered_map<ComponentId, Archetype*> add_edges;
 std::unordered_map<ComponentId, Archetype*> remove_edges;
 ```
 
-## ph/ecs/commands.hpp
+## bowl/ecs/commands.hpp
 
-`#include "ph/ecs/commands.hpp"` · namespace `ph::ecs`
+`#include "bowl/ecs/commands.hpp"` · namespace `bowl::ecs`
 
 ### CommandBuffer
 
@@ -149,12 +149,12 @@ Schedules do this for their systems.
 void use_placeholders(u32 tag);
 ```
 
-## ph/ecs/component.hpp
+## bowl/ecs/component.hpp
 
-`#include "ph/ecs/component.hpp"` · namespace `ph::ecs`
+`#include "bowl/ecs/component.hpp"` · namespace `bowl::ecs`
 
 ```cpp
-#define PH_ECS_MAX_COMPONENTS 256
+#define BOWL_ECS_MAX_COMPONENTS 256
 ```
 
 ### Entity
@@ -195,18 +195,18 @@ Entities in saved data are written as ids local to the file and remapped on load
 between saved entities survive. A reference to an entity that wasn't saved becomes null.
 
 ```cpp
-inline json::Value ph_to_json(const Entity& e, serial::Context& ctx);
-inline bool ph_from_json(const json::Value& j, Entity& e, serial::Context& ctx);
-inline void ph_visit(reflect::FieldVisitor& v, std::string_view name, Entity& e);
+inline json::Value bowl_to_json(const Entity& e, serial::Context& ctx);
+inline bool bowl_from_json(const json::Value& j, Entity& e, serial::Context& ctx);
+inline void bowl_visit(reflect::FieldVisitor& v, std::string_view name, Entity& e);
 ```
 
 ```cpp
 using ComponentId = u16;
-inline constexpr usize max_components = PH_ECS_MAX_COMPONENTS;
+inline constexpr usize max_components = BOWL_ECS_MAX_COMPONENTS;
 ```
 
 A component is any move-constructible, destructible struct; no base class or generated code. Empty structs are
-tags and take no memory. Adding PH_COMPONENT(Type, fields...) after one makes it savable and editable in the
+tags and take no memory. Adding BOWL_COMPONENT(Type, fields...) after one makes it savable and editable in the
 inspector, but is optional.
 
 ```cpp
@@ -230,7 +230,7 @@ void (*move_construct)(void* dst, void* src) = nullptr; // placement-move src in
 void (*destroy)(void* ptr) = nullptr;
 ```
 
-Present for savable components: reflected (PH_REFLECT), with serialization hooks, or tags.
+Present for savable components: reflected (BOWL_REFLECT), with serialization hooks, or tags.
 
 ```cpp
 void (*construct_default)(void* ptr) = nullptr;
@@ -284,11 +284,11 @@ std::vector<std::pair<ComponentId, ComponentInfo>> mark_components_dormant(bool 
 void restore_components(const std::vector<std::pair<ComponentId, ComponentInfo>>& saved);
 ```
 
-PH_COMPONENT(Type, fields...): PH_REFLECT plus registration when the program (or game library) loads, so saved
-worlds can name the type before any code touches it. Use it for components; PH_REFLECT for other structs.
+BOWL_COMPONENT(Type, fields...): BOWL_REFLECT plus registration when the program (or game library) loads, so saved
+worlds can name the type before any code touches it. Use it for components; BOWL_REFLECT for other structs.
 
 ```cpp
-#define PH_COMPONENT(Type, ...)
+#define BOWL_COMPONENT(Type, ...)
 ```
 
 ### ComponentMask
@@ -333,20 +333,20 @@ usize operator()(const ComponentMask& m) const;
 ### std
 
 ```cpp
-template <> struct std::hash<ph::ecs::Entity>
+template <> struct std::hash<bowl::ecs::Entity>
 ```
 
 ```cpp
-std::size_t operator()(const ph::ecs::Entity& e) const noexcept;
+std::size_t operator()(const bowl::ecs::Entity& e) const noexcept;
 ```
 
-## ph/ecs/ecs.hpp
+## bowl/ecs/ecs.hpp
 
-`#include "ph/ecs/ecs.hpp"`
+`#include "bowl/ecs/ecs.hpp"`
 
-## ph/ecs/hierarchy.hpp
+## bowl/ecs/hierarchy.hpp
 
-`#include "ph/ecs/hierarchy.hpp"` · namespace `ph::ecs`
+`#include "bowl/ecs/hierarchy.hpp"` · namespace `bowl::ecs`
 
 Parent/child transforms. Give an entity a Transform2D (relative to its parent) and the engine keeps a
 GlobalTransform2D (in the world) up to date once the transform systems run:
@@ -370,7 +370,7 @@ struct Transform2D {
 ```
 
 ```cpp
-PH_COMPONENT(Transform2D, position, rotation, scale)
+BOWL_COMPONENT(Transform2D, position, rotation, scale)
 ```
 
 ### GlobalTransform2D
@@ -392,7 +392,7 @@ Vec2 apply(Vec2 local) const;
 ```
 
 ```cpp
-PH_COMPONENT(GlobalTransform2D, position, rotation, scale)
+BOWL_COMPONENT(GlobalTransform2D, position, rotation, scale)
 ```
 
 ### Parent
@@ -404,7 +404,7 @@ struct Parent {
 ```
 
 ```cpp
-PH_COMPONENT(Parent, entity)
+BOWL_COMPONENT(Parent, entity)
 ```
 
 ### Children
@@ -416,7 +416,7 @@ struct Children {
 ```
 
 ```cpp
-PH_COMPONENT(Children, list)
+BOWL_COMPONENT(Children, list)
 ```
 
 ### Name
@@ -430,7 +430,7 @@ struct Name {
 ```
 
 ```cpp
-PH_COMPONENT(Name, value)
+BOWL_COMPONENT(Name, value)
 ```
 
 Attaches child under parent (null parent: detach). Refuses (returns false) if that would make a cycle.
@@ -458,9 +458,9 @@ Registers propagate_transforms as an exclusive system at the end of the schedule
 void add_transform_systems(Schedule& schedule);
 ```
 
-## ph/ecs/schedule.hpp
+## bowl/ecs/schedule.hpp
 
-`#include "ph/ecs/schedule.hpp"` · namespace `ph::ecs`
+`#include "bowl/ecs/schedule.hpp"` · namespace `bowl::ecs`
 
 ### SystemContext
 
@@ -586,9 +586,9 @@ Batches of system indices that run concurrently (for tools).
 const std::vector<std::vector<usize>>& batches();
 ```
 
-## ph/ecs/world.hpp
+## bowl/ecs/world.hpp
 
-`#include "ph/ecs/world.hpp"` · namespace `ph::ecs`
+`#include "bowl/ecs/world.hpp"` · namespace `bowl::ecs`
 
 ### QueryFilter
 
@@ -860,9 +860,9 @@ void World::insert(Entity e, Ts&&... components);
 
 **CommandBuffer templates**
 
-## ph/ecs/world_io.hpp
+## bowl/ecs/world_io.hpp
 
-`#include "ph/ecs/world_io.hpp"` · namespace `ph::ecs`
+`#include "bowl/ecs/world_io.hpp"` · namespace `bowl::ecs`
 
 Saving and loading entities as JSON, for save games, scenes, prefabs and copy/paste in tools.
 
@@ -870,8 +870,8 @@ Saving and loading entities as JSON, for save games, scenes, prefabs and copy/pa
 { "format": "Bowl.world", "version": 1,
   "entities": [ { "id": 0, "components": { "game::Health": { "current": 80, "max": 100 }, "game::Player": {} } } ] }
 ```
-Components are saved by type name when they're savable: reflected with PH_REFLECT, given ph_to_json/ph_from_json
-hooks, or empty tags. Others are skipped (once-per-type warning in ctx.warnings). Entity fields that point at other
+Components are saved by type name when they're savable: reflected with BOWL_REFLECT, given
+bowl_to_json/bowl_from_json hooks, or empty tags. Others are skipped (once-per-type warning in ctx.warnings). Entity fields that point at other
 saved entities are rewritten to file ids and back, so references survive a round trip.
 
 Documents can be written as text (json::stringify) or, for big worlds, binary (json::encode_binary); everything that
@@ -896,7 +896,7 @@ json::Value save_world(const World& world, serial::Context& ctx, const QueryFilt
 
 Spawns the saved entities into the world (adding to what's there) and returns them in file order.
 Unknown component names are skipped with a warning. Types the program hasn't used yet are unknown until
-registered: use PH_COMPONENT, or call register_components&lt;...>() before loading.
+registered: use BOWL_COMPONENT, or call register_components&lt;...>() before loading.
 
 ```cpp
 std::vector<Entity> load_entities(World& world, const json::Value& doc, serial::Context& ctx);

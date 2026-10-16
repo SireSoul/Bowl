@@ -1,10 +1,10 @@
-#include "ph/platform/input.hpp"
-#include "ph/platform/system.hpp"
+#include "bowl/platform/input.hpp"
+#include "bowl/platform/system.hpp"
 
 #include <SDL3/SDL_events.h>
 #include <doctest/doctest.h>
 
-using namespace ph;
+using namespace bowl;
 
 namespace {
 SDL_Event key_event(Key k, bool down) {
@@ -84,13 +84,13 @@ TEST_CASE("input: vector normalizes diagonals") {
 }
 
 TEST_CASE("platform: Steam Deck detection can be overridden") {
-    bool detected = ph::is_steam_deck(); // false on the machines tests run on, but don't rely on it
-    ph::set_steam_deck(true);
-    CHECK(ph::is_steam_deck());
-    ph::set_steam_deck(false);
-    CHECK_FALSE(ph::is_steam_deck());
-    ph::set_steam_deck(std::nullopt);
-    CHECK(ph::is_steam_deck() == detected);
+    bool detected = bowl::is_steam_deck(); // false on the machines tests run on, but don't rely on it
+    bowl::set_steam_deck(true);
+    CHECK(bowl::is_steam_deck());
+    bowl::set_steam_deck(false);
+    CHECK_FALSE(bowl::is_steam_deck());
+    bowl::set_steam_deck(std::nullopt);
+    CHECK(bowl::is_steam_deck() == detected);
 }
 
 TEST_CASE("input: touches last from the frame they go down to the frame they lift") {

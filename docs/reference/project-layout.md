@@ -8,14 +8,14 @@ CMakePresets.json         dev, debug, release
 .clang-format             code formatting
 .github/                  CI workflow, issue and pull request templates
 cmake/
-  PhCompiler.cmake        ph_configure_target, ph_optimize_debug: flags and warnings
-  PhDependencies.cmake    third-party libraries, pinned by URL and SHA-256
-  PhShaders.cmake         ph_compile_shaders, ph_add_game, game-code hot reload
-  PhPackaging.cmake       icons, signing, ph_package (installers)
-  PhAppImage.cmake        script: an AppImage from an install
-  PhNotarize.cmake        script: Apple notarization
+  BowlCompiler.cmake        bowl_configure_target, bowl_optimize_debug: flags and warnings
+  BowlDependencies.cmake    third-party libraries, pinned by URL and SHA-256
+  BowlShaders.cmake         bowl_compile_shaders, bowl_add_game, game-code hot reload
+  BowlPackaging.cmake       icons, signing, bowl_package (installers)
+  BowlAppImage.cmake        script: an AppImage from an install
+  BowlNotarize.cmake        script: Apple notarization
 engine/
-  CMakeLists.txt          one static library per module, and ph::engine
+  CMakeLists.txt          one static library per module, and bowl::engine
   assets/                 engine assets, mounted as "engine/"
     fonts/                Roboto Medium and its license
     shaders/              sprite, full-screen and post-processing shaders, common.glsl
@@ -29,11 +29,11 @@ engine/
   net/                    UDP connections, lockstep, rollback
   app/                    Engine, Game, scenes, the main loop, dev tools, hot reload host
 tools/
-  shaderc/                ph-shaderc: library and command-line tool
-  atlas/                  ph-atlas: packs pictures into an atlas with sprite-sheet JSON
-  icon/                   ph-icon: application icons from one picture
-  pack/                   ph-pack: asset archives (.phpak)
-  apidoc/                 ph-apidoc: the API reference from the headers
+  shaderc/                bowl-shaderc: library and command-line tool
+  atlas/                  bowl-atlas: packs pictures into an atlas with sprite-sheet JSON
+  icon/                   bowl-icon: application icons from one picture
+  pack/                   bowl-pack: asset archives (.bowlpak)
+  apidoc/                 bowl-apidoc: the API reference from the headers
 editor/                   Bowl Editor
 samples/
   icon.png                the samples' application icon
@@ -44,14 +44,14 @@ tests/
   test_*.cpp              unit tests, one file per area
   bench_ecs.cpp           ECS benchmark (not a test)
   data/                   test fixtures (small OGG files) and how they were made
-docs/                     this documentation; images/ holds the screenshots, reference/api/ is generated (ph_api_docs)
+docs/                     this documentation; images/ holds the screenshots, reference/api/ is generated (bowl_api_docs)
 ```
 
 Every module follows the same shape:
 
 ```
 engine/<module>/
-  include/ph/<module>/    public headers: #include "ph/<module>/<file>.hpp"
+  include/bowl/<module>/    public headers: #include "bowl/<module>/<file>.hpp"
   src/                    implementation and private headers
 ```
 
@@ -62,25 +62,25 @@ engine/<module>/
 | core | `types.hpp` | `u8`..`u64`, `i8`..`i64`, `f32`, `f64`, `usize`, `NonCopyable` |
 | | `math.hpp` | `Vec2`, `Vec3`, `Vec4`, `Mat4`, `Rect`, `Color`, `lerp`, `clamp`, `pi`, `tau` |
 | | `ease.hpp` | Easing curves, `Tween<T>` |
-| | `assert.hpp` | `PH_ASSERT`, `PH_VERIFY`, `PH_UNREACHABLE` |
+| | `assert.hpp` | `BOWL_ASSERT`, `BOWL_VERIFY`, `BOWL_UNREACHABLE` |
 | | `log.hpp` | `trace` .. `error`, sinks |
 | | `jobs.hpp` | `JobSystem`, `TaskGroup` |
-| | `profiler.hpp` | `PH_PROFILE_SCOPE`, frame stats |
+| | `profiler.hpp` | `BOWL_PROFILE_SCOPE`, frame stats |
 | | `time.hpp` | `now_seconds`, `Stopwatch` |
 | | `file.hpp` | Reading and writing files, `FileWatcher` |
 | | `assets.hpp` | `AssetManager`, `Asset<T>`, `AssetLoadContext` |
 | | `json.hpp` | `json::Value`, `parse`, `stringify` |
 | | `xml.hpp` | `xml::Element`, `xml::parse` (enough XML for tool formats) |
-| | `reflect.hpp` | `PH_REFLECT`, field visitors |
+| | `reflect.hpp` | `BOWL_REFLECT`, field visitors |
 | | `serialize.hpp` | `serial::to_json`, `serial::from_json`, `serial::Context` |
 | | `settings.hpp` | `Settings` |
 | | `localization.hpp` | `Localization`, `StringTable` |
 | | `utf8.hpp` | UTF-8 decoding and encoding |
 | | `type_id.hpp` | `type_id<T>()`, `type_name<T>()`, `fnv1a` |
 | | `function_ref.hpp` | `FunctionRef`, a non-owning callable reference |
-| | `shader_bundle.hpp` | The `.phsh` format |
+| | `shader_bundle.hpp` | The `.bowlsh` format |
 | ecs | `ecs.hpp` | Includes the rest |
-| | `component.hpp` | `Entity`, component registration, `PH_COMPONENT` |
+| | `component.hpp` | `Entity`, component registration, `BOWL_COMPONENT` |
 | | `world.hpp` | `World`, `Query`, `QueryFilter` |
 | | `commands.hpp` | `CommandBuffer` |
 | | `schedule.hpp` | `Schedule`, `SystemContext` |
@@ -99,12 +99,12 @@ engine/<module>/
 | audio | `audio.hpp` | `AudioEngine`, `Sound`, `Music`, buses |
 | physics | `collision.hpp` | Shapes, `collide`, `sweep`, `raycast`, `move_and_slide`, `SpatialHash` |
 | ui | `ui.hpp` | `ui::Context`, `ui::Style`, `ui::Typewriter` |
-| app | `main.hpp` | `PH_MAIN`; include it in one file |
+| app | `main.hpp` | `BOWL_MAIN`; include it in one file |
 | | `engine.hpp` | `Engine`, `Game`, `AppConfig` |
 | | `scene.hpp` | `Scene`, `SceneStack` |
 | | `hot_reload.hpp` | `HotReloadHost` (used by the hot reload build; games don't need it) |
 
-`ph/app/main.hpp` brings in the engine, the whole ECS (`ecs.hpp`, including the hierarchy and world I/O), the renderer,
+`bowl/app/main.hpp` brings in the engine, the whole ECS (`ecs.hpp`, including the hierarchy and world I/O), the renderer,
 audio, input, assets, settings, localization and logging. Include these yourself where you use them: `text.hpp`,
 `sprite_sheet.hpp`, `tilemap.hpp`, `particles.hpp`, `collision.hpp`, `ui.hpp` and `ease.hpp`.
 
@@ -119,8 +119,8 @@ my_game/
   external/
     Bowl/ the engine, as a Git submodule
   src/
-    main.cpp               PH_MAIN and the Game class
-    components.hpp         PH_COMPONENT structs
+    main.cpp               BOWL_MAIN and the Game class
+    components.hpp         BOWL_COMPONENT structs
     systems/               one file per group of systems
     scenes/                one file per scene
   assets/
@@ -139,8 +139,8 @@ After building, each game's folder looks like this (`build/<preset>/<path to gam
 
 ```
 my_game(.exe)
-engine/                    engine assets and compiled engine shaders (.phsh)
-assets/                    copies of your assets, plus compiled shaders (.phsh)
+engine/                    engine assets and compiled engine shaders (.bowlsh)
+assets/                    copies of your assets, plus compiled shaders (.bowlsh)
 my_game_shaders/           (next to it, in the build tree) intermediate shader outputs
 ```
 

@@ -1,10 +1,10 @@
-#include "ph/app/scene.hpp"
+#include "bowl/app/scene.hpp"
 
-#include "ph/app/engine.hpp"
+#include "bowl/app/engine.hpp"
 
 #include <algorithm>
 
-namespace ph {
+namespace bowl {
 
 void SceneStack::request(Op op, std::unique_ptr<Scene> scene, f32 fade) {
     pending_.push_back({op, std::move(scene), fade});
@@ -119,4 +119,4 @@ void SceneStack::shutdown(Engine& engine) {
     }
 }
 
-} // namespace ph
+} // namespace bowl

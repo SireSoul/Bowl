@@ -1,11 +1,11 @@
-#include "ph/gfx/particles.hpp"
+#include "bowl/gfx/particles.hpp"
 
-#include "ph/ecs/hierarchy.hpp"
+#include "bowl/ecs/hierarchy.hpp"
 
 #include <algorithm>
 #include <cmath>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 f32 ParticleSystem::random(f32 lo, f32 hi) {
     // xorshift64*: fast, deterministic per emitter.
@@ -111,4 +111,4 @@ void draw_particle_emitters(ecs::World& world, SpriteBatch& batch, const Texture
     });
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

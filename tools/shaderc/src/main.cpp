@@ -1,10 +1,10 @@
-// ph-shaderc: compiles a GLSL shader into a .phsh bundle (SPIR-V + MSL + HLSL).
+// bowl-shaderc: compiles a GLSL shader into a .bowlsh bundle (SPIR-V + MSL + HLSL).
 //
-//     ph-shaderc sprite.frag.glsl -o sprite.frag.phsh [--depfile sprite.frag.phsh.d] [-g] [--print-msl|--print-hlsl]
-//                [--include <prefix>=<folder>]...
+//     bowl-shaderc sprite.frag.glsl -o sprite.frag.bowlsh [--depfile sprite.frag.bowlsh.d] [-g]
+//                  [--print-msl|--print-hlsl] [--include <prefix>=<folder>]...
 
-#include "ph/core/file.hpp"
-#include "ph/shaderc/shaderc.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/shaderc/shaderc.hpp"
 
 #include <cstdio>
 #include <string>
@@ -40,46 +40,46 @@ int main(int argc, char** argv) {
         else if (arg == "--print-msl") print_msl = true;
         else if (arg == "--print-hlsl") print_hlsl = true;
         else if (arg == "-h" || arg == "--help") {
-            std::puts("usage: ph-shaderc <input.(vert|frag).glsl> -o <output.phsh> [--depfile <file>] [-g] "
+            std::puts("usage: bowl-shaderc <input.(vert|frag).glsl> -o <output.bowlsh> [--depfile <file>] [-g] "
                       "[--print-msl] [--print-hlsl] [--include <prefix>=<folder>]");
             return 0;
         } else input = arg;
     }
     if (input.empty() || (output.empty() && !print_msl && !print_hlsl)) {
-        std::fputs("ph-shaderc: need an input file and -o <output>\n", stderr);
+        std::fputs("bowl-shaderc: need an input file and -o <output>\n", stderr);
         return 2;
     }
 
-    auto stage = ph::shaderc::stage_from_filename(input.filename().string());
+    auto stage = bowl::shaderc::stage_from_filename(input.filename().string());
     if (!stage) {
-        std::fprintf(stderr, "ph-shaderc: can't tell the stage of '%s' (name it *.vert.glsl or *.frag.glsl)\n",
+        std::fprintf(stderr, "bowl-shaderc: can't tell the stage of '%s' (name it *.vert.glsl or *.frag.glsl)\n",
                      input.string().c_str());
         return 2;
     }
-    auto source = ph::read_file_text(input);
+    auto source = bowl::read_file_text(input);
     if (!source) {
-        std::fprintf(stderr, "ph-shaderc: can't read '%s'\n", input.string().c_str());
+        std::fprintf(stderr, "bowl-shaderc: can't read '%s'\n", input.string().c_str());
         return 1;
     }
 
-    ph::shaderc::CompileOptions options;
+    bowl::shaderc::CompileOptions options;
     options.name = input.filename().string();
     options.stage = *stage;
     options.source_path = fs::absolute(input);
     options.debug_info = debug;
     options.include_roots = include_roots;
-    auto result = ph::shaderc::compile_glsl(*source, options);
+    auto result = bowl::shaderc::compile_glsl(*source, options);
     if (!result.log.empty()) std::fputs(result.log.c_str(), result.ok ? stdout : stderr);
     if (!result.ok) return 1;
 
-    for (auto [wanted, format] : {std::pair{print_msl, ph::ShaderBlobFormat::Msl}, std::pair{print_hlsl, ph::ShaderBlobFormat::Hlsl}})
+    for (auto [wanted, format] : {std::pair{print_msl, bowl::ShaderBlobFormat::Msl}, std::pair{print_hlsl, bowl::ShaderBlobFormat::Hlsl}})
         if (wanted)
             if (auto* blob = result.bundle.find(format)) std::fwrite(blob->code.data(), 1, blob->code.size(), stdout);
 
     if (!output.empty()) {
         auto bytes = result.bundle.serialize();
-        if (!ph::write_file_bytes(output, bytes.data(), bytes.size())) {
-            std::fprintf(stderr, "ph-shaderc: can't write '%s'\n", output.string().c_str());
+        if (!bowl::write_file_bytes(output, bytes.data(), bytes.size())) {
+            std::fprintf(stderr, "bowl-shaderc: can't write '%s'\n", output.string().c_str());
             return 1;
         }
     }
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
         deps += " " + depfile_escape(fs::absolute(input));
         for (const auto& inc : result.includes) deps += " " + depfile_escape(fs::absolute(inc));
         deps += "\n";
-        ph::write_file_bytes(depfile, deps.data(), deps.size());
+        bowl::write_file_bytes(depfile, deps.data(), deps.size());
     }
     return 0;
 }

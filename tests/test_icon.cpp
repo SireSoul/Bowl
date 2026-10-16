@@ -1,11 +1,11 @@
-#include "ph/app/icon.hpp"
-#include "ph/icon/icon.hpp"
+#include "bowl/app/icon.hpp"
+#include "bowl/icon/icon.hpp"
 
 #include <doctest/doctest.h>
 
 #include <string>
 
-using namespace ph;
+using namespace bowl;
 
 namespace {
 
@@ -100,9 +100,9 @@ TEST_CASE("icon: .ico holds 16 to 256 as PNG") {
 TEST_CASE("icon: the embedded icon source registers its PNG") {
     std::vector<u8> png = {137, 80, 78, 71};
     std::string cpp = icon::make_cpp(png);
-    CHECK(cpp.find("#include \"ph/app/icon.hpp\"") != std::string::npos);
+    CHECK(cpp.find("#include \"bowl/app/icon.hpp\"") != std::string::npos);
     CHECK(cpp.find(" 137, 80, 78, 71,") != std::string::npos);
-    CHECK(cpp.find("ph::EmbeddedIcon icon(png, sizeof png)") != std::string::npos);
+    CHECK(cpp.find("bowl::EmbeddedIcon icon(png, sizeof png)") != std::string::npos);
 
     // What that file does when the program starts.
     CHECK(embedded_icon().empty()); // the tests have no ICON

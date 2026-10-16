@@ -1,6 +1,6 @@
-#include "ph/app/icon.hpp"
+#include "bowl/app/icon.hpp"
 
-namespace ph {
+namespace bowl {
 
 namespace {
 // Plain values, so they're set (to nothing) before any constructor runs, including the icon file's.
@@ -15,4 +15,4 @@ EmbeddedIcon::EmbeddedIcon(const u8* png, usize size) {
 
 std::span<const u8> embedded_icon() { return {icon_png, icon_size}; }
 
-} // namespace ph
+} // namespace bowl

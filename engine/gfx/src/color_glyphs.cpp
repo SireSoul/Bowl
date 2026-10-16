@@ -1,11 +1,11 @@
 #include "color_glyphs.hpp"
 
-#include "ph/gfx/renderer.hpp" // decode_png
+#include "bowl/gfx/renderer.hpp" // decode_png
 
 #include <algorithm>
 #include <cmath>
 
-namespace ph::gfx::color {
+namespace bowl::gfx::color {
 
 namespace {
 
@@ -259,4 +259,4 @@ std::vector<u8> resize(std::span<const u8> rgba, u32 w, u32 h, u32 nw, u32 nh) {
     return out;
 }
 
-} // namespace ph::gfx::color
+} // namespace bowl::gfx::color

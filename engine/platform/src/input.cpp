@@ -1,14 +1,14 @@
-#include "ph/platform/input.hpp"
+#include "bowl/platform/input.hpp"
 
-#include "ph/core/log.hpp"
-#include "ph/core/type_id.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/type_id.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
 
-namespace ph {
+namespace bowl {
 
 Input::Input() = default;
 
@@ -275,9 +275,9 @@ Vec2 Input::vector(std::string_view neg_x, std::string_view pos_x, std::string_v
     return v / len * ((len - dead_zone) / (1.0f - dead_zone));
 }
 
-} // namespace ph
+} // namespace bowl
 
-namespace ph {
+namespace bowl {
 
 const std::vector<InputBinding>* Input::bindings(std::string_view action) const {
     const Action* a = find(action);
@@ -374,4 +374,4 @@ void Input::load_bindings(const json::Value& json) {
     }
 }
 
-} // namespace ph
+} // namespace bowl

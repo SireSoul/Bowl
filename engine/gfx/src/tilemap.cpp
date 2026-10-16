@@ -1,8 +1,8 @@
-#include "ph/gfx/tilemap.hpp"
+#include "bowl/gfx/tilemap.hpp"
 
-#include "ph/core/log.hpp"
-#include "ph/core/profiler.hpp"
-#include "ph/core/xml.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/profiler.hpp"
+#include "bowl/core/xml.hpp"
 
 #define STBI_NO_STDIO
 #include <stb_image.h> // declarations only: stbi_zlib_decode_* (implemented in loaders.cpp)
@@ -16,7 +16,7 @@
 #include <optional>
 #include <span>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 // Small helpers
 
@@ -1237,7 +1237,7 @@ void TilemapCache::invalidate() {
 }
 
 void TilemapCache::build(GpuDevice& device, const Tilemap& map, const TilemapDrawOptions& o) {
-    PH_PROFILE_SCOPE("TilemapCache::build");
+    BOWL_PROFILE_SCOPE("TilemapCache::build");
     chunks_.clear();
     animated_.clear();
     MapDraw draw(map, o);
@@ -1331,4 +1331,4 @@ void register_tilemap_loader(AssetManager& assets) {
     });
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

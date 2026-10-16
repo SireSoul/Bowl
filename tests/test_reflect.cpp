@@ -1,13 +1,13 @@
-#include "ph/app/inspector.hpp"
-#include "ph/core/file.hpp"
-#include "ph/ecs/ecs.hpp"
+#include "bowl/app/inspector.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/ecs/ecs.hpp"
 
 #include <doctest/doctest.h>
 
 #include <filesystem>
 
-using namespace ph;
-using namespace ph::ecs;
+using namespace bowl;
+using namespace bowl::ecs;
 
 namespace game {
 
@@ -17,7 +17,7 @@ struct Stats {
     i32 strength = 1;
     f32 speed = 2.5f;
 };
-PH_REFLECT(Stats, strength, speed)
+BOWL_REFLECT(Stats, strength, speed)
 
 struct Hero {
     std::string name = "nobody";
@@ -31,7 +31,7 @@ struct Hero {
     std::optional<f32> buff;
     Entity companion; // a reference to another entity
 };
-PH_REFLECT(Hero, name, level, alive, faction, position, tint, stats, inventory, buff, companion)
+BOWL_REFLECT(Hero, name, level, alive, faction, position, tint, stats, inventory, buff, companion)
 
 struct Asleep {}; // tag: savable without reflection
 
@@ -202,7 +202,7 @@ struct Loadout {
     std::array<f32, 3> weights{};
     std::vector<bool> flags;
 };
-PH_REFLECT(Loadout, items, weights, flags)
+BOWL_REFLECT(Loadout, items, weights, flags)
 } // namespace game
 
 TEST_CASE("inspector visitor walks lists and can resize vectors") {
@@ -392,7 +392,7 @@ TEST_CASE("world io: migrations upgrade old saves step by step") {
 
 TEST_CASE("world io: prefab files, one entity or several, text or binary") {
     register_components<Hero, Asleep>();
-    auto dir = std::filesystem::temp_directory_path() / "ph_prefab_test";
+    auto dir = std::filesystem::temp_directory_path() / "bowl_prefab_test";
     std::filesystem::create_directories(dir);
     std::string guard = R"({ "components": { "game::Hero": { "name": "Guard", "level": 5 }, "game::Asleep": {} } })";
     REQUIRE(write_file_bytes(dir / "guard.prefab", guard.data(), guard.size()));

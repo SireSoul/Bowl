@@ -1,6 +1,6 @@
-#include "ph/core/json_text.hpp"
+#include "bowl/core/json_text.hpp"
 
-namespace ph::json {
+namespace bowl::json {
 
 namespace {
 
@@ -230,4 +230,4 @@ bool TextDocument::erase(const Path& path) {
     return replace(start, end, "");
 }
 
-} // namespace ph::json
+} // namespace bowl::json

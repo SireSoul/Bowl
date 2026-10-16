@@ -8,7 +8,7 @@
 // The editor's look and its few custom controls, on top of Dear ImGui: a dark blue-gray theme with a warm accent,
 // icons drawn as shapes (no icon font to ship), tool buttons, cards and tooltips that say what a control does and its
 // key.
-namespace ph::editor::ui {
+namespace bowl::editor::ui {
 
 namespace color {
 inline constexpr ImU32 panel = IM_COL32(24, 27, 34, 245);
@@ -46,4 +46,4 @@ void hint(std::string_view text);
 // A thin line across the current window.
 void rule();
 
-} // namespace ph::editor::ui
+} // namespace bowl::editor::ui

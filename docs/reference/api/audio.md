@@ -1,13 +1,13 @@
 # audio
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/audio/audio.hpp](#phaudioaudiohpp)
+- [bowl/audio/audio.hpp](#bowlaudioaudiohpp)
 
-## ph/audio/audio.hpp
+## bowl/audio/audio.hpp
 
-`#include "ph/audio/audio.hpp"` · namespace `ph::audio`
+`#include "bowl/audio/audio.hpp"` · namespace `bowl::audio`
 
 ### Sound
 
@@ -41,7 +41,7 @@ const std::shared_ptr<const std::vector<f32>>& samples() const;
 
 ### Music
 
-Compressed music (Ogg Vorbis, or Ogg Opus when built with PH_OPUS), decoded a little at a time while it plays.
+Compressed music (Ogg Vorbis, or Ogg Opus when built with BOWL_OPUS), decoded a little at a time while it plays.
 Loaded as an asset from .ogg and .opus files.
 
 ```cpp
@@ -70,7 +70,7 @@ u32 channels() const;
 f32 seconds() const;
 ```
 
-Whether .opus files can be loaded (the engine was built with -DPH_OPUS=ON).
+Whether .opus files can be loaded (the engine was built with -DBOWL_OPUS=ON).
 
 ```cpp
 bool opus_supported();

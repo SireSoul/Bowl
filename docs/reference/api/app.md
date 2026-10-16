@@ -1,19 +1,19 @@
 # app
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/app/engine.hpp](#phappenginehpp)
-- [ph/app/entry.hpp](#phappentryhpp)
-- [ph/app/hot_reload.hpp](#phapphot_reloadhpp)
-- [ph/app/icon.hpp](#phappiconhpp)
-- [ph/app/inspector.hpp](#phappinspectorhpp)
-- [ph/app/main.hpp](#phappmainhpp)
-- [ph/app/scene.hpp](#phappscenehpp)
+- [bowl/app/engine.hpp](#bowlappenginehpp)
+- [bowl/app/entry.hpp](#bowlappentryhpp)
+- [bowl/app/hot_reload.hpp](#bowlapphot_reloadhpp)
+- [bowl/app/icon.hpp](#bowlappiconhpp)
+- [bowl/app/inspector.hpp](#bowlappinspectorhpp)
+- [bowl/app/main.hpp](#bowlappmainhpp)
+- [bowl/app/scene.hpp](#bowlappscenehpp)
 
-## ph/app/engine.hpp
+## bowl/app/engine.hpp
 
-`#include "ph/app/engine.hpp"` · namespace `ph`
+`#include "bowl/app/engine.hpp"` · namespace `bowl`
 
 ```cpp
 union SDL_Event;
@@ -36,8 +36,8 @@ struct AppConfig {
     // Where settings and saves live: the OS's per-user app data folder for <organization>/<application>.
     std::string organization = "Bowl";
     std::string application;         // empty: the window title
-    std::string game_asset_dir;      // dev builds: the game's source asset folder (set by PH_MAIN)
-    bool fullscreen_on_steam_deck = true; // see is_steam_deck() in ph/platform/system.hpp
+    std::string game_asset_dir;      // dev builds: the game's source asset folder (set by BOWL_MAIN)
+    bool fullscreen_on_steam_deck = true; // see is_steam_deck() in bowl/platform/system.hpp
     // For tools built on the engine, like the editor: Game::dev_ui is always shown, not only while the F1 overlay
     // is open, and the engine's own windows move from F1 to F12. Dev builds only.
     bool dev_ui_always = false;
@@ -46,7 +46,7 @@ struct AppConfig {
 
 ### Game
 
-Implement this, then put PH_MAIN(YourGame) in one .cpp file (see ph/app/main.hpp).
+Implement this, then put BOWL_MAIN(YourGame) in one .cpp file (see bowl/app/main.hpp).
 
 ```cpp
 class Game
@@ -212,15 +212,15 @@ SDL_EVENT_WILL_ENTER_BACKGROUND reaches Game::event, since the system may close 
 bool suspended() const;
 ```
 
-## ph/app/entry.hpp
+## bowl/app/entry.hpp
 
-`#include "ph/app/entry.hpp"`
+`#include "bowl/app/entry.hpp"`
 
-The engine side of the entry point. Games include ph/app/main.hpp instead.
+The engine side of the entry point. Games include bowl/app/main.hpp instead.
 
-## ph/app/hot_reload.hpp
+## bowl/app/hot_reload.hpp
 
-`#include "ph/app/hot_reload.hpp"` · namespace `ph`
+`#include "bowl/app/hot_reload.hpp"` · namespace `bowl`
 
 ### HotReloadHost
 
@@ -239,10 +239,10 @@ file changes (you rebuilt it), the host
 ```cpp
  runs its init(), and puts the saved components back.
 ```
-A plain-data component whose size or alignment changed loses its old data. Use PH_COMPONENT for savable components
+A plain-data component whose size or alignment changed loses its old data. Use BOWL_COMPONENT for savable components
 so they're registered as soon as the library loads. State kept only in the Game object is rebuilt by init().
 
-With source_dirs and build_command set (ph_add_game does this), the host also rebuilds the library itself when a
+With source_dirs and build_command set (bowl_add_game does this), the host also rebuilds the library itself when a
 source file is saved, so editing code is enough. --no-auto-build turns that off.
 
 ```cpp
@@ -309,11 +309,11 @@ Whether a path is a C or C++ source or header, by extension.
 static bool is_source(const std::filesystem::path& path);
 ```
 
-## ph/app/icon.hpp
+## bowl/app/icon.hpp
 
-`#include "ph/app/icon.hpp"` · namespace `ph`
+`#include "bowl/app/icon.hpp"` · namespace `bowl`
 
-The game's icon as a PNG, put into the executable by ph_add_game(... ICON icon.png); empty without one. The App
+The game's icon as a PNG, put into the executable by bowl_add_game(... ICON icon.png); empty without one. The App
 shows it on the window (title bar, taskbar, and the Dock outside an .app bundle, which has its own .icns).
 
 ```cpp
@@ -322,7 +322,7 @@ std::span<const u8> embedded_icon();
 
 ### EmbeddedIcon
 
-What the file ph_add_game makes uses to register the icon.
+What the file bowl_add_game makes uses to register the icon.
 
 ```cpp
 struct EmbeddedIcon
@@ -332,14 +332,14 @@ struct EmbeddedIcon
 EmbeddedIcon(const u8* png, usize size);
 ```
 
-## ph/app/inspector.hpp
+## bowl/app/inspector.hpp
 
-`#include "ph/app/inspector.hpp"` · namespace `ph::inspector`
+`#include "bowl/app/inspector.hpp"` · namespace `bowl::inspector`
 
 Drag-and-drop payload type for asset paths (a UTF-8 string, no terminator). Asset fields accept it.
 
 ```cpp
-inline constexpr const char* asset_payload = "PH_ASSET_PATH";
+inline constexpr const char* asset_payload = "BOWL_ASSET_PATH";
 ```
 
 One component of an entity under a collapsing header: editable fields for reflected components (lists included), a
@@ -377,20 +377,21 @@ value changed; false (and nothing drawn) for components that aren't reflected.
 bool fields(ecs::World& world, ecs::Entity e, ecs::ComponentId c, AssetManager& assets, ecs::Entity* select);
 ```
 
-## ph/app/main.hpp
+## bowl/app/main.hpp
 
-`#include "ph/app/main.hpp"`
+`#include "bowl/app/main.hpp"`
 
-Include in exactly one .cpp of your game and write PH_MAIN(YourGame).
+Include in exactly one .cpp of your game and write BOWL_MAIN(YourGame).
 
 Uses SDL3's callback entry points instead of a main() loop. The web (Emscripten), iOS and Android need those, and
-using them everywhere keeps the game code identical on every platform. In a hot-reload build (ph_add_game(... HOT_RELOAD)) the game is a
-library instead, and PH_MAIN exports the function the host uses to create the game.
+using them everywhere keeps the game code identical on every platform. In a hot-reload build
+(bowl_add_game(... HOT_RELOAD)) the game is a library instead, and BOWL_MAIN exports the function the host uses to
+create the game.
 
 ```cpp
-#define PH_DETAIL_EXPORT extern "C" __declspec(dllexport)
-#define PH_DETAIL_EXPORT extern "C" __attribute__((visibility("default")))
-#define PH_MAIN(GameType)
+#define BOWL_DETAIL_EXPORT extern "C" __declspec(dllexport)
+#define BOWL_DETAIL_EXPORT extern "C" __attribute__((visibility("default")))
+#define BOWL_MAIN(GameType)
 ```
 
 ```cpp
@@ -398,17 +399,17 @@ library instead, and PH_MAIN exports the function the host uses to create the ga
 ```
 
 ```cpp
-#define PH_DETAIL_GAME_ASSETS PH_GAME_ASSET_SOURCE_DIR
-#define PH_DETAIL_GAME_ASSETS ""
+#define BOWL_DETAIL_GAME_ASSETS BOWL_GAME_ASSET_SOURCE_DIR
+#define BOWL_DETAIL_GAME_ASSETS ""
 ```
 
 ```cpp
-#define PH_MAIN(GameType)
+#define BOWL_MAIN(GameType)
 ```
 
-## ph/app/scene.hpp
+## bowl/app/scene.hpp
 
-`#include "ph/app/scene.hpp"` · namespace `ph`
+`#include "bowl/app/scene.hpp"` · namespace `bowl`
 
 ### Scene
 

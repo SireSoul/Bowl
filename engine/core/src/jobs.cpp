@@ -1,11 +1,11 @@
-#include "ph/core/jobs.hpp"
+#include "bowl/core/jobs.hpp"
 
-#include "ph/core/profiler.hpp"
+#include "bowl/core/profiler.hpp"
 
 #include <algorithm>
 #include <string>
 
-namespace ph {
+namespace bowl {
 
 JobSystem::JobSystem(i32 workers) {
     if (workers < 0) workers = std::max(0, static_cast<i32>(std::thread::hardware_concurrency()) - 1);
@@ -96,4 +96,4 @@ void JobSystem::parallel_for(usize count, usize min_chunk, FunctionRef<void(usiz
     wait(group);
 }
 
-} // namespace ph
+} // namespace bowl

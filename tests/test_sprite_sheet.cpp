@@ -1,10 +1,10 @@
-#include "ph/atlas/atlas.hpp"
-#include "ph/gfx/sprite_sheet.hpp"
+#include "bowl/atlas/atlas.hpp"
+#include "bowl/gfx/sprite_sheet.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
-using namespace ph::gfx;
+using namespace bowl;
+using namespace bowl::gfx;
 
 namespace {
 

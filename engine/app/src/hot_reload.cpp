@@ -1,8 +1,8 @@
-#include "ph/app/hot_reload.hpp"
+#include "bowl/app/hot_reload.hpp"
 
-#include "ph/core/file.hpp"
-#include "ph/core/time.hpp"
-#include "ph/ecs/world_io.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/time.hpp"
+#include "bowl/ecs/world_io.hpp"
 
 #include <SDL3/SDL_process.h>
 #include <SDL3/SDL_properties.h>
@@ -20,7 +20,7 @@
 #include <format>
 #include <thread>
 
-namespace ph {
+namespace bowl {
 
 namespace fs = std::filesystem;
 
@@ -254,7 +254,7 @@ std::unique_ptr<HotReloadHost::Library> HotReloadHost::open_copy() {
     const fs::path& library = options_.library;
     auto lib = std::make_unique<Library>();
     std::error_code ec;
-    lib->copy = fs::temp_directory_path() / std::format("ph-hot-{}-{}{}", library.stem().string(), copies_++,
+    lib->copy = fs::temp_directory_path() / std::format("bowl-hot-{}-{}{}", library.stem().string(), copies_++,
                                                           library.extension().string());
     fs::copy_file(library, lib->copy, fs::copy_options::overwrite_existing, ec);
     if (ec) {
@@ -270,9 +270,9 @@ std::unique_ptr<HotReloadHost::Library> HotReloadHost::open_copy() {
         error("hot reload: can't load {}: {}", library.string(), last_error());
         return nullptr;
     }
-    lib->create = reinterpret_cast<CreateGame>(find_symbol(lib->handle, "ph_create_game"));
+    lib->create = reinterpret_cast<CreateGame>(find_symbol(lib->handle, "bowl_create_game"));
     if (!lib->create) {
-        error("hot reload: {} has no ph_create_game (is it built with PH_MAIN?)", library.string());
+        error("hot reload: {} has no bowl_create_game (is it built with BOWL_MAIN?)", library.string());
         return nullptr;
     }
     lib->base = module_of(reinterpret_cast<const void*>(lib->create));
@@ -451,4 +451,4 @@ void HotReloadHost::shutdown(Engine& engine) {
     teardown(engine);
 }
 
-} // namespace ph
+} // namespace bowl

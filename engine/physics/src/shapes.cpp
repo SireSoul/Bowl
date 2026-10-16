@@ -6,12 +6,12 @@
 // over the cores' edge normals (with each projection widened by its radius) finds the shortest way out; otherwise the
 // closest points between the cores give it.
 
-#include "ph/physics/collision.hpp"
+#include "bowl/physics/collision.hpp"
 
 #include <algorithm>
 #include <limits>
 
-namespace ph::physics {
+namespace bowl::physics {
 
 namespace {
 
@@ -268,4 +268,4 @@ RayHit raycast(Vec2 origin, Vec2 dir, f32 max_t, const Shape& s) {
         s);
 }
 
-} // namespace ph::physics
+} // namespace bowl::physics

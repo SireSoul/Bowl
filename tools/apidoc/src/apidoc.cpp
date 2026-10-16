@@ -1,9 +1,9 @@
-#include "ph/apidoc/apidoc.hpp"
+#include "bowl/apidoc/apidoc.hpp"
 
 #include <algorithm>
 #include <cctype>
 
-namespace ph::apidoc {
+namespace bowl::apidoc {
 
 namespace {
 
@@ -188,7 +188,7 @@ private:
     Statement statement() {
         usize start = i_;
         int paren = 0;
-        // A macro call (PH_REFLECT(...)) may end its line with no semicolon.
+        // A macro call (BOWL_REFLECT(...)) may end its line with no semicolon.
         usize n = 0;
         while (start + n < s_.size() && is_ident(s_[start + n])) ++n;
         std::string_view first = s_.substr(start, n);
@@ -560,8 +560,8 @@ std::string first_sentence(const std::vector<std::string>& lines) {
 }
 
 constexpr std::string_view generated_note =
-    "Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run\n"
-    "`cmake --build <build folder> --target ph_api_docs`.\n";
+    "Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run\n"
+    "`cmake --build <build folder> --target bowl_api_docs`.\n";
 
 } // namespace
 
@@ -615,4 +615,4 @@ std::string render_index(const std::vector<std::pair<std::string, std::vector<He
     return out;
 }
 
-} // namespace ph::apidoc
+} // namespace bowl::apidoc

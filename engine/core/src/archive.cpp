@@ -1,18 +1,18 @@
-#include "ph/core/archive.hpp"
+#include "bowl/core/archive.hpp"
 
-#include "ph/core/file.hpp"
-#include "ph/core/log.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/log.hpp"
 
 #include <algorithm>
 #include <fstream>
 
-namespace ph {
+namespace bowl {
 
 namespace fs = std::filesystem;
 
 namespace {
 
-constexpr char magic[4] = {'P', 'H', 'P', 'K'};
+constexpr char magic[4] = {'B', 'W', 'P', 'K'};
 constexpr u32 version = 1;
 
 template <class T> void put(std::vector<u8>& out, T v) {
@@ -119,4 +119,4 @@ bool write_archive(const fs::path& archive, const fs::path& folder) {
     return write_file_bytes(archive, out.data(), out.size());
 }
 
-} // namespace ph
+} // namespace bowl

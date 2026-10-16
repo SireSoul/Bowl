@@ -1,11 +1,11 @@
-#include "ph/gfx/gpu_particles.hpp"
+#include "bowl/gfx/gpu_particles.hpp"
 
-#include "ph/core/log.hpp"
+#include "bowl/core/log.hpp"
 
 #include <algorithm>
 #include <cmath>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 namespace {
 // Must match engine/assets/shaders/particles.comp.glsl.
@@ -67,4 +67,4 @@ void GpuParticles::draw(Renderer& renderer, const Camera2D& camera, const Textur
     if (sprites_) renderer.submit(*sprites_, capacity_, texture, camera, blend);
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

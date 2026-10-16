@@ -1,8 +1,8 @@
-#include "ph/core/profiler.hpp"
+#include "bowl/core/profiler.hpp"
 
-#include "ph/core/time.hpp"
+#include "bowl/core/time.hpp"
 
-#if PH_TRACY
+#if BOWL_TRACY
 #include <tracy/TracyC.h>
 #endif
 
@@ -15,7 +15,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace ph {
+namespace bowl {
 
 namespace {
 
@@ -52,25 +52,25 @@ void profiler::end_frame() {
     s.current.clear();
     s.history.push_back(static_cast<f32>(frame_ms));
     if (s.history.size() > 240) s.history.pop_front();
-#if PH_TRACY
+#if BOWL_TRACY
     ___tracy_emit_frame_mark(nullptr);
 #endif
 }
 
 void profiler::set_thread_name([[maybe_unused]] const char* name) {
-#if PH_TRACY
+#if BOWL_TRACY
     ___tracy_set_thread_name(name);
 #endif
 }
 
 void profiler::plot([[maybe_unused]] const char* name, [[maybe_unused]] f64 value) {
-#if PH_TRACY
+#if BOWL_TRACY
     ___tracy_emit_plot(name, value);
 #endif
 }
 
 bool profiler::tracy_enabled() {
-#if PH_TRACY
+#if BOWL_TRACY
     return true;
 #else
     return false;
@@ -107,7 +107,7 @@ std::vector<f32> profiler::frame_history() {
 
 ProfileScope::ProfileScope(std::string_view name, [[maybe_unused]] const char* file, [[maybe_unused]] u32 line)
     : name_(name), start_(profiler::enabled() ? now_seconds() : -1.0) {
-#if PH_TRACY
+#if BOWL_TRACY
     // Names are often runtime strings (system names), so the source location is allocated per zone. Tracy copies it.
     if (___tracy_connected()) {
         const char* f = file ? file : "";
@@ -121,9 +121,9 @@ ProfileScope::ProfileScope(std::string_view name, [[maybe_unused]] const char* f
 
 ProfileScope::~ProfileScope() {
     if (start_ >= 0) profiler::record(name_, (now_seconds() - start_) * 1000.0);
-#if PH_TRACY
+#if BOWL_TRACY
     if (tracy_active_) ___tracy_emit_zone_end(TracyCZoneCtx{tracy_zone_, 1});
 #endif
 }
 
-} // namespace ph
+} // namespace bowl

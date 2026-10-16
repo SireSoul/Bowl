@@ -1,4 +1,4 @@
-#include "ph/ecs/ecs.hpp"
+#include "bowl/ecs/ecs.hpp"
 
 #include <doctest/doctest.h>
 
@@ -6,8 +6,8 @@
 #include <set>
 #include <string>
 
-using namespace ph;
-using namespace ph::ecs;
+using namespace bowl;
+using namespace bowl::ecs;
 
 namespace {
 

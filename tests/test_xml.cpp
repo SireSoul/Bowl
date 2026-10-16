@@ -1,8 +1,8 @@
-#include "ph/core/xml.hpp"
+#include "bowl/core/xml.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
+using namespace bowl;
 
 TEST_CASE("xml: elements, attributes, text and entities") {
     auto doc = xml::parse(R"(<?xml version="1.0"?>

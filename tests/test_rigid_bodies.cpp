@@ -1,11 +1,11 @@
-// Only built with PH_BOX2D.
-#include "ph/ecs/world_io.hpp"
-#include "ph/physics/rigid_bodies.hpp"
+// Only built with BOWL_BOX2D.
+#include "bowl/ecs/world_io.hpp"
+#include "bowl/physics/rigid_bodies.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
-using namespace ph::physics;
+using namespace bowl;
+using namespace bowl::physics;
 
 TEST_CASE("rigid bodies: a crate falls and lands on the floor") {
     ecs::World world;

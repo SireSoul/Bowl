@@ -1,13 +1,13 @@
-#include "ph/physics/rigid_bodies.hpp"
+#include "bowl/physics/rigid_bodies.hpp"
 
-#include "ph/core/log.hpp"
+#include "bowl/core/log.hpp"
 
 #include <box2d/box2d.h>
 
 #include <algorithm>
 #include <unordered_map>
 
-namespace ph::physics {
+namespace bowl::physics {
 
 namespace {
 
@@ -363,4 +363,4 @@ void apply_impulse(ecs::World& world, ecs::Entity e, Vec2 impulse) {
     b2Body_ApplyLinearImpulseToCenter(it->second.id, {impulse.x / ppm, impulse.y / ppm}, true);
 }
 
-} // namespace ph::physics
+} // namespace bowl::physics

@@ -42,11 +42,11 @@ tests run.
 ## Logging
 
 ```cpp
-ph::info("loaded {} enemies from {}", count, path);   // std::format syntax
-ph::warn("save slot {} is from a newer version", slot);
-ph::error("can't open {}", file.string());
-ph::debug("path cost {}", cost);
-ph::trace("...");
+bowl::info("loaded {} enemies from {}", count, path);   // std::format syntax
+bowl::warn("save slot {} is from a newer version", slot);
+bowl::error("can't open {}", file.string());
+bowl::debug("path cost {}", cost);
+bowl::trace("...");
 ```
 
 Levels, from least to most severe: `Trace`, `Debug`, `Info`, `Warn`, `Error`. Lines below the current level
@@ -60,14 +60,14 @@ thread logged, one at a time. Logging is thread-safe.
 ## Assertions
 
 ```cpp
-PH_ASSERT(index < size);
-PH_ASSERT(texture, "the hero texture must be loaded before spawning");
+BOWL_ASSERT(index < size);
+BOWL_ASSERT(texture, "the hero texture must be loaded before spawning");
 ```
 
 A failed assertion logs the condition, the message and the location, then stops the program (in the debugger, if
 one is attached). Assertions are on in debug builds and in any build with dev tools, and compiled out of release
-builds; define `PH_ASSERTS` as 0 or 1 to override. `PH_VERIFY(cond)` is the same, but `cond` is still evaluated when
-assertions are off. `PH_UNREACHABLE()` marks code that must never run.
+builds; define `BOWL_ASSERTS` as 0 or 1 to override. `BOWL_VERIFY(cond)` is the same, but `cond` is still evaluated when
+assertions are off. `BOWL_UNREACHABLE()` marks code that must never run.
 
 The engine uses assertions for programming errors, never for things that can go wrong at runtime like missing files.
 
@@ -77,7 +77,7 @@ The CPU profiler is always compiled in and cheap enough to leave on. Mark the co
 
 ```cpp
 void rebuild_navigation() {
-    PH_PROFILE_SCOPE("rebuild navigation");
+    BOWL_PROFILE_SCOPE("rebuild navigation");
     // ...
 }
 ```
@@ -91,14 +91,14 @@ frame times.
 
 ### Tracy
 
-For a timeline of what every thread did and when, build with `-DPH_TRACY=ON` and connect the
+For a timeline of what every thread did and when, build with `-DBOWL_TRACY=ON` and connect the
 [Tracy](https://github.com/wolfpld/tracy) profiler (version 0.12) to the running game:
 
 ```bash
-cmake --preset dev -DPH_TRACY=ON -B build/tracy
+cmake --preset dev -DBOWL_TRACY=ON -B build/tracy
 ```
 
-Everything the overlay's profiler measures also goes to Tracy, with the file and line of each `PH_PROFILE_SCOPE`:
+Everything the overlay's profiler measures also goes to Tracy, with the file and line of each `BOWL_PROFILE_SCOPE`:
 engine phases, every system, your own zones. On top of that you get one frame mark per frame, named worker threads,
 log lines (sent while Tracy is connected) and plots of entities, sprites, draw calls and fixed ticks per frame. Add
 your own plots with `profiler::plot("enemies", count)`; the name must be a string literal.
@@ -108,7 +108,7 @@ connections from the same machine. GPU timings aren't available, because SDL_GPU
 
 ## Timing small things
 
-`ph/core/time.hpp` has `now_seconds()` and a `Stopwatch` for quick measurements:
+`bowl/core/time.hpp` has `now_seconds()` and a `Stopwatch` for quick measurements:
 
 ```cpp
 Stopwatch watch;

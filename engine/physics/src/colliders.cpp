@@ -1,8 +1,8 @@
-#include "ph/physics/colliders.hpp"
+#include "bowl/physics/colliders.hpp"
 
 #include <algorithm>
 
-namespace ph::physics {
+namespace bowl::physics {
 
 Shape world_shape(const Collider& c, const ecs::GlobalTransform2D& t) {
     Vec2 center = t.apply(c.offset);
@@ -85,4 +85,4 @@ std::vector<ecs::Entity> overlapping(ecs::World& world, const Shape& shape, u32 
     return out;
 }
 
-} // namespace ph::physics
+} // namespace bowl::physics

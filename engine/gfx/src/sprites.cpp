@@ -1,4 +1,4 @@
-#include "ph/gfx/sprites.hpp"
+#include "bowl/gfx/sprites.hpp"
 
 #include <SDL3/SDL_gpu.h>
 
@@ -6,7 +6,7 @@
 #include <cmath>
 #include <numeric>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 // Camera2D
 
@@ -192,4 +192,4 @@ bool StaticSprites::build(GpuDevice& device, const SpriteBatch& batch) {
     return true;
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

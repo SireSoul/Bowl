@@ -1,6 +1,6 @@
-#include "ph/shaderc/shaderc.hpp"
+#include "bowl/shaderc/shaderc.hpp"
 
-#include "ph/core/file.hpp"
+#include "bowl/core/file.hpp"
 
 #include <SPIRV/GlslangToSpv.h>
 #include <glslang/Public/ResourceLimits.h>
@@ -14,7 +14,7 @@
 #include <memory>
 #include <mutex>
 
-namespace ph::shaderc {
+namespace bowl::shaderc {
 
 namespace fs = std::filesystem;
 
@@ -355,4 +355,4 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
     return result;
 }
 
-} // namespace ph::shaderc
+} // namespace bowl::shaderc

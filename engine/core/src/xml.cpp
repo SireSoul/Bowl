@@ -1,11 +1,11 @@
-#include "ph/core/xml.hpp"
+#include "bowl/core/xml.hpp"
 
-#include "ph/core/utf8.hpp"
+#include "bowl/core/utf8.hpp"
 
 #include <charconv>
 #include <format>
 
-namespace ph::xml {
+namespace bowl::xml {
 
 std::string_view Element::attribute(std::string_view key, std::string_view fallback) const {
     for (const auto& [k, v] : attributes)
@@ -204,4 +204,4 @@ private:
 
 ParseResult parse(std::string_view text) { return Parser(text).run(); }
 
-} // namespace ph::xml
+} // namespace bowl::xml

@@ -57,8 +57,8 @@ The engine sets up these mounts:
 
 | Prefix | Dev builds | All builds |
 | --- | --- | --- |
-| `engine/` | `<engine source>/engine/assets/` first | `<exe dir>/engine.phpak` if it's there, else `<exe dir>/engine/` |
-| (none) | your game's `ASSETS` folder first | `<exe dir>/assets.phpak` if it's there, else `<exe dir>/assets/` |
+| `engine/` | `<engine source>/engine/assets/` first | `<exe dir>/engine.bowlpak` if it's there, else `<exe dir>/engine/` |
+| (none) | your game's `ASSETS` folder first | `<exe dir>/assets.bowlpak` if it's there, else `<exe dir>/assets/` |
 
 So `"characters/hero.png"` is `assets/characters/hero.png` in your source tree, and `"engine/fonts/Roboto-Medium.ttf"`
 is the engine's font. Because dev builds read the source folders directly, saving a file there is all it takes to
@@ -71,21 +71,21 @@ for code that needs a file on disk; files inside archives have none.
 
 ### Archives
 
-An archive (`.phpak`) holds a whole folder in one file. Shipping builds made with `PH_PACK_ASSETS` (on in the
-`release` preset) put `engine/` and `assets/` into `engine.phpak` and `assets.phpak`, and the engine mounts those
-instead: fewer files to install, and nothing for players to poke at by accident. The `ph-pack` tool makes and lists
+An archive (`.bowlpak`) holds a whole folder in one file. Shipping builds made with `BOWL_PACK_ASSETS` (on in the
+`release` preset) put `engine/` and `assets/` into `engine.bowlpak` and `assets.bowlpak`, and the engine mounts those
+instead: fewer files to install, and nothing for players to poke at by accident. The `bowl-pack` tool makes and lists
 them:
 
 ```bash
-ph-pack assets -o assets.phpak
+bowl-pack assets -o assets.bowlpak
 ```
 
 ```bash
-ph-pack --list assets.phpak
+bowl-pack --list assets.bowlpak
 ```
 
 Files are stored as they are, without compression; pictures and sounds are compressed already. Archives are read
-only and never hot-reload. In code, `ph::Archive` (`ph/core/archive.hpp`) opens one and `ph::write_archive` makes
+only and never hot-reload. In code, `bowl::Archive` (`bowl/core/archive.hpp`) opens one and `bowl::write_archive` makes
 one.
 
 ## Asset handles
@@ -118,7 +118,7 @@ loads again when the world is loaded (see [saving.md](saving.md)).
 | Type | Files | Notes |
 | --- | --- | --- |
 | `gfx::Texture` | `.png` `.jpg` `.tga` `.bmp` | Premultiplied on load; mipmapped unless `pixel_art` is set |
-| `gfx::Shader` | `name.vert` / `name.frag` | Path without `.glsl` / `.phsh`; see [shaders.md](shaders.md) |
+| `gfx::Shader` | `name.vert` / `name.frag` | Path without `.glsl` / `.bowlsh`; see [shaders.md](shaders.md) |
 | `gfx::Font` | `.ttf` `.otf` | See [text.md](text.md) |
 | `gfx::SpriteSheet` | Aseprite `.json` | Loads its PNG too; see [sprite-animation.md](sprite-animation.md) |
 | `gfx::Tilemap` | Tiled `.tmj` | Loads `.tsj` tilesets and images too; see [tilemaps.md](tilemaps.md) |

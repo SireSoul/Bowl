@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- An iOS game's Info.plist, filled in by ph_add_game (its NAME, BUNDLE_ID, ICON and ORIENTATION) and CMake. -->
+<!-- An iOS game's Info.plist, filled in by bowl_add_game (its NAME, BUNDLE_ID, ICON and ORIENTATION) and CMake. -->
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key><string>en</string>
@@ -12,14 +12,14 @@
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
     <key>CFBundleVersion</key><string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
-    @PH_IOS_ICON@
+    @BOWL_IOS_ICON@
     <key>LSRequiresIPhoneOS</key><true/>
     <key>UILaunchScreen</key><dict/>
     <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string><string>metal</string></array>
     <key>UIRequiresFullScreen</key><true/>
     <key>UIStatusBarHidden</key><true/>
     <key>UIViewControllerBasedStatusBarAppearance</key><false/>
-    <key>UISupportedInterfaceOrientations</key><array>@PH_IOS_ORIENTATIONS@</array>
-    <key>UISupportedInterfaceOrientations~ipad</key><array>@PH_IOS_ORIENTATIONS@</array>
+    <key>UISupportedInterfaceOrientations</key><array>@BOWL_IOS_ORIENTATIONS@</array>
+    <key>UISupportedInterfaceOrientations~ipad</key><array>@BOWL_IOS_ORIENTATIONS@</array>
 </dict>
 </plist>

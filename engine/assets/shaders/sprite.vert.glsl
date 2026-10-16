@@ -1,6 +1,6 @@
 #version 450
 // Vertex pulling: no vertex buffers. Each sprite is 6 vertices; the vertex index picks the sprite and the corner,
-// and the sprite's data comes from a storage buffer. Must match ph::gfx::SpriteInstance.
+// and the sprite's data comes from a storage buffer. Must match bowl::gfx::SpriteInstance.
 // Draws always start at vertex 0 and pass their first sprite in the uniform block: backends disagree on whether the
 // vertex index includes the draw's first-vertex offset, so the shader never relies on it.
 #include "common.glsl"

@@ -1,8 +1,8 @@
-#include "ph/core/file.hpp"
+#include "bowl/core/file.hpp"
 
 #include <fstream>
 
-namespace ph {
+namespace bowl {
 
 namespace fs = std::filesystem;
 
@@ -60,4 +60,4 @@ void FileWatcher::poll() {
     for (auto& [callback, path] : changed) callback(path);
 }
 
-} // namespace ph
+} // namespace bowl

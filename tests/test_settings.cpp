@@ -1,16 +1,16 @@
-#include "ph/core/settings.hpp"
-#include "ph/platform/input.hpp"
+#include "bowl/core/settings.hpp"
+#include "bowl/platform/input.hpp"
 
 #include <SDL3/SDL_events.h>
 #include <doctest/doctest.h>
 
 #include <filesystem>
 
-using namespace ph;
+using namespace bowl;
 namespace fs = std::filesystem;
 
 TEST_CASE("settings: dotted keys, typed values, atomic save and reload") {
-    fs::path file = fs::temp_directory_path() / "ph_tests" / "settings" / "settings.json";
+    fs::path file = fs::temp_directory_path() / "bowl_tests" / "settings" / "settings.json";
     fs::remove_all(file.parent_path());
     fs::create_directories(file.parent_path());
     {

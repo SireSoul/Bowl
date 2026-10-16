@@ -1,9 +1,9 @@
-#include "ph/gfx/device.hpp"
+#include "bowl/gfx/device.hpp"
 
-#include "ph/core/assert.hpp"
-#include "ph/core/file.hpp"
-#include "ph/core/log.hpp"
-#include "ph/core/type_id.hpp"
+#include "bowl/core/assert.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/type_id.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -19,7 +19,7 @@
 #include <format>
 #include <vector>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 namespace {
 std::atomic<u32> next_texture_id{1};
@@ -208,7 +208,7 @@ bool GpuDevice::update_texture(Texture& texture, const void* rgba8, bool premult
 bool GpuDevice::update_texture_region(Texture& texture, PixelRect rect, const void* rgba8, u32 row_pixels,
                                       bool premultiplied) {
     if (rect.w == 0 || rect.h == 0) return true;
-    PH_ASSERT(rect.x + rect.w <= texture.width_ && rect.y + rect.h <= texture.height_, "region outside the texture");
+    BOWL_ASSERT(rect.x + rect.w <= texture.width_ && rect.y + rect.h <= texture.height_, "region outside the texture");
     return upload_pixels(texture.texture_, rect, rgba8, row_pixels, premultiplied, texture.mipmapped_);
 }
 
@@ -394,4 +394,4 @@ bool GpuDevice::upload(SDL_GPUBuffer* buffer, const void* data, u32 size, u32 of
     return ok;
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

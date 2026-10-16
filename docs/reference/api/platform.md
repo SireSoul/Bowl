@@ -1,15 +1,15 @@
 # platform
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/platform/input.hpp](#phplatforminputhpp)
-- [ph/platform/system.hpp](#phplatformsystemhpp)
-- [ph/platform/window.hpp](#phplatformwindowhpp)
+- [bowl/platform/input.hpp](#bowlplatforminputhpp)
+- [bowl/platform/system.hpp](#bowlplatformsystemhpp)
+- [bowl/platform/window.hpp](#bowlplatformwindowhpp)
 
-## ph/platform/input.hpp
+## bowl/platform/input.hpp
 
-`#include "ph/platform/input.hpp"` · namespace `ph`
+`#include "bowl/platform/input.hpp"` · namespace `bowl`
 
 ```cpp
 union SDL_Event;
@@ -219,9 +219,9 @@ Dev UI captured the keyboard/mouse: games see nothing new until released.
 void set_blocked(bool keyboard, bool mouse);
 ```
 
-## ph/platform/system.hpp
+## bowl/platform/system.hpp
 
-`#include "ph/platform/system.hpp"` · namespace `ph`
+`#include "bowl/platform/system.hpp"` · namespace `bowl`
 
 Whether the game runs on a Steam Deck: Steam says so (the SteamDeck environment variable), or the hardware is one.
 On the Deck the App starts fullscreen (AppConfig::fullscreen_on_steam_deck). `--deck` pretends to be one in a
@@ -237,9 +237,9 @@ Overrides the answer (`--deck` sets it); nothing goes back to asking the system.
 void set_steam_deck(std::optional<bool> value);
 ```
 
-## ph/platform/window.hpp
+## bowl/platform/window.hpp
 
-`#include "ph/platform/window.hpp"` · namespace `ph`
+`#include "bowl/platform/window.hpp"` · namespace `bowl`
 
 ### WindowDesc
 
@@ -294,7 +294,7 @@ void set_fullscreen(bool fullscreen);
 bool fullscreen() const;
 ```
 
-The title bar and taskbar icon, from RGBA8 pixels. The App sets the game's ICON (ph_add_game) by itself.
+The title bar and taskbar icon, from RGBA8 pixels. The App sets the game's ICON (bowl_add_game) by itself.
 
 ```cpp
 bool set_icon(u32 width, u32 height, std::span<const u8> rgba);

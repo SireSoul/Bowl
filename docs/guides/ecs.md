@@ -6,7 +6,7 @@ components, queries, command buffers, hooks, resources and the transform hierarc
 page: [systems.md](systems.md).
 
 ```cpp
-#include "ph/ecs/ecs.hpp" // included by ph/app/main.hpp already
+#include "bowl/ecs/ecs.hpp" // included by bowl/app/main.hpp already
 ```
 
 - [Entities](#entities)
@@ -48,14 +48,14 @@ struct Velocity {
 struct Frozen {}; // an empty struct is a tag: it takes no memory per entity
 ```
 
-Adding `PH_COMPONENT` after a component lists its fields:
+Adding `BOWL_COMPONENT` after a component lists its fields:
 
 ```cpp
 struct Health {
     i32 current = 100;
     i32 max = 100;
 };
-PH_COMPONENT(Health, current, max)
+BOWL_COMPONENT(Health, current, max)
 ```
 
 That's optional, and buys three things:
@@ -64,8 +64,8 @@ That's optional, and buys three things:
 - the F1 inspector shows its fields and lets you edit them while the game runs;
 - it survives [game-code hot reload](hot-reload.md#game-code).
 
-`PH_COMPONENT` goes at namespace scope, in the same namespace as the struct, and takes up to 32 fields. For structs
-that are only *fields* of components (not components themselves), use `PH_REFLECT` with the same syntax.
+`BOWL_COMPONENT` goes at namespace scope, in the same namespace as the struct, and takes up to 32 fields. For structs
+that are only *fields* of components (not components themselves), use `BOWL_REFLECT` with the same syntax.
 
 ## Reading and writing components
 
@@ -208,10 +208,10 @@ The engine stores a pointer to itself as a resource, so systems can reach engine
 
 ## Parent and child transforms
 
-`ph/ecs/hierarchy.hpp` adds a scene-graph style hierarchy on top of the ECS:
+`bowl/ecs/hierarchy.hpp` adds a scene-graph style hierarchy on top of the ECS:
 
 ```cpp
-#include "ph/ecs/hierarchy.hpp"
+#include "bowl/ecs/hierarchy.hpp"
 
 ecs::Entity ship = world.create(ecs::Transform2D{{100, 100}});
 ecs::Entity turret = world.create(ecs::Transform2D{{0, -12}});
@@ -240,11 +240,11 @@ The cost is on structural changes: adding or removing a component moves the enti
 That's cheap (the moves between archetypes are cached), but avoid toggling components every tick on thousands of
 entities; a `bool` field is often better than a tag that comes and goes.
 
-`ph_bench_ecs` (in `tests/`) measures creation, iteration and add/remove on a million entities.
+`bowl_bench_ecs` (in `tests/`) measures creation, iteration and add/remove on a million entities.
 
 ## Limits
 
-- 256 component types by default. Define `PH_ECS_MAX_COMPONENTS` (a multiple of 64) to raise it.
+- 256 component types by default. Define `BOWL_ECS_MAX_COMPONENTS` (a multiple of 64) to raise it.
 - An archetype stays after its last entity leaves, so it's ready when the combination comes back. A world that goes
   through many combinations can free the unused ones with `world.compact()` now and then (between levels, say);
   queries made before carry on correctly.

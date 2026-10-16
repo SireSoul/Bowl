@@ -8,7 +8,7 @@ along easing curves.
 A particle system spawns many short-lived sprites according to a `gfx::ParticleSettings`:
 
 ```cpp
-#include "ph/gfx/particles.hpp"
+#include "bowl/gfx/particles.hpp"
 
 gfx::ParticleSettings smoke;
 smoke.rate = 20;                       // per second while emitting
@@ -98,7 +98,7 @@ For hundreds of thousands of particles, `gfx::GpuParticles` simulates and draws 
 dispatch and one draw call a frame, with nothing sent from the CPU but the settings.
 
 ```cpp
-#include "ph/gfx/gpu_particles.hpp"
+#include "bowl/gfx/gpu_particles.hpp"
 
 gfx::GpuParticles fountain;
 fountain.init(engine.gpu(), engine.assets(), 200000);   // capacity
@@ -118,7 +118,7 @@ submission order with the scene. They're not deterministic and can't be read bac
 
 ## Easing and tweens
 
-`ph/core/ease.hpp` has the standard easing curves, each mapping 0..1 to 0..1:
+`bowl/core/ease.hpp` has the standard easing curves, each mapping 0..1 to 0..1:
 
 ```cpp
 f32 t = ease(Ease::OutBack, 0.5f);
@@ -148,4 +148,4 @@ if (slide.done()) { /* ... */ }
 | `reverse()` | Play back to the start from wherever it is now, such as a menu closing halfway through opening |
 
 Tweens are plain structs, so they can be components or live inside one; step them in a system. They aren't
-reflected, so a component holding one can't be listed in `PH_COMPONENT`; recreate tweens after loading instead.
+reflected, so a component holding one can't be listed in `BOWL_COMPONENT`; recreate tweens after loading instead.

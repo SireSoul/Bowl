@@ -3,8 +3,8 @@
 #include "document.hpp"
 #include "ui.hpp"
 
-#include "ph/app/engine.hpp"
-#include "ph/core/json_text.hpp"
+#include "bowl/app/engine.hpp"
+#include "bowl/core/json_text.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -14,13 +14,13 @@
 #include <string>
 #include <vector>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 // Bowl Editor: lays out levels (.world files) with the game's own renderer, so what you see is what the game shows.
 //
 //     bowl-editor [level.world] [--assets <folder>] [--game <game code library>] [--select <name>] [--resave]
 //
-// --game loads a game's hot-reload library (lib<game>_code.so / .dylib) so its PH_COMPONENT types can be added and
+// --game loads a game's hot-reload library (lib<game>_code.so / .dylib) so its BOWL_COMPONENT types can be added and
 // edited. Without it, the game's components are kept as raw JSON. --resave rewrites the file and quits.
 class Editor final : public Game {
 public:
@@ -232,8 +232,8 @@ private:
     std::shared_ptr<DialogResult> dialogs_ = std::make_shared<DialogResult>();
 };
 
-// Engine component names read better without namespaces ("ph::gfx::Sprite" is "Art", "game::SpawnPoint" is
+// Engine component names read better without namespaces ("bowl::gfx::Sprite" is "Art", "game::SpawnPoint" is
 // "Spawn point").
 std::string pretty_name(std::string_view type_name);
 
-} // namespace ph::editor
+} // namespace bowl::editor

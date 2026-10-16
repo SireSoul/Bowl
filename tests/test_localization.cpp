@@ -1,11 +1,11 @@
-#include "ph/core/file.hpp"
-#include "ph/core/localization.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/localization.hpp"
 
 #include <doctest/doctest.h>
 
 #include <filesystem>
 
-using namespace ph;
+using namespace bowl;
 namespace fs = std::filesystem;
 
 namespace {
@@ -13,7 +13,7 @@ void write(const fs::path& p, std::string_view s) { REQUIRE(write_file_bytes(p, 
 } // namespace
 
 TEST_CASE("localization: lookup, fallback, placeholders, plurals") {
-    fs::path dir = fs::temp_directory_path() / "ph_tests" / "lang_root";
+    fs::path dir = fs::temp_directory_path() / "bowl_tests" / "lang_root";
     fs::remove_all(dir);
     write(dir / "lang" / "en.json", R"({
         "menu": { "start": "Start", "quit": "Quit" },

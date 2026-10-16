@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ph/app/engine.hpp"
+#include "bowl/app/engine.hpp"
 
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 // Components in the file whose types the editor doesn't know (the game's code library wasn't loaded). They're kept
 // as JSON, shown in the inspector as text, and written back when saving, so opening and saving never loses them.
@@ -77,4 +77,4 @@ private:
     std::string saved_;
 };
 
-} // namespace ph::editor
+} // namespace bowl::editor

@@ -1,14 +1,14 @@
-#include "ph/core/file.hpp"
-#include "ph/core/reflect.hpp"
-#include "ph/ecs/world_io.hpp"
-#include "ph/gfx/device.hpp"
-#include "ph/gfx/sprite.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/reflect.hpp"
+#include "bowl/ecs/world_io.hpp"
+#include "bowl/gfx/device.hpp"
+#include "bowl/gfx/sprite.hpp"
 
 #include <doctest/doctest.h>
 
 #include <filesystem>
 
-using namespace ph;
+using namespace bowl;
 namespace fs = std::filesystem;
 
 TEST_CASE("sprite: size falls back from size to region to a default") {
@@ -62,7 +62,7 @@ struct Note {
 struct Holder {
     Asset<Note> note;
 };
-PH_REFLECT(Holder, note)
+BOWL_REFLECT(Holder, note)
 
 // Pretends the user typed a new path into an asset field.
 struct RetypeAsset final : reflect::FieldVisitor {
@@ -88,7 +88,7 @@ struct RetypeAsset final : reflect::FieldVisitor {
 } // namespace
 
 TEST_CASE("reflect: asset fields can be retargeted to another path") {
-    fs::path dir = fs::temp_directory_path() / "ph_tests" / "asset_field";
+    fs::path dir = fs::temp_directory_path() / "bowl_tests" / "asset_field";
     fs::remove_all(dir);
     fs::create_directories(dir);
     write_file_bytes(dir / "a.txt", "A", 1);
@@ -109,7 +109,7 @@ TEST_CASE("reflect: asset fields can be retargeted to another path") {
 }
 
 TEST_CASE("world files load as assets") {
-    fs::path dir = fs::temp_directory_path() / "ph_tests" / "world_file";
+    fs::path dir = fs::temp_directory_path() / "bowl_tests" / "world_file";
     fs::remove_all(dir);
     fs::create_directories(dir);
     ecs::World world;
@@ -130,7 +130,7 @@ TEST_CASE("world files load as assets") {
 }
 
 TEST_CASE("shader cache: stores code by key and refuses mismatches") {
-    auto dir = std::filesystem::temp_directory_path() / "ph_shader_cache_test";
+    auto dir = std::filesystem::temp_directory_path() / "bowl_shader_cache_test";
     std::error_code ec;
     std::filesystem::remove_all(dir, ec);
     std::vector<u8> code = {1, 2, 3, 4, 5};

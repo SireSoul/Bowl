@@ -1,9 +1,9 @@
-#include "ph/ui/ui.hpp"
+#include "bowl/ui/ui.hpp"
 
 #include <SDL3/SDL_events.h>
 #include <doctest/doctest.h>
 
-using namespace ph;
+using namespace bowl;
 
 namespace {
 

@@ -1,4 +1,4 @@
-#include "ph/icon/icon.hpp"
+#include "bowl/icon/icon.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -23,7 +23,7 @@
 #pragma GCC diagnostic pop
 #endif
 
-namespace ph::icon {
+namespace bowl::icon {
 
 std::optional<Image> decode_png(std::span<const u8> bytes) {
     int w = 0, h = 0, channels = 0;
@@ -125,14 +125,14 @@ std::vector<u8> make_ico(const Image& image, bool pixel_art) {
 }
 
 std::string make_cpp(std::span<const u8> png) {
-    std::string out = "// Made by ph-icon from the game's ICON. Don't edit.\n#include \"ph/app/icon.hpp\"\n\nnamespace {\n"
+    std::string out = "// Made by bowl-icon from the game's ICON. Don't edit.\n#include \"bowl/app/icon.hpp\"\n\nnamespace {\n"
                       "const unsigned char png[] = {";
     for (usize i = 0; i < png.size(); ++i) {
         if (i % 24 == 0) out += "\n   ";
         out += std::format(" {},", png[i]);
     }
-    out += "\n};\nconst ph::EmbeddedIcon icon(png, sizeof png);\n} // namespace\n";
+    out += "\n};\nconst bowl::EmbeddedIcon icon(png, sizeof png);\n} // namespace\n";
     return out;
 }
 
-} // namespace ph::icon
+} // namespace bowl::icon

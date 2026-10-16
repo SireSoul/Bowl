@@ -9,8 +9,8 @@ fraction of a second.
 - [Writing a sprite material](#writing-a-sprite-material)
 - [Includes](#includes)
 - [Live editing](#live-editing)
-- [ph-shaderc](#ph-shaderc)
-- [The .phsh bundle](#the-phsh-bundle)
+- [bowl-shaderc](#bowl-shaderc)
+- [The .bowlsh bundle](#the-phsh-bundle)
 - [Engine shaders](#engine-shaders)
 - [Limitations](#limitations)
 
@@ -30,7 +30,7 @@ Load it by its path *without* `.glsl`:
 Asset<gfx::Shader> fs = engine.assets().load<gfx::Shader>("shaders/hologram.frag");
 ```
 
-Release builds load the precompiled `shaders/hologram.frag.phsh`; dev builds compile the `.glsl` source directly.
+Release builds load the precompiled `shaders/hologram.frag.bowlsh`; dev builds compile the `.glsl` source directly.
 Either way, your code is the same.
 
 The dialect is Vulkan-style GLSL: `#version 450`, explicit `layout(set = ..., binding = ...)` on every resource, and
@@ -57,7 +57,7 @@ Storage marked `readonly` in GLSL goes in set 0; anything the shader writes goes
 
 Within a set, number bindings from 0 with no gaps. Uniform blocks use `std140`; storage buffers `std430`.
 
-If a resource is in the wrong set, `ph-shaderc` stops with an error naming the set it should be in.
+If a resource is in the wrong set, `bowl-shaderc` stops with an error naming the set it should be in.
 
 ## Writing a sprite material
 
@@ -124,7 +124,7 @@ Game shaders can include the engine's shader files by their asset path:
 #include "engine/shaders/common.glsl"   // premultiply(), rotate()
 ```
 
-`ph_add_game` passes ph-shaderc the engine's shader folder for that prefix, and dev builds find it wherever the
+`bowl_add_game` passes bowl-shaderc the engine's shader folder for that prefix, and dev builds find it wherever the
 engine's assets are mounted.
 
 ## Live editing
@@ -136,12 +136,12 @@ their next use.
 A shader that fails to compile logs the compiler's error, with file and line, and the last working version stays in
 use. Fix the file and save again.
 
-## ph-shaderc
+## bowl-shaderc
 
-The compiler is a library (`ph_shaderc`, used by dev builds at runtime) and a command-line tool:
+The compiler is a library (`bowl_shaderc`, used by dev builds at runtime) and a command-line tool:
 
 ```bash
-ph-shaderc shaders/hologram.frag.glsl -o hologram.frag.phsh
+bowl-shaderc shaders/hologram.frag.glsl -o hologram.frag.bowlsh
 ```
 
 | Option | |
@@ -157,13 +157,13 @@ The stage comes from the file name (`.vert.glsl` or `.frag.glsl`). The pipeline 
 and SPIRV-Cross (SPIR-V to MSL and HLSL), with resource slots remapped to what SDL_GPU expects on each backend.
 `--print-msl` and `--print-hlsl` are the quickest way to see what a backend will actually run.
 
-You rarely run it by hand: `ph_add_game(... ASSETS dir)` compiles every `*.vert.glsl`, `*.frag.glsl` and `*.comp.glsl`
-under the asset folder at build time. When cross-compiling (iOS, Android), point `PH_SHADERC_EXECUTABLE` at a host build of the
+You rarely run it by hand: `bowl_add_game(... ASSETS dir)` compiles every `*.vert.glsl`, `*.frag.glsl` and `*.comp.glsl`
+under the asset folder at build time. When cross-compiling (iOS, Android), point `BOWL_SHADERC_EXECUTABLE` at a host build of the
 tool.
 
-## The .phsh bundle
+## The .bowlsh bundle
 
-A `.phsh` file holds, for one shader stage:
+A `.bowlsh` file holds, for one shader stage:
 
 - SPIR-V, for Vulkan
 - Metal Shading Language source, for Metal

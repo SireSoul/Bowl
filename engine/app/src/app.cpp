@@ -1,16 +1,16 @@
-#include "ph/app/entry.hpp"
+#include "bowl/app/entry.hpp"
 
 #include "dev_tools.hpp"
-#include "ph/app/icon.hpp"
-#include "ph/core/profiler.hpp"
-#include "ph/core/time.hpp"
-#include "ph/ecs/hierarchy.hpp"
-#include "ph/gfx/particles.hpp"
-#include "ph/gfx/sprite.hpp"
-#include "ph/gfx/sprite_sheet.hpp"
-#include "ph/physics/colliders.hpp"
-#if PH_BOX2D
-#include "ph/physics/rigid_bodies.hpp"
+#include "bowl/app/icon.hpp"
+#include "bowl/core/profiler.hpp"
+#include "bowl/core/time.hpp"
+#include "bowl/ecs/hierarchy.hpp"
+#include "bowl/gfx/particles.hpp"
+#include "bowl/gfx/sprite.hpp"
+#include "bowl/gfx/sprite_sheet.hpp"
+#include "bowl/physics/colliders.hpp"
+#if BOWL_BOX2D
+#include "bowl/physics/rigid_bodies.hpp"
 #endif
 
 #include <SDL3/SDL.h>
@@ -19,7 +19,7 @@
 #include <filesystem>
 #include <string_view>
 
-namespace ph {
+namespace bowl {
 
 Engine::Engine() = default;
 Engine::~Engine() = default;
@@ -42,7 +42,7 @@ struct AppRunner {
         // game is loaded by configure()), so their code never belongs to a library that gets unloaded.
         ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
                                  gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, physics::Collider>();
-#if PH_BOX2D
+#if BOWL_BOX2D
         ecs::register_components<physics::RigidBody, physics::Joint>();
 #endif
         e.config_ = game->configure();
@@ -118,7 +118,7 @@ struct AppRunner {
             e.i18n_.set_fallback(e.config_.fallback_language);
             e.i18n_.set_language(e.config_.language);
         }
-        e.assets_.set_hot_reload(PH_DEV_TOOLS != 0);
+        e.assets_.set_hot_reload(BOWL_DEV_TOOLS != 0);
         if (!e.renderer_.init(e.gpu_, e.assets_)) return false;
 
         e.camera_.viewport = e.window_.size();
@@ -158,15 +158,15 @@ struct AppRunner {
         namespace fs = std::filesystem;
         const char* base_path = SDL_GetBasePath();
         fs::path base = base_path ? fs::path(base_path) : fs::current_path();
-#if PH_DEV_TOOLS && defined(PH_ENGINE_ASSET_SOURCE_DIR)
+#if BOWL_DEV_TOOLS && defined(BOWL_ENGINE_ASSET_SOURCE_DIR)
         // Dev builds read straight from the source tree, so saved files hot-reload.
-        e.assets_.mount("engine/", PH_ENGINE_ASSET_SOURCE_DIR);
+        e.assets_.mount("engine/", BOWL_ENGINE_ASSET_SOURCE_DIR);
         if (!e.config_.game_asset_dir.empty()) e.assets_.mount("", e.config_.game_asset_dir);
 #endif
-        // Shipping builds may have their folders packed into archives (PH_PACK_ASSETS).
+        // Shipping builds may have their folders packed into archives (BOWL_PACK_ASSETS).
         auto mount = [&](const char* prefix, const char* name) {
             std::error_code ec;
-            fs::path archive = base / (std::string(name) + ".phpak");
+            fs::path archive = base / (std::string(name) + ".bowlpak");
             if (!fs::is_regular_file(archive, ec) || !e.assets_.mount_archive(prefix, archive)) e.assets_.mount(prefix, base / name);
         };
         mount("engine/", "engine");
@@ -187,7 +187,7 @@ struct AppRunner {
         e.input_.end_events();
         e.assets_.finish_loads(); // background loads that are ready
         if (e.assets_.hot_reload() && now_seconds() - last_asset_poll > 0.25) {
-            PH_PROFILE_SCOPE("assets.poll");
+            BOWL_PROFILE_SCOPE("assets.poll");
             last_asset_poll = now_seconds();
             e.assets_.poll();
         }
@@ -202,7 +202,7 @@ struct AppRunner {
         i32 steps = 0;
         e.input_.set_context(Input::Context::Fixed);
         while (e.accumulator_ >= step && steps < e.config_.max_fixed_steps) {
-            PH_PROFILE_SCOPE("fixed tick");
+            BOWL_PROFILE_SCOPE("fixed tick");
             e.input_.begin_fixed_tick();
             e.fixed_schedule_.run(e.world_, *e.jobs_, static_cast<f32>(step));
             game->fixed_update(e, static_cast<f32>(step));
@@ -222,7 +222,7 @@ struct AppRunner {
         e.input_.set_context(Input::Context::Frame);
         e.delta_ = e.paused_ ? 0.0f : static_cast<f32>(scaled);
         {
-            PH_PROFILE_SCOPE("frame update");
+            BOWL_PROFILE_SCOPE("frame update");
             e.frame_schedule_.run(e.world_, *e.jobs_, e.delta_);
             game->update(e, e.delta_);
             e.scenes_.update(e, e.delta_);
@@ -237,7 +237,7 @@ struct AppRunner {
             });
         }
         if (e.renderer_.begin_frame()) {
-            PH_PROFILE_SCOPE("game render");
+            BOWL_PROFILE_SCOPE("game render");
             game->render(e);
             e.scenes_.render(e);
         }
@@ -320,4 +320,4 @@ void app_quit(void* state, SDL_AppResult result) {
 }
 
 } // namespace detail
-} // namespace ph
+} // namespace bowl

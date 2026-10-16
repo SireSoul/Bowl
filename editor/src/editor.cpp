@@ -1,9 +1,9 @@
 #include "editor.hpp"
 
-#include "ph/app/inspector.hpp"
-#include "ph/core/time.hpp"
-#include "ph/gfx/particles.hpp"
-#include "ph/gfx/sprite.hpp"
+#include "bowl/app/inspector.hpp"
+#include "bowl/core/time.hpp"
+#include "bowl/gfx/particles.hpp"
+#include "bowl/gfx/sprite.hpp"
 
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_dialog.h>
@@ -20,7 +20,7 @@
 #include <format>
 #include <map>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 namespace fs = std::filesystem;
 
@@ -55,10 +55,10 @@ void drop_dangling_parents(ecs::World& world, const std::vector<ecs::Entity>& en
 
 std::string pretty_name(std::string_view type) {
     static const std::map<std::string_view, std::string_view> known = {
-        {"ph::ecs::Transform2D", "Transform"},        {"ph::ecs::GlobalTransform2D", "World transform"},
-        {"ph::gfx::Sprite", "Art"},                   {"ph::gfx::ParticleEmitter", "Particles"},
-        {"ph::ecs::Name", "Name"},                    {"ph::ecs::Parent", "Parent"},
-        {"ph::ecs::Children", "Children"},
+        {"bowl::ecs::Transform2D", "Transform"},        {"bowl::ecs::GlobalTransform2D", "World transform"},
+        {"bowl::gfx::Sprite", "Art"},                   {"bowl::gfx::ParticleEmitter", "Particles"},
+        {"bowl::ecs::Name", "Name"},                    {"bowl::ecs::Parent", "Parent"},
+        {"bowl::ecs::Children", "Children"},
     };
     if (auto it = known.find(type); it != known.end()) return std::string(it->second);
     auto colon = type.rfind("::");
@@ -125,7 +125,7 @@ void Editor::init(Engine& engine) {
     engine.assets().mount("", assets_dir_);
 
     if (!game.empty()) {
-        // Loading the library runs its PH_COMPONENT registrations. It stays loaded: component code lives in it.
+        // Loading the library runs its BOWL_COMPONENT registrations. It stays loaded: component code lives in it.
         // On Windows this is <game>_editor_code.dll, the copy built against the editor.
 #if defined(_WIN32)
         game_library_ = LoadLibraryW(fs::absolute(game).c_str());
@@ -872,4 +872,4 @@ void Editor::update_title(Engine& engine) {
     }
 }
 
-} // namespace ph::editor
+} // namespace bowl::editor

@@ -1,6 +1,6 @@
-#include "ph/core/archive.hpp"
-#include "ph/core/assets.hpp"
-#include "ph/core/file.hpp"
+#include "bowl/core/archive.hpp"
+#include "bowl/core/assets.hpp"
+#include "bowl/core/file.hpp"
 
 #include <doctest/doctest.h>
 
@@ -10,7 +10,7 @@
 #include <filesystem>
 #include <thread>
 
-using namespace ph;
+using namespace bowl;
 namespace fs = std::filesystem;
 
 namespace {
@@ -20,7 +20,7 @@ struct Text {
 };
 
 fs::path temp_dir(const char* name) {
-    fs::path dir = fs::temp_directory_path() / "ph_tests" / name;
+    fs::path dir = fs::temp_directory_path() / "bowl_tests" / name;
     fs::remove_all(dir);
     fs::create_directories(dir);
     return dir;
@@ -198,9 +198,9 @@ TEST_CASE("assets: archives hold a folder and mount like one") {
     write(src / "a.txt", "alpha");
     write(src / "sub" / "b.txt", "beta");
     fs::create_directories(src / "empty");
-    REQUIRE(write_archive(out / "pack.phpak", src));
+    REQUIRE(write_archive(out / "pack.bowlpak", src));
 
-    auto archive = Archive::open(out / "pack.phpak");
+    auto archive = Archive::open(out / "pack.bowlpak");
     REQUIRE(archive);
     CHECK(archive->names() == std::vector<std::string>{"a.txt", "sub/b.txt"});
     CHECK(archive->contains("sub/b.txt"));
@@ -209,22 +209,22 @@ TEST_CASE("assets: archives hold a folder and mount like one") {
     REQUIRE(b);
     CHECK(std::string(b->begin(), b->end()) == "beta");
     CHECK_FALSE(archive->read("missing"));
-    write(out / "not.phpak", "PHPK but not really");
-    CHECK_FALSE(Archive::open(out / "not.phpak"));
-    CHECK_FALSE(Archive::open(out / "missing.phpak"));
+    write(out / "not.bowlpak", "BWPK but not really");
+    CHECK_FALSE(Archive::open(out / "not.bowlpak"));
+    CHECK_FALSE(Archive::open(out / "missing.bowlpak"));
 
     // The same folder makes the same archive.
-    REQUIRE(write_archive(out / "again.phpak", src));
-    CHECK(read_file_bytes(out / "pack.phpak") == read_file_bytes(out / "again.phpak"));
+    REQUIRE(write_archive(out / "again.bowlpak", src));
+    CHECK(read_file_bytes(out / "pack.bowlpak") == read_file_bytes(out / "again.bowlpak"));
 
     // Mounted: loads, sync and in the background; earlier mounts still win.
     fs::path loose = temp_dir("archive_loose");
     write(loose / "a.txt", "loose alpha");
     AssetManager assets;
     register_text(assets);
-    REQUIRE(assets.mount_archive("data/", out / "pack.phpak"));
+    REQUIRE(assets.mount_archive("data/", out / "pack.bowlpak"));
     assets.mount("data/", loose);
-    CHECK_FALSE(assets.mount_archive("", out / "not.phpak"));
+    CHECK_FALSE(assets.mount_archive("", out / "not.bowlpak"));
     CHECK(assets.load<Text>("data/a.txt")->value == "alpha");
     auto later = assets.load_async<Text>("data/sub/b.txt");
     for (int i = 0; i < 500 && assets.loading(); ++i) {

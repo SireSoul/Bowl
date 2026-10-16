@@ -4,7 +4,7 @@ labels: [enhancement]
 body:
   - type: markdown
     attributes:
-      value: Check the [roadmap](https://github.com/SireSoul/BOWL/blob/develop/docs/roadmap.md) first; it may already be planned.
+      value: Check the [roadmap](https://github.com/SireSoul/Bowl/blob/develop/docs/roadmap.md) first; it may already be planned.
   - type: textarea
     id: problem
     attributes:

@@ -1,11 +1,11 @@
-#include "ph/ecs/world_io.hpp"
+#include "bowl/ecs/world_io.hpp"
 
 #include <algorithm>
 #include <format>
 #include <set>
 #include <unordered_map>
 
-namespace ph::ecs {
+namespace bowl::ecs {
 
 json::Value save_entities(const World& world, std::span<const Entity> entities, serial::Context& ctx) {
     // Pass 1: file ids for every saved entity, so references between them can be written.
@@ -40,7 +40,8 @@ json::Value save_entities(const World& world, std::span<const Entity> entities, 
         list.push(std::move(entry));
     }
     for (ComponentId c : skipped)
-        ctx.warn(std::format("component '{}' isn't savable (add PH_REFLECT) and was skipped", component_info(c).name));
+        ctx.warn(
+            std::format("component '{}' isn't savable (add BOWL_REFLECT) and was skipped", component_info(c).name));
     ctx.entity_map = previous;
 
     json::Value doc;
@@ -243,4 +244,4 @@ void rename_field(json::Value& document, std::string_view component, std::string
     });
 }
 
-} // namespace ph::ecs
+} // namespace bowl::ecs

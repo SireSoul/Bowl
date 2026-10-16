@@ -29,12 +29,12 @@ engine/
   net/       Socket, Host (reliable UDP), Lockstep, Rollback                          (core)
   app/       Engine, Game, Scene stack, main loop, DevTools, HotReloadHost              (everything)
   assets/    engine assets (shaders, the Roboto font), mounted as "engine/"
-tools/shaderc  GLSL -> .phsh compiler (library + CLI)
+tools/shaderc  GLSL -> .bowlsh compiler (library + CLI)
 ```
 
-Each module is a static library, `ph_<module>` (alias `ph::<module>`), with its public headers in
-`engine/<module>/include/ph/<module>/`. `ph::engine` is an interface target that links all of them; games link that,
-usually through `ph_add_game`.
+Each module is a static library, `bowl_<module>` (alias `bowl::<module>`), with its public headers in
+`engine/<module>/include/bowl/<module>/`. `bowl::engine` is an interface target that links all of them; games link that,
+usually through `bowl_add_game`.
 
 The dependency arrows only point down the list. `core` knows nothing about SDL or the GPU, which is why most of it is
 tested without a window. Within a module, headers include only what they use, and platform types (`SDL_Window`,
@@ -44,7 +44,7 @@ tested without a window. Within a module, headers include only what they use, an
 
 SDL3 drives the loop through its callback entry points (`SDL_AppInit`, `SDL_AppIterate`, `SDL_AppEvent`,
 `SDL_AppQuit`). The web, iOS and Android need those, and using them everywhere keeps the game code identical on every
-platform, so games never write `main()`; `PH_MAIN(YourGame)` does it.
+platform, so games never write `main()`; `BOWL_MAIN(YourGame)` does it.
 
 Startup:
 
@@ -80,7 +80,7 @@ iterate:
 ## ECS
 
 - **Components** are plain structs: no base class, no code generation. Empty structs are tags and use no memory.
-  `PH_COMPONENT(Type, fields...)` (or `PH_REFLECT`) after a struct makes it savable as JSON and editable in the
+  `BOWL_COMPONENT(Type, fields...)` (or `BOWL_REFLECT`) after a struct makes it savable as JSON and editable in the
   inspector.
 - **Storage** is by archetype: entities with exactly the same set of components share one table, with one tightly
   packed array per component. Adding or removing a component moves the entity to another archetype; those moves are
@@ -113,7 +113,7 @@ exclusive systems. Lifting this limit is on the roadmap.
 
 ```cpp
 struct Health { i32 current = 100; i32 max = 100; ecs::Entity attacker; };
-PH_COMPONENT(Health, current, max, attacker)
+BOWL_COMPONENT(Health, current, max, attacker)
 
 serial::Context ctx{&engine.assets()};
 json::Value save = ecs::save_world(world, ctx);              // every entity with savable components
@@ -121,14 +121,14 @@ auto spawned = ecs::load_entities(other_world, save, ctx);   // adds to a world;
 ecs::Entity guard = ecs::spawn_prefab(world, prefab_json, ctx);
 ```
 
-- Savable components are reflected ones, ones with `ph_to_json`/`ph_from_json` hooks, and tags. Others are skipped,
+- Savable components are reflected ones, ones with `bowl_to_json`/`bowl_from_json` hooks, and tags. Others are skipped,
   with a warning in `ctx.warnings`.
 - Fields can be numbers, bools, enums, strings, math types, `Color`, vectors, arrays, optionals, nested reflected
   structs, `Asset<T>` (saved as its path and loaded again) and `Entity`. Entity references are remapped, so they
   survive loading into a world that already has entities.
 - Loading is tolerant: missing fields keep their defaults and unknown components are skipped with a warning, so old
   save files keep loading as components gain fields.
-- Components are saved by type name. A type has to be registered before loading: `PH_COMPONENT` does that when the
+- Components are saved by type name. A type has to be registered before loading: `BOWL_COMPONENT` does that when the
   program starts; otherwise call `ecs::register_components<A, B>()`.
 
 [guides/ecs.md](guides/ecs.md), [guides/systems.md](guides/systems.md) and [guides/saving.md](guides/saving.md) have
@@ -136,19 +136,19 @@ the full story.
 
 ## Game-code hot reload
 
-With `ph_add_game(target ... HOT_RELOAD)` (dev builds, CMake 3.27+), the game's sources are built into `target_code`,
+With `bowl_add_game(target ... HOT_RELOAD)` (dev builds, CMake 3.27+), the game's sources are built into `target_code`,
 a loadable library. `target` becomes a host executable that contains the whole engine and exports its symbols. On
 macOS and Linux the library links against nothing and finds engine functions in the host when it's loaded; on Windows
-it links against the host's import library. `PH_MAIN` turns into the library's `ph_create_game` export. The host also
+it links against the host's import library. `BOWL_MAIN` turns into the library's `bowl_create_game` export. The host also
 watches the game's source folders and rebuilds the library when a file is saved.
 
-When the library file changes and the linker has finished writing it, the host (`ph::HotReloadHost`):
+When the library file changes and the linker has finished writing it, the host (`bowl::HotReloadHost`):
 
 1. saves the world with `save_world`;
 2. tears down everything the old code made, while that code is still loaded: scenes, systems, the world (entities,
    hooks, resources), and every asset, loader and callback registered since startup (`AssetManager::mark/rollback`);
 3. marks component registrations whose code lived in the old library as dormant;
-4. loads a fresh copy of the new library, whose `PH_COMPONENT` registrations refresh those entries under the same ids;
+4. loads a fresh copy of the new library, whose `BOWL_COMPONENT` registrations refresh those entries under the same ids;
 5. creates the new `Game`, runs `init()`, applies saved controls again and loads the world back.
 
 If the new library won't load, the old registrations are restored and the old code comes back up with the world.
@@ -189,7 +189,7 @@ With default `PostSettings` the final pass is an exact copy, so a game only pays
 ## Shaders
 
 Shaders are written once, in Vulkan-flavored GLSL, as `name.vert.glsl` and `name.frag.glsl`; `#include` works.
-`ph-shaderc` compiles each into a `.phsh` bundle holding SPIR-V, MSL and HLSL (Shader Model 5.1) plus the resource
+`bowl-shaderc` compiles each into a `.bowlsh` bundle holding SPIR-V, MSL and HLSL (Shader Model 5.1) plus the resource
 counts SDL_GPU needs. It remaps Metal slots and HLSL registers to SDL's layout, and when a resource is in the wrong
 descriptor set it says which set to use. On Windows the D3D12 backend compiles the HLSL to DXBC at load time.
 
@@ -214,7 +214,7 @@ go through `assets.add(path, value)`.
 | Type | Files | Notes |
 | --- | --- | --- |
 | `gfx::Texture` | .png .jpg .tga .bmp | premultiplied on load; mipmapped unless the game is pixel art |
-| `gfx::Shader` | .vert/.frag (.glsl or .phsh) | load by path without the extension |
+| `gfx::Shader` | .vert/.frag (.glsl or .bowlsh) | load by path without the extension |
 | `gfx::Font` | .ttf .otf | glyphs rasterized on demand |
 | `gfx::SpriteSheet` | Aseprite .json | loads its PNG too |
 | `gfx::Tilemap` | Tiled .tmj (+ .tsj) | loads tileset and image-layer PNGs too |
@@ -222,7 +222,7 @@ go through `assets.add(path, value)`.
 | `audio::Music` | .ogg | streamed |
 | `StringTable` | lang/*.json | localization |
 
-At runtime, `ph_add_game(target ASSETS dir)` lays out next to the executable:
+At runtime, `bowl_add_game(target ASSETS dir)` lays out next to the executable:
 
 ```
 <exe dir>/engine/   engine assets and compiled engine shaders

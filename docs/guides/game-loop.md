@@ -1,28 +1,28 @@
 # The game loop
 
-A game is a class derived from `ph::Game`, registered with `PH_MAIN`. The engine owns the loop and calls the game
+A game is a class derived from `bowl::Game`, registered with `BOWL_MAIN`. The engine owns the loop and calls the game
 back at fixed points. This page covers those callbacks, the fixed timestep, `AppConfig`, and the `Engine` object
 every callback receives.
 
 ```cpp
-#include "ph/app/main.hpp"
+#include "bowl/app/main.hpp"
 
-class MyGame final : public ph::Game {
-    ph::AppConfig configure() override;
-    void init(ph::Engine&) override;
-    void start(ph::Engine&) override;
-    void fixed_update(ph::Engine&, ph::f32 dt) override;
-    void update(ph::Engine&, ph::f32 dt) override;
-    void render(ph::Engine&) override;
-    void dev_ui(ph::Engine&) override;
-    void event(ph::Engine&, const SDL_Event&) override;
-    void shutdown(ph::Engine&) override;
+class MyGame final : public bowl::Game {
+    bowl::AppConfig configure() override;
+    void init(bowl::Engine&) override;
+    void start(bowl::Engine&) override;
+    void fixed_update(bowl::Engine&, bowl::f32 dt) override;
+    void update(bowl::Engine&, bowl::f32 dt) override;
+    void render(bowl::Engine&) override;
+    void dev_ui(bowl::Engine&) override;
+    void event(bowl::Engine&, const SDL_Event&) override;
+    void shutdown(bowl::Engine&) override;
 };
 
-PH_MAIN(MyGame)
+BOWL_MAIN(MyGame)
 ```
 
-All callbacks are optional. `PH_MAIN` goes in exactly one `.cpp` file.
+All callbacks are optional. `BOWL_MAIN` goes in exactly one `.cpp` file.
 
 ## The callbacks
 
@@ -60,15 +60,15 @@ previous tick's value and interpolate:
 
 ```cpp
 struct Position {
-    ph::Vec2 value;
-    ph::Vec2 previous;
+    bowl::Vec2 value;
+    bowl::Vec2 previous;
 };
 
 // a system at the start of the fixed schedule
 fixed.par_each<Position>("remember position", [](Position& p) { p.previous = p.value; });
 
 // when drawing
-ph::Vec2 at = ph::lerp(p.previous, p.value, engine.alpha());
+bowl::Vec2 at = bowl::lerp(p.previous, p.value, engine.alpha());
 ```
 
 `engine.alpha()` is 0 right after a tick and approaches 1 just before the next.
@@ -82,8 +82,8 @@ several. See [input.md](input.md).
 ## AppConfig
 
 ```cpp
-ph::AppConfig configure() override {
-    ph::AppConfig config;
+bowl::AppConfig configure() override {
+    bowl::AppConfig config;
     config.window.title = "My Game";
     config.window.width = 1600;
     config.window.height = 900;
@@ -110,7 +110,7 @@ ph::AppConfig configure() override {
 
 ## The Engine
 
-Every callback receives `ph::Engine&`, which owns every engine service:
+Every callback receives `bowl::Engine&`, which owns every engine service:
 
 | Accessor | What |
 | --- | --- |

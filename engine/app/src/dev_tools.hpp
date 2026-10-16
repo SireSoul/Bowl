@@ -1,13 +1,13 @@
 #pragma once
 
-#include "ph/app/engine.hpp"
+#include "bowl/app/engine.hpp"
 
 union SDL_Event;
 
-namespace ph {
+namespace bowl {
 
 // The in-game developer overlay (F1): stats, profiler, systems, entity browser, assets, log, time controls.
-// Compiles to nothing when PH_DEV_TOOLS is off.
+// Compiles to nothing when BOWL_DEV_TOOLS is off.
 class DevTools : NonCopyable {
 public:
     explicit DevTools(Engine& engine);
@@ -19,7 +19,7 @@ public:
     bool visible() const { return visible_; }
     void set_visible(bool visible) { visible_ = visible; }
     void select(ecs::Entity e) {
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
         selected_ = e;
 #else
         (void)e;
@@ -27,7 +27,7 @@ public:
     }
 
 private:
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
     void draw_main();
     void draw_profiler();
     void draw_post();
@@ -44,4 +44,4 @@ private:
     bool visible_ = false;
 };
 
-} // namespace ph
+} // namespace bowl

@@ -1,10 +1,10 @@
 #include "document.hpp"
 
-#include "ph/core/file.hpp"
+#include "bowl/core/file.hpp"
 
 #include <algorithm>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 namespace fs = std::filesystem;
 
@@ -206,4 +206,4 @@ void Document::discard_autosave() const {
     fs::remove(autosave_path(), ec);
 }
 
-} // namespace ph::editor
+} // namespace bowl::editor

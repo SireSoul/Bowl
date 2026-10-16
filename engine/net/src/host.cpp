@@ -1,13 +1,13 @@
-#include "ph/net/host.hpp"
+#include "bowl/net/host.hpp"
 
-#include "ph/core/log.hpp"
-#include "ph/core/time.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/time.hpp"
 
 #include <algorithm>
 #include <cstring>
 #include <map>
 
-namespace ph::net {
+namespace bowl::net {
 
 // Packets, little-endian:
 //   u32 protocol, u8 kind, then by kind:
@@ -486,4 +486,4 @@ void Host::update(f64 now) {
     for (PeerId id : gone) drop(id, true);
 }
 
-} // namespace ph::net
+} // namespace bowl::net

@@ -46,9 +46,9 @@ jobs:
           fi
           # The optional parts (Box2D, Tracy) are built in dev, so they keep compiling everywhere.
           optional=""
-          if [ "${{ matrix.preset }}" = "dev" ]; then optional="-DPH_BOX2D=ON -DPH_TRACY=ON -DPH_OPUS=ON"; fi
-          cmake --preset ${{ matrix.preset }} -DPH_FETCH_SDL=ON \
-            -DPH_WARNINGS_AS_ERRORS=${{ runner.os != 'Windows' && 'ON' || 'OFF' }} $launcher $optional
+          if [ "${{ matrix.preset }}" = "dev" ]; then optional="-DBOWL_BOX2D=ON -DBOWL_TRACY=ON -DBOWL_OPUS=ON"; fi
+          cmake --preset ${{ matrix.preset }} -DBOWL_FETCH_SDL=ON \
+            -DBOWL_WARNINGS_AS_ERRORS=${{ runner.os != 'Windows' && 'ON' || 'OFF' }} $launcher $optional
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }} --parallel 4

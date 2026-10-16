@@ -49,10 +49,10 @@ project(fireflies LANGUAGES C CXX)
 add_subdirectory(../Bowl engine)
 
 add_executable(fireflies main.cpp)
-ph_add_game(fireflies ASSETS assets)
+bowl_add_game(fireflies ASSETS assets)
 ```
 
-`ph_add_game` links the engine, compiles any shaders in `assets/`, and sets up the folders the game reads its assets
+`bowl_add_game` links the engine, compiles any shaders in `assets/`, and sets up the folders the game reads its assets
 from. In a dev build, assets are read straight from your `assets/` folder, so saving a file there updates the running
 game. ([reference/cmake.md](reference/cmake.md) has the details, including how to fetch the engine with
 `FetchContent` instead.)
@@ -60,9 +60,9 @@ game. ([reference/cmake.md](reference/cmake.md) has the details, including how t
 `main.cpp` starts as the smallest possible game:
 
 ```cpp
-#include "ph/app/main.hpp"
+#include "bowl/app/main.hpp"
 
-using namespace ph;
+using namespace bowl;
 
 class FirefliesGame final : public Game {
 public:
@@ -73,10 +73,10 @@ public:
     }
 };
 
-PH_MAIN(FirefliesGame)
+BOWL_MAIN(FirefliesGame)
 ```
 
-`PH_MAIN` provides the program's entry point. The engine owns the main loop and calls your `Game` back: `configure`
+`BOWL_MAIN` provides the program's entry point. The engine owns the main loop and calls your `Game` back: `configure`
 first, then `init` and `start` once, then `fixed_update`, `update` and `render` every frame.
 [guides/game-loop.md](guides/game-loop.md) covers them all.
 
@@ -153,15 +153,15 @@ struct Position {
     Vec2 value;
     Vec2 previous; // value at the previous fixed tick, so drawing can interpolate
 };
-PH_COMPONENT(Position, value, previous)
+BOWL_COMPONENT(Position, value, previous)
 
 struct Player {
     f32 radius = 16;
 };
-PH_COMPONENT(Player, radius)
+BOWL_COMPONENT(Player, radius)
 ```
 
-`PH_COMPONENT` is optional. It lists the fields so the engine can save the component, show it in the F1 inspector and
+`BOWL_COMPONENT` is optional. It lists the fields so the engine can save the component, show it in the F1 inspector and
 keep it across hot reloads. Any struct can be a component without it.
 
 Create the player in `start`, and keep its id:
@@ -222,7 +222,7 @@ struct Firefly {
     f32 turn = 0;    // radians per second
     f32 speed = 60;  // units per second
 };
-PH_COMPONENT(Firefly, heading, turn, speed)
+BOWL_COMPONENT(Firefly, heading, turn, speed)
 ```
 
 **Resources.** The size of the field and a random number generator are needed in several places. Values that exist
@@ -315,7 +315,7 @@ instead of stopping dead, and never tunnels through thin walls. It asks a callba
 move:
 
 ```cpp
-#include "ph/physics/collision.hpp"
+#include "bowl/physics/collision.hpp"
 ```
 
 ```cpp
@@ -367,28 +367,28 @@ needs it.
 ### Checkpoint: the whole file so far
 
 ```cpp
-#include "ph/app/main.hpp"
-#include "ph/physics/collision.hpp"
+#include "bowl/app/main.hpp"
+#include "bowl/physics/collision.hpp"
 
-using namespace ph;
+using namespace bowl;
 
 struct Position {
     Vec2 value;
     Vec2 previous; // value at the previous fixed tick, so drawing can interpolate
 };
-PH_COMPONENT(Position, value, previous)
+BOWL_COMPONENT(Position, value, previous)
 
 struct Firefly {
     f32 heading = 0; // radians
     f32 turn = 0;    // radians per second
     f32 speed = 60;  // units per second
 };
-PH_COMPONENT(Firefly, heading, turn, speed)
+BOWL_COMPONENT(Firefly, heading, turn, speed)
 
 struct Player {
     f32 radius = 16;
 };
-PH_COMPONENT(Player, radius)
+BOWL_COMPONENT(Player, radius)
 
 struct Arena {
     Rect bounds{-420, -240, 840, 480};
@@ -502,7 +502,7 @@ private:
     int score_ = 0;
 };
 
-PH_MAIN(FirefliesGame)
+BOWL_MAIN(FirefliesGame)
 ```
 
 ## 7. A score on screen
@@ -511,7 +511,7 @@ Text needs a font. The engine ships Roboto under `engine/fonts/`, and any `.ttf`
 same way. Load it once in `init`:
 
 ```cpp
-#include "ph/gfx/text.hpp"
+#include "bowl/gfx/text.hpp"
 
 #include <format>
 ```
@@ -587,7 +587,7 @@ A trail of sparks while the player moves, and a burst on every catch. `gfx::Part
 particle settings and the live particles. Give the player one in `start`:
 
 ```cpp
-#include "ph/gfx/particles.hpp"
+#include "bowl/gfx/particles.hpp"
 ```
 
 ```cpp
@@ -709,7 +709,7 @@ The title screen uses the immediate-mode UI: call widgets every frame, and they 
 the mouse, keyboard and gamepad without extra code.
 
 ```cpp
-#include "ph/ui/ui.hpp"
+#include "bowl/ui/ui.hpp"
 
 class TitleScene final : public Scene {
 public:

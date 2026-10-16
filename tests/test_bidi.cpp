@@ -1,15 +1,15 @@
-#include "ph/core/file.hpp"
-#include "ph/core/utf8.hpp"
-#include "ph/gfx/bidi.hpp"
-#include "ph/gfx/text.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/utf8.hpp"
+#include "bowl/gfx/bidi.hpp"
+#include "bowl/gfx/text.hpp"
 
 #include <doctest/doctest.h>
 
 #include <algorithm>
 #include <filesystem>
 
-using namespace ph;
-using namespace ph::gfx;
+using namespace bowl;
+using namespace bowl::gfx;
 
 namespace {
 
@@ -87,7 +87,7 @@ TEST_CASE("bidi: levels and visual order") {
 }
 
 TEST_CASE("text: right-to-left characters are drawn in reading order") {
-    auto font = load_font(std::filesystem::path(PH_ENGINE_ASSET_SOURCE_DIR) / "fonts" / "Roboto-Medium.ttf");
+    auto font = load_font(std::filesystem::path(BOWL_ENGINE_ASSET_SOURCE_DIR) / "fonts" / "Roboto-Medium.ttf");
     REQUIRE(font);
     TextStyle style;
     style.size = 20;

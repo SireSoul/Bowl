@@ -27,7 +27,7 @@ docs it affects. The pull request template has the checklist.
 Run what CI runs:
 
 ```bash
-cmake --preset dev -DPH_WARNINGS_AS_ERRORS=ON
+cmake --preset dev -DBOWL_WARNINGS_AS_ERRORS=ON
 ```
 
 ```bash
@@ -57,7 +57,7 @@ Formatting is `.clang-format` (LLVM-based, 4-space indent, 120 columns). Run `cl
 Beyond formatting:
 
 - C++20 without compiler extensions. No exceptions, and nothing that needs RTTI.
-- `snake_case` for functions, variables and files, `PascalCase` for types, `PH_UPPER_CASE` for macros. Members end
+- `snake_case` for functions, variables and files, `PascalCase` for types, `BOWL_UPPER_CASE` for macros. Members end
   in `_`. Use the short integer aliases (`u32`, `f32`, `usize`).
 - Headers include what they use. Forward-declare SDL types in public headers where you can.
 - Assert on programming errors. For runtime failures (missing files, bad data), log and carry on; bad content should
@@ -83,7 +83,7 @@ what's missing and, if you know, why: `// Not yet: kerning across font fallbacks
 
 ## Tests
 
-Tests use [doctest](https://github.com/doctest/doctest) and live in `tests/test_<area>.cpp`. One `ph_tests` executable
+Tests use [doctest](https://github.com/doctest/doctest) and live in `tests/test_<area>.cpp`. One `bowl_tests` executable
 holds all of them.
 
 - New behavior gets a test. Bugs get a test that fails before the fix.
@@ -96,7 +96,7 @@ holds all of them.
 ## Documentation
 
 - The headers document the API. Update the comment when you change a function, then regenerate the
-  [API reference](docs/reference/api/README.md): `cmake --build build/dev --target ph_api_docs`.
+  [API reference](docs/reference/api/README.md): `cmake --build build/dev --target bowl_api_docs`.
 - The guides in `docs/guides/` explain how to use each system. If you add a feature, add it to its guide; if you add a
   system, add a guide and link it from `docs/README.md`.
 - `docs/tutorial.md` follows `samples/tutorial/main.cpp`. Change them together.
@@ -119,7 +119,7 @@ holds all of them.
 
 Think twice: every dependency is code everyone builds, on every platform. If it's worth it:
 
-1. Add it to `cmake/PhDependencies.cmake` with `ph_fetch(name <release archive URL> <sha256>)`, pinned to a release.
+1. Add it to `cmake/BowlDependencies.cmake` with `bowl_fetch(name <release archive URL> <sha256>)`, pinned to a release.
 2. Mark it `SYSTEM` (the helper does) so its warnings don't fail our builds.
 3. Note the version, purpose and license in [docs/reference/cmake.md](docs/reference/cmake.md#dependencies) and in the
    README's license section.

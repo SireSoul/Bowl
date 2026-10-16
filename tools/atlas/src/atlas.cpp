@@ -1,4 +1,4 @@
-#include "ph/atlas/atlas.hpp"
+#include "bowl/atlas/atlas.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -7,7 +7,7 @@
 #include <map>
 #include <numeric>
 
-namespace ph::atlas {
+namespace bowl::atlas {
 
 namespace {
 
@@ -156,7 +156,7 @@ json::Value sheet_json(const Atlas& atlas, const std::vector<Image>& images, std
     tags.make_array();
     for (auto& [name, list] : groups) {
         std::sort(list.begin(), list.end());
-        // A tag needs consecutive frames; they are when the input lists them in order (ph-atlas sorts by name).
+        // A tag needs consecutive frames; they are when the input lists them in order (bowl-atlas sorts by name).
         bool consecutive = true;
         for (usize k = 1; k < list.size(); ++k) consecutive &= list[k].second == list[k - 1].second + 1;
         if (!consecutive || list.size() < 2) continue;
@@ -169,7 +169,7 @@ json::Value sheet_json(const Atlas& atlas, const std::vector<Image>& images, std
     }
 
     json::Value meta;
-    meta.set("app", "ph-atlas");
+    meta.set("app", "bowl-atlas");
     meta.set("image", std::string(image_file));
     meta.set("format", "RGBA8888");
     json::Value size;
@@ -184,4 +184,4 @@ json::Value sheet_json(const Atlas& atlas, const std::vector<Image>& images, std
     return doc;
 }
 
-} // namespace ph::atlas
+} // namespace bowl::atlas

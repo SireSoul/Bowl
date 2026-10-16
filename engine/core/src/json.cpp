@@ -1,6 +1,6 @@
-#include "ph/core/json.hpp"
+#include "bowl/core/json.hpp"
 
-#include "ph/core/utf8.hpp"
+#include "bowl/core/utf8.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -11,7 +11,7 @@
 #include <format>
 #include <unordered_map>
 
-namespace ph::json {
+namespace bowl::json {
 
 namespace {
 const Value null_value;
@@ -358,7 +358,7 @@ std::string stringify(const Value& value, int indent) {
 
 // Binary form
 //
-//   "PHJB" u8 version
+//   "BWJB" u8 version
 //   varint string count, then each string: varint length, bytes
 //   the value: a tag byte, then
 //     null, false, true                nothing
@@ -377,7 +377,7 @@ class BinaryWriter {
 public:
     std::vector<u8> run(const Value& root) {
         collect(root);
-        out_ = {'P', 'H', 'J', 'B', binary_version};
+        out_ = {'B', 'W', 'J', 'B', binary_version};
         varint(strings_.size());
         for (const std::string* s : strings_) {
             varint(s->size());
@@ -457,7 +457,7 @@ public:
 
     ParseResult run() {
         ParseResult out;
-        if (!is_binary(d_)) return fail(out, "not binary JSON (no \"PHJB\")");
+        if (!is_binary(d_)) return fail(out, "not binary JSON (no \"BWJB\")");
         if (d_[4] > binary_version) return fail(out, "written by a newer version of the format");
         at_ = 5;
         u64 count = 0;
@@ -569,7 +569,7 @@ private:
 
 std::vector<u8> encode_binary(const Value& value) { return BinaryWriter().run(value); }
 
-bool is_binary(std::span<const u8> data) { return data.size() >= 5 && std::memcmp(data.data(), "PHJB", 4) == 0; }
+bool is_binary(std::span<const u8> data) { return data.size() >= 5 && std::memcmp(data.data(), "BWJB", 4) == 0; }
 
 ParseResult decode_binary(std::span<const u8> data) { return BinaryReader(data).run(); }
 
@@ -578,4 +578,4 @@ ParseResult parse_any(std::span<const u8> data) {
     return parse(std::string_view(reinterpret_cast<const char*>(data.data()), data.size()));
 }
 
-} // namespace ph::json
+} // namespace bowl::json

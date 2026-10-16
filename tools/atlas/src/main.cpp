@@ -1,6 +1,6 @@
-// ph-atlas: packs a folder of PNGs into one atlas image plus sprite-sheet JSON that gfx::SpriteSheet loads.
+// bowl-atlas: packs a folder of PNGs into one atlas image plus sprite-sheet JSON that gfx::SpriteSheet loads.
 //
-//     ph-atlas art/characters -o assets/characters.png [--padding 1] [--max 4096] [--no-trim] [--fps 10]
+//     bowl-atlas art/characters -o assets/characters.png [--padding 1] [--max 4096] [--no-trim] [--fps 10]
 //
 // Writes characters.png and characters.json next to each other. Frames are named after the files (without
 // extension, with their subfolder: "npc/baker"); files named walk_0.png, walk_1.png... also become a "walk" animation.
@@ -10,8 +10,8 @@
 #include <stb_image.h>
 #include <stb_image_write.h>
 
-#include "ph/atlas/atlas.hpp"
-#include "ph/core/file.hpp"
+#include "bowl/atlas/atlas.hpp"
+#include "bowl/core/file.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -26,7 +26,7 @@ namespace {
 
 // "walk_2" before "walk_10": digit runs compare as numbers.
 bool natural_less(const std::string& a, const std::string& b) {
-    using ph::usize;
+    using bowl::usize;
     usize i = 0, j = 0;
     while (i < a.size() && j < b.size()) {
         if (std::isdigit(static_cast<unsigned char>(a[i])) && std::isdigit(static_cast<unsigned char>(b[j]))) {
@@ -49,7 +49,7 @@ bool natural_less(const std::string& a, const std::string& b) {
 }
 
 int usage() {
-    std::puts("usage: ph-atlas <folder or images...> -o <atlas.png> [--padding N] [--max N] [--no-trim] [--fps N]");
+    std::puts("usage: bowl-atlas <folder or images...> -o <atlas.png> [--padding N] [--max N] [--no-trim] [--fps N]");
     return 2;
 }
 
@@ -58,7 +58,7 @@ int usage() {
 int main(int argc, char** argv) {
     std::vector<fs::path> inputs;
     fs::path output;
-    ph::atlas::Options options;
+    bowl::atlas::Options options;
     unsigned fps = 10;
     for (int i = 1; i < argc; ++i) {
         std::string_view a = argv[i];
@@ -94,44 +94,44 @@ int main(int argc, char** argv) {
         } else if (fs::is_regular_file(in, ec)) {
             files.emplace_back(in.stem().string(), in);
         } else {
-            std::fprintf(stderr, "ph-atlas: can't read %s\n", in.string().c_str());
+            std::fprintf(stderr, "bowl-atlas: can't read %s\n", in.string().c_str());
             return 1;
         }
     }
     std::sort(files.begin(), files.end(), [](const auto& x, const auto& y) { return natural_less(x.first, y.first); });
 
-    std::vector<ph::atlas::Image> images;
+    std::vector<bowl::atlas::Image> images;
     for (const auto& [name, path] : files) {
         int w = 0, h = 0, n = 0;
         unsigned char* px = stbi_load(path.string().c_str(), &w, &h, &n, 4);
         if (!px) {
-            std::fprintf(stderr, "ph-atlas: %s: %s\n", path.string().c_str(), stbi_failure_reason());
+            std::fprintf(stderr, "bowl-atlas: %s: %s\n", path.string().c_str(), stbi_failure_reason());
             return 1;
         }
-        images.push_back({name, static_cast<ph::u32>(w), static_cast<ph::u32>(h),
-                          std::vector<ph::u8>(px, px + static_cast<size_t>(w) * h * 4)});
+        images.push_back({name, static_cast<bowl::u32>(w), static_cast<bowl::u32>(h),
+                          std::vector<bowl::u8>(px, px + static_cast<size_t>(w) * h * 4)});
         stbi_image_free(px);
     }
 
     std::string error;
-    auto atlas = ph::atlas::pack(images, options, error);
+    auto atlas = bowl::atlas::pack(images, options, error);
     if (!atlas) {
-        std::fprintf(stderr, "ph-atlas: %s\n", error.c_str());
+        std::fprintf(stderr, "bowl-atlas: %s\n", error.c_str());
         return 1;
     }
     if (!stbi_write_png(output.string().c_str(), static_cast<int>(atlas->width), static_cast<int>(atlas->height), 4,
                         atlas->rgba.data(), static_cast<int>(atlas->width * 4))) {
-        std::fprintf(stderr, "ph-atlas: can't write %s\n", output.string().c_str());
+        std::fprintf(stderr, "bowl-atlas: can't write %s\n", output.string().c_str());
         return 1;
     }
     fs::path json_path = output;
     json_path.replace_extension(".json");
-    std::string text = ph::json::stringify(ph::atlas::sheet_json(*atlas, images, output.filename().string(), 1000 / fps));
-    if (!ph::write_file_bytes(json_path, text.data(), text.size())) {
-        std::fprintf(stderr, "ph-atlas: can't write %s\n", json_path.string().c_str());
+    std::string text = bowl::json::stringify(bowl::atlas::sheet_json(*atlas, images, output.filename().string(), 1000 / fps));
+    if (!bowl::write_file_bytes(json_path, text.data(), text.size())) {
+        std::fprintf(stderr, "bowl-atlas: can't write %s\n", json_path.string().c_str());
         return 1;
     }
-    std::printf("ph-atlas: %zu pictures -> %s (%u x %u) and %s\n", images.size(), output.string().c_str(), atlas->width,
-                atlas->height, json_path.filename().string().c_str());
+    std::printf("bowl-atlas: %zu pictures -> %s (%u x %u) and %s\n", images.size(), output.string().c_str(),
+                atlas->width, atlas->height, json_path.filename().string().c_str());
     return 0;
 }

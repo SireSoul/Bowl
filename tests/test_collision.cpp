@@ -1,12 +1,12 @@
-#include "ph/physics/colliders.hpp"
-#include "ph/physics/collision.hpp"
+#include "bowl/physics/colliders.hpp"
+#include "bowl/physics/collision.hpp"
 
 #include <doctest/doctest.h>
 
 #include <set>
 
-using namespace ph;
-using namespace ph::physics;
+using namespace bowl;
+using namespace bowl::physics;
 
 TEST_CASE("collision: overlap and minimum translation") {
     Rect a{0, 0, 10, 10};

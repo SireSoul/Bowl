@@ -1,11 +1,11 @@
-#include "ph/gfx/text.hpp"
+#include "bowl/gfx/text.hpp"
 
 #include "color_glyphs.hpp"
-#include "ph/core/log.hpp"
-#if PH_HARFBUZZ
+#include "bowl/core/log.hpp"
+#if BOWL_HARFBUZZ
 #include <hb.h>
 #endif
-#include "ph/core/utf8.hpp"
+#include "bowl/core/utf8.hpp"
 
 #include <algorithm>
 #include <charconv>
@@ -26,13 +26,13 @@
 #pragma GCC diagnostic pop
 #endif
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 struct Font::Impl {
     std::vector<u8> data;
     stbtt_fontinfo info{};
     color::Tables colors; // emoji
-#if PH_HARFBUZZ
+#if BOWL_HARFBUZZ
     hb_font_t* hb = nullptr; // shaping, in font units
     ~Impl() {
         if (hb) hb_font_destroy(hb);
@@ -40,10 +40,10 @@ struct Font::Impl {
 #endif
 };
 
-bool text_shaping() { return PH_HARFBUZZ != 0; }
+bool text_shaping() { return BOWL_HARFBUZZ != 0; }
 
 void* Font::hb_font(int slot) const {
-#if PH_HARFBUZZ
+#if BOWL_HARFBUZZ
     const Impl* impl = slot <= 0 ? impl_.get() : fallbacks_[static_cast<usize>(slot - 1)]->impl_.get();
     return impl->hb;
 #else
@@ -116,7 +116,7 @@ std::unique_ptr<Font> Font::from_memory(GpuDevice* device, std::vector<u8> ttf, 
         return nullptr;
     }
     font->impl_->colors = color::find_tables(font->impl_->data, static_cast<u32>(offset));
-#if PH_HARFBUZZ
+#if BOWL_HARFBUZZ
     // HarfBuzz reads the same bytes (which the Impl keeps alive), the first font of a collection as stb does.
     hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(data), static_cast<unsigned>(font->impl_->data.size()),
                                      HB_MEMORY_MODE_READONLY, nullptr, nullptr);
@@ -458,13 +458,13 @@ struct TextShaper {
     std::vector<usize> offsets; // each character's byte offset
     std::vector<u8> levels, paragraph_levels;
     bool any_rtl = false;
-#if PH_HARFBUZZ
+#if BOWL_HARFBUZZ
     hb_buffer_t* buffer = hb_buffer_create();
     ~TextShaper() { hb_buffer_destroy(buffer); }
 #endif
 
     TextShaper(Font& f, std::string_view t, f32 pixels, bool sdf, bidi::Direction direction)
-        : font(f), text(t), px(pixels), shape_runs(PH_HARFBUZZ && !sdf) {
+        : font(f), text(t), px(pixels), shape_runs(BOWL_HARFBUZZ && !sdf) {
         for (usize i = 0; i < text.size();) {
             offsets.push_back(i);
             cps.push_back(utf8::next(text, i));
@@ -526,7 +526,7 @@ struct TextShaper {
         return line;
     }
 
-#if PH_HARFBUZZ
+#if BOWL_HARFBUZZ
     // Runs of one level, font and script, each shaped by HarfBuzz, in visual order.
     ShapedLine shaped(usize a, usize b) {
         struct Item {
@@ -601,7 +601,7 @@ struct TextShaper {
 
     ShapedLine shape(usize begin, usize end) {
         auto [a, b] = chars(begin, end);
-#if PH_HARFBUZZ
+#if BOWL_HARFBUZZ
         if (shape_runs && b > a) return shaped(a, b);
 #endif
         return unshaped(a, b);
@@ -826,4 +826,4 @@ Material sdf_text_material(AssetManager& assets, const SdfTextLook& look) {
     return m;
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

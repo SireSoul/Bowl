@@ -1,8 +1,8 @@
-#include "ph/gfx/renderer.hpp"
+#include "bowl/gfx/renderer.hpp"
 
-#include "ph/core/assert.hpp"
-#include "ph/core/log.hpp"
-#include "ph/core/profiler.hpp"
+#include "bowl/core/assert.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/profiler.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -11,7 +11,7 @@
 #include <cstring>
 #include <numeric>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 Renderer::~Renderer() { shutdown(); }
 
@@ -224,7 +224,7 @@ bool Renderer::ensure_targets(u32 w, u32 h) {
 }
 
 bool Renderer::begin_frame() {
-    PH_ASSERT(!cmd_, "begin_frame called twice");
+    BOWL_ASSERT(!cmd_, "begin_frame called twice");
     ++frame_;
     // Drop pipelines nobody has used for a while (old versions of hot-reloaded shaders, retired materials).
     if (frame_ % 300 == 0)
@@ -407,7 +407,7 @@ void Renderer::fullscreen(SDL_GPUTexture* target, bool clear, const Shader& frag
 
 void Renderer::run_bloom(SDL_GPUTexture* input) {
     if (!bloom_pre_fs_ || !bloom_down_fs_ || !bloom_up_fs_) return;
-    PH_PROFILE_SCOPE("bloom");
+    BOWL_PROFILE_SCOPE("bloom");
     f32 params[4] = {1.0f / static_cast<f32>(target_w_), 1.0f / static_cast<f32>(target_h_), post_.bloom_threshold,
                      post_.bloom_knee};
     const SDL_GPUTexture* scene_input[1] = {input};
@@ -425,7 +425,7 @@ void Renderer::run_bloom(SDL_GPUTexture* input) {
 }
 
 void Renderer::end_frame() {
-    PH_PROFILE_SCOPE("render");
+    BOWL_PROFILE_SCOPE("render");
     if (!cmd_) return;
     SDL_GPUDevice* d = device_->handle();
 
@@ -623,4 +623,4 @@ void Renderer::end_frame() {
     last_stats_ = stats_;
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

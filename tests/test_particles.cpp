@@ -1,12 +1,12 @@
-#include "ph/core/ease.hpp"
-#include "ph/core/serialize.hpp"
-#include "ph/ecs/hierarchy.hpp"
-#include "ph/gfx/particles.hpp"
+#include "bowl/core/ease.hpp"
+#include "bowl/core/serialize.hpp"
+#include "bowl/ecs/hierarchy.hpp"
+#include "bowl/gfx/particles.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
-using namespace ph::gfx;
+using namespace bowl;
+using namespace bowl::gfx;
 
 TEST_CASE("ease: endpoints, monotonic basics, overshoot where expected") {
     for (int e = 0; e <= static_cast<int>(Ease::InOutBounce); ++e) {

@@ -1,12 +1,12 @@
-#include "ph/platform/window.hpp"
+#include "bowl/platform/window.hpp"
 
-#include "ph/core/log.hpp"
+#include "bowl/core/log.hpp"
 
 #include <SDL3/SDL.h>
 
 #include <string>
 
-namespace ph {
+namespace bowl {
 
 Window::~Window() { destroy(); }
 
@@ -68,4 +68,4 @@ bool Window::set_icon(u32 width, u32 height, std::span<const u8> rgba) {
 
 bool Window::fullscreen() const { return (SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0; }
 
-} // namespace ph
+} // namespace bowl

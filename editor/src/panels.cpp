@@ -3,9 +3,9 @@
 
 #include "editor.hpp"
 
-#include "ph/app/inspector.hpp"
-#include "ph/core/time.hpp"
-#include "ph/gfx/sprite.hpp"
+#include "bowl/app/inspector.hpp"
+#include "bowl/core/time.hpp"
+#include "bowl/gfx/sprite.hpp"
 
 #include <SDL3/SDL_misc.h>
 
@@ -15,14 +15,14 @@
 #include <format>
 #include <map>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 namespace fs = std::filesystem;
 
 namespace {
 
 constexpr float top_h = 48, status_h = 28, left_w = 300, right_w = 340;
-constexpr const char* entity_payload = "PH_ENTITY";
+constexpr const char* entity_payload = "BOWL_ENTITY";
 constexpr ImGuiWindowFlags fixed = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
                                    ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings |
                                    ImGuiWindowFlags_NoBringToFrontOnFocus;
@@ -463,7 +463,7 @@ void Editor::inspect_one(Engine& engine, ecs::Entity e) {
         if (ui::begin_card(title.c_str(), id.c_str(), ui::Icon::Cross, &remove, "Remove")) {
             if (info.visit) inspector::fields(world, e, c, engine.assets(), nullptr);
             else if (info.size == 0) ui::hint("A tag: having it is all it says.");
-            else ui::hint(std::format("{} has no PH_COMPONENT field list, so it can't be edited here.", info.name));
+            else ui::hint(std::format("{} has no BOWL_COMPONENT field list, so it can't be edited here.", info.name));
             ui::end_card();
         }
         if (ImGui::IsItemHovered()) ui::tip(info.name);
@@ -479,7 +479,7 @@ void Editor::transform_card(Engine& engine, ecs::Entity e) {
     ImGui::SetNextItemWidth(-60);
     ImGui::DragFloat2("Position", &t.position.x, 1.0f, 0, 0, "%.1f");
     ui::tip("Where it stands (relative to its group, if it's in one). Drag, or double-click to type.");
-    f32 degrees = ph::degrees(t.rotation);
+    f32 degrees = bowl::degrees(t.rotation);
     ImGui::SetNextItemWidth(-60);
     if (ImGui::DragFloat("Turn", &degrees, 0.5f, 0, 0, "%.1f deg")) t.rotation = radians(degrees);
     ui::tip("Rotation in degrees", "Q / E: 15 degrees (Shift: 1)");
@@ -876,4 +876,4 @@ void Editor::welcome_window(Engine& engine) {
     ImGui::EndPopup();
 }
 
-} // namespace ph::editor
+} // namespace bowl::editor

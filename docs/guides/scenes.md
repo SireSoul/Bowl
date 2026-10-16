@@ -10,7 +10,7 @@ game has several screens with their own setup and teardown.
 ## A scene
 
 ```cpp
-class PauseMenu final : public ph::Scene {
+class PauseMenu final : public bowl::Scene {
 public:
     void enter(Engine& engine) override { engine.set_paused(true); }
     void exit(Engine& engine) override { engine.set_paused(false); }

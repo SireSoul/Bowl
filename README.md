@@ -1,4 +1,4 @@
-# BOWL
+# Bowl
 
 A code-first 2D game engine in C++20, built on SDL3. One renderer for Vulkan, Metal and Direct3D 12, a parallel
 archetype ECS, hot reload for assets, shaders and game code, and dev tools that run inside the game.
@@ -21,7 +21,7 @@ load their worlds without a pile of boilerplate.
 - Fixed-timestep simulation with interpolated rendering, so motion is smooth at any refresh rate
 - Job system with deterministic chunking, a CPU profiler, logging, assertions
 - Asset manager with virtual paths, mounts and hot reload; a failed reload keeps the last good version. Background
-  loading (textures and sounds decode on the loading thread), and asset archives (`ph-pack`) for release builds
+  loading (textures and sounds decode on the loading thread), and asset archives (`bowl-pack`) for release builds
 - JSON (comments and trailing commas allowed in hand-written files) with a binary form for big files, a small XML
   reader, UTF-8, easing curves and tweens
 
@@ -30,7 +30,7 @@ load their worlds without a pile of boilerplate.
 - A scheduler that runs non-conflicting systems in parallel and still gives the same result as running them in order,
   entity ids included
 - Command buffers for structural changes, hooks, typed resources
-- `PH_REFLECT` / `PH_COMPONENT` reflection: JSON save and load, entity references that survive a reload
+- `BOWL_REFLECT` / `BOWL_COMPONENT` reflection: JSON save and load, entity references that survive a reload
 - Prefabs and `.world` files as hot-reloading assets; binary saves, and save-file migrations for renamed or removed
   components and fields
 - Parent/child transforms
@@ -43,12 +43,12 @@ load their worlds without a pile of boilerplate.
   aberration, film grain, and full-screen effects of your own
 - 2D lighting: an additive light map, ambient color, emissive sprites, normal maps and shadows from occluders
 - Custom materials: your own fragment shader per batch, extra textures, a uniform block, four blend modes
-- Shaders, compute shaders included, written once in GLSL and compiled to SPIR-V, MSL and HLSL by `ph-shaderc`
+- Shaders, compute shaders included, written once in GLSL and compiled to SPIR-V, MSL and HLSL by `bowl-shaderc`
 - Particles on the CPU, or simulated and drawn on the GPU
 - TrueType text with kerning, wrapping, alignment, outlines, shadows, rich-text markup, fallback fonts, distance-field
   text and typewriter reveals, sharp at any size; right-to-left text, color emoji, and HarfBuzz shaping for Arabic,
   Devanagari and other complex scripts (optional)
-- Aseprite sprite sheets, slices and animation events; `ph-atlas` packs a folder of PNGs into an atlas
+- Aseprite sprite sheets, slices and animation events; `bowl-atlas` packs a folder of PNGs into an atlas
 - Tiled maps (JSON and XML; orthogonal, isometric, staggered and hexagonal; y-sorted, animated tiles, object
   templates), with big maps kept on the GPU in chunks
 - Screenshots from the command line
@@ -80,7 +80,7 @@ load their worlds without a pile of boilerplate.
 - Packaging: release builds with static SDL, precompiled shaders and packed assets, `.app` bundles on macOS and
   `cmake --install` layouts; app icons from one PNG; signing on macOS (and notarization) and Windows; installers
   (DMG, NSIS, ZIP), a Linux AppImage and a Flatpak manifest; Steam Deck detection and a `--deck` preview window
-- An API reference generated from the headers' comments by `ph-apidoc`
+- An API reference generated from the headers' comments by `bowl-apidoc`
 
 ## Quick start
 
@@ -89,11 +89,11 @@ All other dependencies are downloaded at pinned versions and checked against a S
 there is one; otherwise SDL3 is built from source.
 
 ```bash
-git clone https://github.com/SireSoul/BOWL.git
+git clone https://github.com/SireSoul/Bowl.git
 ```
 
 ```bash
-cd BOWL
+cd Bowl
 ```
 
 ```bash
@@ -119,13 +119,13 @@ Then run a sample (on Windows the executables are one folder deeper, in `RelWith
 ## A game in one file
 
 ```cpp
-#include "ph/app/main.hpp"
-using namespace ph;
+#include "bowl/app/main.hpp"
+using namespace bowl;
 
 struct Position { Vec2 value; };
 struct Velocity { Vec2 value; };
-PH_COMPONENT(Position, value) // optional: savable, editable in the F1 inspector, survives hot reload
-PH_COMPONENT(Velocity, value)
+BOWL_COMPONENT(Position, value) // optional: savable, editable in the F1 inspector, survives hot reload
+BOWL_COMPONENT(Velocity, value)
 
 class MyGame final : public Game {
     gfx::SpriteBatch batch_;
@@ -149,12 +149,12 @@ class MyGame final : public Game {
     }
 };
 
-PH_MAIN(MyGame)
+BOWL_MAIN(MyGame)
 ```
 
 ```cmake
 add_executable(my_game main.cpp)
-ph_add_game(my_game ASSETS assets)
+bowl_add_game(my_game ASSETS assets)
 ```
 
 The [tutorial](docs/tutorial.md) builds a complete small game from here, one feature at a time.
@@ -199,11 +199,11 @@ Start at [docs/README.md](docs/README.md), the full index. The main entry points
 ```
 engine/      the engine: core, ecs, platform, gfx, audio, physics, ui, net, app (+ engine assets)
 editor/      Bowl Editor
-tools/       ph-shaderc (shaders), ph-atlas (atlases), ph-icon (app icons), ph-pack (asset archives),
-             ph-apidoc (the API reference)
+tools/       bowl-shaderc (shaders), bowl-atlas (atlases), bowl-icon (app icons), bowl-pack (asset archives),
+             bowl-apidoc (the API reference)
 samples/     tutorial, isometric, sprites
 tests/       unit tests (doctest) and an ECS benchmark
-cmake/       build helpers: dependencies, compiler flags, shaders, ph_add_game, packaging
+cmake/       build helpers: dependencies, compiler flags, shaders, bowl_add_game, packaging
 docs/        the documentation
 ```
 
@@ -220,7 +220,7 @@ game is built on it; [CHANGELOG.md](CHANGELOG.md) records what changed.
 
 ## License
 
-BOWL is not open source: all rights are reserved ([LICENSE](LICENSE)). You're welcome to read the code, but not to
+Bowl is not open source: all rights are reserved ([LICENSE](LICENSE)). You're welcome to read the code, but not to
 use, copy or redistribute it without permission.
 
 Third-party code keeps its own license: SDL (zlib), stb (public domain or MIT), glslang (BSD-3-Clause and others),

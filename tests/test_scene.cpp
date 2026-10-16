@@ -1,11 +1,11 @@
-#include "ph/app/engine.hpp"
+#include "bowl/app/engine.hpp"
 
 #include <doctest/doctest.h>
 
 #include <string>
 #include <vector>
 
-using namespace ph;
+using namespace bowl;
 
 namespace {
 

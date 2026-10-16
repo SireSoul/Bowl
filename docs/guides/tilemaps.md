@@ -30,7 +30,7 @@ XML, with animated tiles, flipped tiles, y-sorting for isometric depth, and GPU-
 ## Loading and drawing
 
 ```cpp
-#include "ph/gfx/tilemap.hpp"
+#include "bowl/gfx/tilemap.hpp"
 
 Asset<gfx::Tilemap> town = engine.assets().load<gfx::Tilemap>("maps/town.tmj");
 

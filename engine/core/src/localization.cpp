@@ -1,11 +1,11 @@
-#include "ph/core/localization.hpp"
+#include "bowl/core/localization.hpp"
 
-#include "ph/core/json.hpp"
-#include "ph/core/log.hpp"
+#include "bowl/core/json.hpp"
+#include "bowl/core/log.hpp"
 
 #include <format>
 
-namespace ph {
+namespace bowl {
 
 const std::string* StringTable::find(std::string_view key) const {
     auto it = strings.find(std::string(key));
@@ -117,4 +117,4 @@ std::string Localization::plural(std::string_view key, i64 count) const {
     return fill_placeholders(tr(form), {{"n", n}});
 }
 
-} // namespace ph
+} // namespace bowl

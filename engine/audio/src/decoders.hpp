@@ -2,13 +2,13 @@
 
 // Compressed audio decoders behind one interface, so music streams don't care what codec a track uses.
 
-#include "ph/core/types.hpp"
+#include "bowl/core/types.hpp"
 
 #include <memory>
 #include <optional>
 #include <vector>
 
-namespace ph::audio::detail {
+namespace bowl::audio::detail {
 
 // Decodes a file held in memory, a little at a time: interleaved float frames at the file's own rate.
 class Decoder {
@@ -28,11 +28,11 @@ struct StreamInfo {
 std::optional<StreamInfo> probe_vorbis(const std::vector<u8>& data);
 std::unique_ptr<Decoder> open_vorbis(const std::vector<u8>& data);
 
-// Ogg Opus (opusfile). Always 48 kHz stereo; mono and surround files are mixed to stereo. Without PH_OPUS these
+// Ogg Opus (opusfile). Always 48 kHz stereo; mono and surround files are mixed to stereo. Without BOWL_OPUS these
 // find nothing.
 bool opus_built();
 bool looks_like_opus(const std::vector<u8>& data);
 std::optional<StreamInfo> probe_opus(const std::vector<u8>& data);
 std::unique_ptr<Decoder> open_opus(const std::vector<u8>& data);
 
-} // namespace ph::audio::detail
+} // namespace bowl::audio::detail

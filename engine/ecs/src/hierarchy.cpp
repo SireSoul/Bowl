@@ -1,8 +1,8 @@
-#include "ph/ecs/hierarchy.hpp"
+#include "bowl/ecs/hierarchy.hpp"
 
 #include <algorithm>
 
-namespace ph::ecs {
+namespace bowl::ecs {
 
 namespace {
 
@@ -73,4 +73,4 @@ void add_transform_systems(Schedule& schedule) {
     schedule.add("propagate transforms", [](SystemContext& ctx) { propagate_transforms(ctx.world); });
 }
 
-} // namespace ph::ecs
+} // namespace bowl::ecs

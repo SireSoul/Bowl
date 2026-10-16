@@ -1,41 +1,42 @@
 # core
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/core/archive.hpp](#phcorearchivehpp)
-- [ph/core/assert.hpp](#phcoreasserthpp)
-- [ph/core/assets.hpp](#phcoreassetshpp)
-- [ph/core/ease.hpp](#phcoreeasehpp)
-- [ph/core/file.hpp](#phcorefilehpp)
-- [ph/core/function_ref.hpp](#phcorefunction_refhpp)
-- [ph/core/jobs.hpp](#phcorejobshpp)
-- [ph/core/json.hpp](#phcorejsonhpp)
-- [ph/core/json_text.hpp](#phcorejson_texthpp)
-- [ph/core/localization.hpp](#phcorelocalizationhpp)
-- [ph/core/log.hpp](#phcoreloghpp)
-- [ph/core/math.hpp](#phcoremathhpp)
-- [ph/core/profiler.hpp](#phcoreprofilerhpp)
-- [ph/core/reflect.hpp](#phcorereflecthpp)
-- [ph/core/serialize.hpp](#phcoreserializehpp)
-- [ph/core/settings.hpp](#phcoresettingshpp)
-- [ph/core/shader_bundle.hpp](#phcoreshader_bundlehpp)
-- [ph/core/time.hpp](#phcoretimehpp)
-- [ph/core/type_id.hpp](#phcoretype_idhpp)
-- [ph/core/types.hpp](#phcoretypeshpp)
-- [ph/core/utf8.hpp](#phcoreutf8hpp)
-- [ph/core/xml.hpp](#phcorexmlhpp)
+- [bowl/core/archive.hpp](#bowlcorearchivehpp)
+- [bowl/core/assert.hpp](#bowlcoreasserthpp)
+- [bowl/core/assets.hpp](#bowlcoreassetshpp)
+- [bowl/core/ease.hpp](#bowlcoreeasehpp)
+- [bowl/core/file.hpp](#bowlcorefilehpp)
+- [bowl/core/function_ref.hpp](#bowlcorefunction_refhpp)
+- [bowl/core/jobs.hpp](#bowlcorejobshpp)
+- [bowl/core/json.hpp](#bowlcorejsonhpp)
+- [bowl/core/json_text.hpp](#bowlcorejson_texthpp)
+- [bowl/core/localization.hpp](#bowlcorelocalizationhpp)
+- [bowl/core/log.hpp](#bowlcoreloghpp)
+- [bowl/core/math.hpp](#bowlcoremathhpp)
+- [bowl/core/profiler.hpp](#bowlcoreprofilerhpp)
+- [bowl/core/reflect.hpp](#bowlcorereflecthpp)
+- [bowl/core/serialize.hpp](#bowlcoreserializehpp)
+- [bowl/core/settings.hpp](#bowlcoresettingshpp)
+- [bowl/core/shader_bundle.hpp](#bowlcoreshader_bundlehpp)
+- [bowl/core/time.hpp](#bowlcoretimehpp)
+- [bowl/core/type_id.hpp](#bowlcoretype_idhpp)
+- [bowl/core/types.hpp](#bowlcoretypeshpp)
+- [bowl/core/utf8.hpp](#bowlcoreutf8hpp)
+- [bowl/core/xml.hpp](#bowlcorexmlhpp)
 
-## ph/core/archive.hpp
+## bowl/core/archive.hpp
 
-`#include "ph/core/archive.hpp"` · namespace `ph`
+`#include "bowl/core/archive.hpp"` · namespace `bowl`
 
 ### Archive
 
-An asset archive (.phpak): many files in one, stored as they are, with an index at the front. Shipping builds put
-their asset folders in archives (PH_PACK_ASSETS) and AssetManager::mount_archive reads from them; ph-pack makes them.
+An asset archive (.bowlpak): many files in one, stored as they are, with an index at the front. Shipping builds put
+their asset folders in archives (BOWL_PACK_ASSETS) and AssetManager::mount_archive reads from them; bowl-pack makes
+them.
 
-Layout, little-endian: "PHPK", u32 version (1), u32 file count, then per file: u16 name length, the name (UTF-8,
+Layout, little-endian: "BWPK", u32 version (1), u32 file count, then per file: u16 name length, the name (UTF-8,
 '/' separated), u64 offset from the start of the archive, u64 size; then the files' bytes.
 
 ```cpp
@@ -67,32 +68,32 @@ or the archive can't be written.
 bool write_archive(const std::filesystem::path& archive, const std::filesystem::path& folder);
 ```
 
-## ph/core/assert.hpp
+## bowl/core/assert.hpp
 
-`#include "ph/core/assert.hpp"`
+`#include "bowl/core/assert.hpp"`
 
-PH_ASSERT(cond[, "message"]): checked in debug and dev builds, compiled out when PH_ASSERTS is 0.
-PH_VERIFY(cond[, "message"]): like PH_ASSERT, but cond is evaluated even when asserts are off.
+BOWL_ASSERT(cond[, "message"]): checked in debug and dev builds, compiled out when BOWL_ASSERTS is 0.
+BOWL_VERIFY(cond[, "message"]): like BOWL_ASSERT, but cond is evaluated even when asserts are off.
 
 ```cpp
-#define PH_ASSERTS 1
-#define PH_ASSERTS 0
+#define BOWL_ASSERTS 1
+#define BOWL_ASSERTS 0
 ```
 
 ```cpp
-#define PH_ASSERT(cond, ...)
-#define PH_VERIFY(cond, ...) PH_ASSERT(cond __VA_OPT__(, ) __VA_ARGS__)
-#define PH_ASSERT(cond, ...) ((void)0)
-#define PH_VERIFY(cond, ...) ((void)(cond))
+#define BOWL_ASSERT(cond, ...)
+#define BOWL_VERIFY(cond, ...) BOWL_ASSERT(cond __VA_OPT__(, ) __VA_ARGS__)
+#define BOWL_ASSERT(cond, ...) ((void)0)
+#define BOWL_VERIFY(cond, ...) ((void)(cond))
 ```
 
 ```cpp
-#define PH_UNREACHABLE() ::ph::detail::assert_fail("unreachable", __FILE__, __LINE__)
+#define BOWL_UNREACHABLE() ::bowl::detail::assert_fail("unreachable", __FILE__, __LINE__)
 ```
 
-## ph/core/assets.hpp
+## bowl/core/assets.hpp
 
-`#include "ph/core/assets.hpp"` · namespace `ph`
+`#include "bowl/core/assets.hpp"` · namespace `bowl`
 
 ### AssetSlot
 
@@ -222,7 +223,7 @@ Files under `virtual_prefix` (e.g. "engine/" or "") resolve into `directory`. Ea
 void mount(std::string virtual_prefix, std::filesystem::path directory);
 ```
 
-The same, from an archive (.phpak, see ph/core/archive.hpp). False if it isn't one.
+The same, from an archive (.bowlpak, see bowl/core/archive.hpp). False if it isn't one.
 
 ```cpp
 bool mount_archive(std::string virtual_prefix, const std::filesystem::path& archive);
@@ -327,9 +328,9 @@ std::vector<Info> list() const;
 void log_asset_error(std::string_view path, std::string_view type, std::string_view message);
 ```
 
-## ph/core/ease.hpp
+## bowl/core/ease.hpp
 
-`#include "ph/core/ease.hpp"` · namespace `ph`
+`#include "bowl/core/ease.hpp"` · namespace `bowl`
 
 Easing curves: t in 0..1 -> 0..1 (some overshoot, like back and elastic).
 
@@ -387,9 +388,9 @@ Plays backwards from wherever it is now (e.g. a panel closing halfway through op
 void reverse();
 ```
 
-## ph/core/file.hpp
+## bowl/core/file.hpp
 
-`#include "ph/core/file.hpp"` · namespace `ph`
+`#include "bowl/core/file.hpp"` · namespace `bowl`
 
 ```cpp
 std::optional<std::vector<u8>> read_file_bytes(const std::filesystem::path& path);
@@ -422,17 +423,17 @@ void poll();
 usize size() const;
 ```
 
-## ph/core/function_ref.hpp
+## bowl/core/function_ref.hpp
 
-`#include "ph/core/function_ref.hpp"` · namespace `ph`
+`#include "bowl/core/function_ref.hpp"` · namespace `bowl`
 
 ```cpp
 template <class R, class... Args> class FunctionRef<R(Args...)>;
 ```
 
-## ph/core/jobs.hpp
+## bowl/core/jobs.hpp
 
-`#include "ph/core/jobs.hpp"` · namespace `ph`
+`#include "bowl/core/jobs.hpp"` · namespace `bowl`
 
 ### TaskGroup
 
@@ -491,9 +492,9 @@ Items per chunk parallel_for uses for this count; chunk i covers [i*size, min(co
 static usize chunk_size(usize count, usize min_chunk);
 ```
 
-## ph/core/json.hpp
+## bowl/core/json.hpp
 
-`#include "ph/core/json.hpp"` · namespace `ph::json`
+`#include "bowl/core/json.hpp"` · namespace `bowl::json`
 
 ```cpp
 using Array = std::vector<Value>;
@@ -603,7 +604,7 @@ std::string stringify(const Value& value, int indent = 2);
 ```
 
 A compact binary form of a document, for big saves: the same values, with every key and string stored once and
-numbers in as few bytes as they need. Several times smaller than text, and quicker to read. Starts "PHJB".
+numbers in as few bytes as they need. Several times smaller than text, and quicker to read. Starts "BWJB".
 
 ```cpp
 std::vector<u8> encode_binary(const Value& value);
@@ -617,9 +618,9 @@ Reads either form.
 ParseResult parse_any(std::span<const u8> data);
 ```
 
-## ph/core/json_text.hpp
+## bowl/core/json_text.hpp
 
-`#include "ph/core/json_text.hpp"` · namespace `ph::json`
+`#include "bowl/core/json_text.hpp"` · namespace `bowl::json`
 
 ### TextDocument
 
@@ -673,9 +674,9 @@ Removes an item or a key and its value, with the comma that went with it.
 bool erase(const Path& path);
 ```
 
-## ph/core/localization.hpp
+## bowl/core/localization.hpp
 
-`#include "ph/core/localization.hpp"` · namespace `ph`
+`#include "bowl/core/localization.hpp"` · namespace `bowl`
 
 ### StringTable
 
@@ -740,9 +741,9 @@ std::string fill_placeholders(std::string_view text, std::initializer_list<std::
 void register_string_table_loader(AssetManager& assets);
 ```
 
-## ph/core/log.hpp
+## bowl/core/log.hpp
 
-`#include "ph/core/log.hpp"` · namespace `ph`, `logging`
+`#include "bowl/core/log.hpp"` · namespace `bowl`, `logging`
 
 ```cpp
 enum class LogLevel : u8 { Trace, Debug, Info, Warn, Error };
@@ -794,9 +795,9 @@ template <class... Args>
 void error(std::format_string<Args...> fmt, Args&&... args);
 ```
 
-## ph/core/math.hpp
+## bowl/core/math.hpp
 
-`#include "ph/core/math.hpp"` · namespace `ph`
+`#include "bowl/core/math.hpp"` · namespace `bowl`
 
 ```cpp
 inline constexpr f32 pi = std::numbers::pi_v<f32>;
@@ -1013,9 +1014,9 @@ static constexpr Color transparent();
 constexpr Color lerp(Color a, Color b, f32 t);
 ```
 
-## ph/core/profiler.hpp
+## bowl/core/profiler.hpp
 
-`#include "ph/core/profiler.hpp"` · namespace `ph`, `profiler`
+`#include "bowl/core/profiler.hpp"` · namespace `bowl`, `profiler`
 
 ### ZoneStats
 
@@ -1069,18 +1070,18 @@ ProfileScope& operator=(const ProfileScope&) = delete;
 ```
 
 ```cpp
-#define PH_PROFILE_SCOPE(name) ::ph::ProfileScope PH_CONCAT(ph_profile_scope_, __LINE__){name, __FILE__, __LINE__}
+#define BOWL_PROFILE_SCOPE(name)
 ```
 
-## ph/core/reflect.hpp
+## bowl/core/reflect.hpp
 
-`#include "ph/core/reflect.hpp"` · namespace `ph::reflect`
+`#include "bowl/core/reflect.hpp"` · namespace `bowl::reflect`
 
 Reflection without code generation. After a struct, at namespace scope (in the struct's own namespace):
 
 ```cpp
 struct Health { i32 current = 100; i32 max = 100; bool invulnerable = false; };
-PH_REFLECT(Health, current, max, invulnerable)
+BOWL_REFLECT(Health, current, max, invulnerable)
 ```
 Reflected types serialize to JSON, save and load with the world, and are editable live in the dev overlay.
 Up to 32 fields per type.
@@ -1156,11 +1157,11 @@ virtual void end_list();
 template <class T> void visit(FieldVisitor& v, std::string_view name, T& value);
 ```
 
-Found by argument-dependent lookup: PH_REFLECT defines ph_reflect_info(const T*) next to T.
+Found by argument-dependent lookup: BOWL_REFLECT defines bowl_reflect_info(const T*) next to T.
 
 ```cpp
 template <class T>
-concept Reflected = requires(const T* p){ ph_reflect_info(p); };
+concept Reflected = requires(const T* p){ bowl_reflect_info(p); };
 ```
 
 ```cpp
@@ -1179,11 +1180,11 @@ void for_each_field(T& obj, F&& f);
 template <Reflected T> constexpr usize field_count();
 ```
 
-Types that know how to show themselves (e.g. ecs::Entity) provide ph_visit(FieldVisitor&, name, T&) via ADL.
+Types that know how to show themselves (e.g. ecs::Entity) provide bowl_visit(FieldVisitor&, name, T&) via ADL.
 
 ```cpp
 template <class T>
-concept HasVisitHook = requires(FieldVisitor& v, std::string_view n, T& t){ ph_visit(v, n, t); };
+concept HasVisitHook = requires(FieldVisitor& v, std::string_view n, T& t){ bowl_visit(v, n, t); };
 ```
 
 ```cpp
@@ -1191,54 +1192,54 @@ template <class T> void visit(FieldVisitor& v, std::string_view name, T& value);
 ```
 
 ```cpp
-#define PH_EXPAND(x) x
-#define PH_FE_1(m, x) m(x)
-#define PH_FE_2(m, x, ...) m(x), PH_EXPAND(PH_FE_1(m, __VA_ARGS__))
-#define PH_FE_3(m, x, ...) m(x), PH_EXPAND(PH_FE_2(m, __VA_ARGS__))
-#define PH_FE_4(m, x, ...) m(x), PH_EXPAND(PH_FE_3(m, __VA_ARGS__))
-#define PH_FE_5(m, x, ...) m(x), PH_EXPAND(PH_FE_4(m, __VA_ARGS__))
-#define PH_FE_6(m, x, ...) m(x), PH_EXPAND(PH_FE_5(m, __VA_ARGS__))
-#define PH_FE_7(m, x, ...) m(x), PH_EXPAND(PH_FE_6(m, __VA_ARGS__))
-#define PH_FE_8(m, x, ...) m(x), PH_EXPAND(PH_FE_7(m, __VA_ARGS__))
-#define PH_FE_9(m, x, ...) m(x), PH_EXPAND(PH_FE_8(m, __VA_ARGS__))
-#define PH_FE_10(m, x, ...) m(x), PH_EXPAND(PH_FE_9(m, __VA_ARGS__))
-#define PH_FE_11(m, x, ...) m(x), PH_EXPAND(PH_FE_10(m, __VA_ARGS__))
-#define PH_FE_12(m, x, ...) m(x), PH_EXPAND(PH_FE_11(m, __VA_ARGS__))
-#define PH_FE_13(m, x, ...) m(x), PH_EXPAND(PH_FE_12(m, __VA_ARGS__))
-#define PH_FE_14(m, x, ...) m(x), PH_EXPAND(PH_FE_13(m, __VA_ARGS__))
-#define PH_FE_15(m, x, ...) m(x), PH_EXPAND(PH_FE_14(m, __VA_ARGS__))
-#define PH_FE_16(m, x, ...) m(x), PH_EXPAND(PH_FE_15(m, __VA_ARGS__))
-#define PH_FE_17(m, x, ...) m(x), PH_EXPAND(PH_FE_16(m, __VA_ARGS__))
-#define PH_FE_18(m, x, ...) m(x), PH_EXPAND(PH_FE_17(m, __VA_ARGS__))
-#define PH_FE_19(m, x, ...) m(x), PH_EXPAND(PH_FE_18(m, __VA_ARGS__))
-#define PH_FE_20(m, x, ...) m(x), PH_EXPAND(PH_FE_19(m, __VA_ARGS__))
-#define PH_FE_21(m, x, ...) m(x), PH_EXPAND(PH_FE_20(m, __VA_ARGS__))
-#define PH_FE_22(m, x, ...) m(x), PH_EXPAND(PH_FE_21(m, __VA_ARGS__))
-#define PH_FE_23(m, x, ...) m(x), PH_EXPAND(PH_FE_22(m, __VA_ARGS__))
-#define PH_FE_24(m, x, ...) m(x), PH_EXPAND(PH_FE_23(m, __VA_ARGS__))
-#define PH_FE_25(m, x, ...) m(x), PH_EXPAND(PH_FE_24(m, __VA_ARGS__))
-#define PH_FE_26(m, x, ...) m(x), PH_EXPAND(PH_FE_25(m, __VA_ARGS__))
-#define PH_FE_27(m, x, ...) m(x), PH_EXPAND(PH_FE_26(m, __VA_ARGS__))
-#define PH_FE_28(m, x, ...) m(x), PH_EXPAND(PH_FE_27(m, __VA_ARGS__))
-#define PH_FE_29(m, x, ...) m(x), PH_EXPAND(PH_FE_28(m, __VA_ARGS__))
-#define PH_FE_30(m, x, ...) m(x), PH_EXPAND(PH_FE_29(m, __VA_ARGS__))
-#define PH_FE_31(m, x, ...) m(x), PH_EXPAND(PH_FE_30(m, __VA_ARGS__))
-#define PH_FE_32(m, x, ...) m(x), PH_EXPAND(PH_FE_31(m, __VA_ARGS__))
-#define PH_FE_PICK(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, NAME, ...) NAME
-#define PH_FOR_EACH(m, ...) PH_EXPAND(PH_FE_PICK(__VA_ARGS__, PH_FE_32, PH_FE_31, PH_FE_30, PH_FE_29, PH_FE_28, PH_FE_27, PH_FE_26, PH_FE_25, PH_FE_24, PH_FE_23, PH_FE_22, PH_FE_21, PH_FE_20, PH_FE_19, PH_FE_18, PH_FE_17, PH_FE_16, PH_FE_15, PH_FE_14, PH_FE_13, PH_FE_12, PH_FE_11, PH_FE_10, PH_FE_9, PH_FE_8, PH_FE_7, PH_FE_6, PH_FE_5, PH_FE_4, PH_FE_3, PH_FE_2, PH_FE_1)(m, __VA_ARGS__))
+#define BOWL_EXPAND(x) x
+#define BOWL_FE_1(m, x) m(x)
+#define BOWL_FE_2(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_1(m, __VA_ARGS__))
+#define BOWL_FE_3(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_2(m, __VA_ARGS__))
+#define BOWL_FE_4(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_3(m, __VA_ARGS__))
+#define BOWL_FE_5(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_4(m, __VA_ARGS__))
+#define BOWL_FE_6(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_5(m, __VA_ARGS__))
+#define BOWL_FE_7(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_6(m, __VA_ARGS__))
+#define BOWL_FE_8(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_7(m, __VA_ARGS__))
+#define BOWL_FE_9(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_8(m, __VA_ARGS__))
+#define BOWL_FE_10(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_9(m, __VA_ARGS__))
+#define BOWL_FE_11(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_10(m, __VA_ARGS__))
+#define BOWL_FE_12(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_11(m, __VA_ARGS__))
+#define BOWL_FE_13(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_12(m, __VA_ARGS__))
+#define BOWL_FE_14(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_13(m, __VA_ARGS__))
+#define BOWL_FE_15(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_14(m, __VA_ARGS__))
+#define BOWL_FE_16(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_15(m, __VA_ARGS__))
+#define BOWL_FE_17(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_16(m, __VA_ARGS__))
+#define BOWL_FE_18(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_17(m, __VA_ARGS__))
+#define BOWL_FE_19(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_18(m, __VA_ARGS__))
+#define BOWL_FE_20(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_19(m, __VA_ARGS__))
+#define BOWL_FE_21(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_20(m, __VA_ARGS__))
+#define BOWL_FE_22(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_21(m, __VA_ARGS__))
+#define BOWL_FE_23(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_22(m, __VA_ARGS__))
+#define BOWL_FE_24(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_23(m, __VA_ARGS__))
+#define BOWL_FE_25(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_24(m, __VA_ARGS__))
+#define BOWL_FE_26(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_25(m, __VA_ARGS__))
+#define BOWL_FE_27(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_26(m, __VA_ARGS__))
+#define BOWL_FE_28(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_27(m, __VA_ARGS__))
+#define BOWL_FE_29(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_28(m, __VA_ARGS__))
+#define BOWL_FE_30(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_29(m, __VA_ARGS__))
+#define BOWL_FE_31(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_30(m, __VA_ARGS__))
+#define BOWL_FE_32(m, x, ...) m(x), BOWL_EXPAND(BOWL_FE_31(m, __VA_ARGS__))
+#define BOWL_FE_PICK(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, NAME, ...) NAME
+#define BOWL_FOR_EACH(m, ...) BOWL_EXPAND(BOWL_FE_PICK(__VA_ARGS__, BOWL_FE_32, BOWL_FE_31, BOWL_FE_30, BOWL_FE_29, BOWL_FE_28, BOWL_FE_27, BOWL_FE_26, BOWL_FE_25, BOWL_FE_24, BOWL_FE_23, BOWL_FE_22, BOWL_FE_21, BOWL_FE_20, BOWL_FE_19, BOWL_FE_18, BOWL_FE_17, BOWL_FE_16, BOWL_FE_15, BOWL_FE_14, BOWL_FE_13, BOWL_FE_12, BOWL_FE_11, BOWL_FE_10, BOWL_FE_9, BOWL_FE_8, BOWL_FE_7, BOWL_FE_6, BOWL_FE_5, BOWL_FE_4, BOWL_FE_3, BOWL_FE_2, BOWL_FE_1)(m, __VA_ARGS__))
 ```
 
 ```cpp
-#define PH_REFLECT_FIELD(f) ::ph::reflect::Field<PhReflectedType, decltype(PhReflectedType::f)>{#f, &PhReflectedType::f}
+#define BOWL_REFLECT_FIELD(f)
 ```
 
 ```cpp
-#define PH_REFLECT(Type, ...)
+#define BOWL_REFLECT(Type, ...)
 ```
 
-## ph/core/serialize.hpp
+## bowl/core/serialize.hpp
 
-`#include "ph/core/serialize.hpp"` · namespace `ph::serial`
+`#include "bowl/core/serialize.hpp"` · namespace `bowl::serial`
 
 ### Context
 
@@ -1264,7 +1265,8 @@ void warn(std::string message);
 What can be saved: bool, numbers, enums (as numbers), std::string, Vec2/3/4, Color, Rect, std::vector, std::array,
 std::optional, Asset&lt;T> (as its path), reflected structs (as objects), and any type with ADL hooks
 ```cpp
-json::Value ph_to_json(const T&, serial::Context&);  bool ph_from_json(const json::Value&, T&, serial::Context&);
+json::Value bowl_to_json(const T&, serial::Context&);
+bool bowl_from_json(const json::Value&, T&, serial::Context&);
 ```
 Loading is tolerant: missing keys keep the current value, so adding fields never breaks old save files.
 
@@ -1332,8 +1334,8 @@ template <class T> struct is_asset<Asset<T>> : std::true_type {
 ```cpp
 template <class T>
 concept HasHooks = requires(const T& c, T& m, const json::Value& j, Context& ctx){
-    { ph_to_json(c, ctx) } -> std::convertible_to<json::Value>;
-    { ph_from_json(j, m, ctx) } -> std::convertible_to<bool>;
+    { bowl_to_json(c, ctx) } -> std::convertible_to<json::Value>;
+    { bowl_from_json(j, m, ctx) } -> std::convertible_to<bool>;
 };
 ```
 
@@ -1355,9 +1357,9 @@ template <class T> json::Value to_json(const T& v, Context& ctx);
 template <class T> bool from_json(const json::Value& j, T& v, Context& ctx);
 ```
 
-## ph/core/settings.hpp
+## bowl/core/settings.hpp
 
-`#include "ph/core/settings.hpp"` · namespace `ph`
+`#include "bowl/core/settings.hpp"` · namespace `bowl`
 
 ### Settings
 
@@ -1390,9 +1392,9 @@ const json::Value& data() const;
 bool dirty() const;
 ```
 
-## ph/core/shader_bundle.hpp
+## bowl/core/shader_bundle.hpp
 
-`#include "ph/core/shader_bundle.hpp"` · namespace `ph`
+`#include "bowl/core/shader_bundle.hpp"` · namespace `bowl`
 
 ```cpp
 enum class ShaderStage : u32 { Vertex = 0, Fragment = 1, Compute = 2 };
@@ -1408,14 +1410,14 @@ enum class ShaderBlobFormat : u32 { SpirV = 1, Msl = 2, Dxil = 3, Dxbc = 4, Hlsl
 ### ShaderBundle
 
 One shader stage compiled for every GPU backend, plus the resource counts SDL_GPU needs to create it.
-Written by ph-shaderc (build time, or at runtime in dev builds); read by the renderer. Format: little-endian u32s.
+Written by bowl-shaderc (build time, or at runtime in dev builds); read by the renderer. Format: little-endian u32s.
 
 ```cpp
 struct ShaderBundle
 ```
 
 ```cpp
-static constexpr u32 magic = 0x48534850; // "PHSH"
+static constexpr u32 magic = 0x48535742; // "BWSH"
 static constexpr u32 format_version = 2; // 2 added the compute fields; version 1 bundles still load
 ```
 
@@ -1458,9 +1460,9 @@ std::vector<u8> serialize() const;
 static std::optional<ShaderBundle> parse(std::span<const u8> data);
 ```
 
-## ph/core/time.hpp
+## bowl/core/time.hpp
 
-`#include "ph/core/time.hpp"` · namespace `ph`
+`#include "bowl/core/time.hpp"` · namespace `bowl`
 
 Seconds since the process started, from a monotonic clock.
 
@@ -1481,9 +1483,9 @@ f64 seconds() const;
 f64 milliseconds() const;
 ```
 
-## ph/core/type_id.hpp
+## bowl/core/type_id.hpp
 
-`#include "ph/core/type_id.hpp"` · namespace `ph`
+`#include "bowl/core/type_id.hpp"` · namespace `bowl`
 
 Compile-time type name, e.g. type_name&lt;game::Health>() == "game::Health". Used for debugging and the inspector.
 
@@ -1509,9 +1511,9 @@ using TypeId = u64;
 template <class T> constexpr TypeId type_id();
 ```
 
-## ph/core/types.hpp
+## bowl/core/types.hpp
 
-`#include "ph/core/types.hpp"` · namespace `ph`
+`#include "bowl/core/types.hpp"` · namespace `bowl`
 
 ```cpp
 using u8 = std::uint8_t;
@@ -1545,13 +1547,13 @@ NonCopyable& operator=(NonCopyable&&) = delete;
 ```
 
 ```cpp
-#define PH_CONCAT_IMPL(a, b) a##b
-#define PH_CONCAT(a, b) PH_CONCAT_IMPL(a, b)
+#define BOWL_CONCAT_IMPL(a, b) a##b
+#define BOWL_CONCAT(a, b) BOWL_CONCAT_IMPL(a, b)
 ```
 
-## ph/core/utf8.hpp
+## bowl/core/utf8.hpp
 
-`#include "ph/core/utf8.hpp"` · namespace `ph::utf8`
+`#include "bowl/core/utf8.hpp"` · namespace `bowl::utf8`
 
 ```cpp
 inline constexpr u32 replacement = 0xFFFD;
@@ -1568,9 +1570,9 @@ constexpr u32 next(std::string_view s, usize& i);
 inline void append(std::string& out, u32 cp);
 ```
 
-## ph/core/xml.hpp
+## bowl/core/xml.hpp
 
-`#include "ph/core/xml.hpp"` · namespace `ph::xml`
+`#include "bowl/core/xml.hpp"` · namespace `bowl::xml`
 
 ### Element
 

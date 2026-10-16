@@ -1,9 +1,9 @@
-#include "ph/ecs/world.hpp"
+#include "bowl/ecs/world.hpp"
 
 #include <algorithm>
 #include <cstring>
 
-namespace ph::ecs {
+namespace bowl::ecs {
 
 // World
 
@@ -43,7 +43,7 @@ void World::materialize_reserved() {
 
 void World::spawn_reserved(Entity e) {
     Record& r = records_[e.index];
-    PH_ASSERT(!r.alive && r.generation == e.generation, "spawning an entity id that wasn't reserved");
+    BOWL_ASSERT(!r.alive && r.generation == e.generation, "spawning an entity id that wasn't reserved");
     r.alive = true;
     r.archetype = empty_;
     r.row = empty_->push(e);
@@ -228,7 +228,7 @@ void World::forget_code() {
 void World::flush() {
     // Applying can record more commands (hooks, run() callbacks); keep going until quiet.
     for (int pass = 0; pass < 64 && !deferred_.empty(); ++pass) deferred_.apply();
-    PH_ASSERT(deferred_.empty(), "deferred commands keep scheduling more commands");
+    BOWL_ASSERT(deferred_.empty(), "deferred commands keep scheduling more commands");
 }
 
 // Stand-in ids
@@ -326,7 +326,7 @@ void* CommandBuffer::allocate(usize size, usize align) {
 
 Entity CommandBuffer::create() {
     if (placeholder_tag_) {
-        PH_ASSERT(placeholder_tag_ < 4096 && next_placeholder_ < (1u << 20), "too many stand-in entities in one buffer");
+        BOWL_ASSERT(placeholder_tag_ < 4096 && next_placeholder_ < (1u << 20), "too many stand-in entities in one buffer");
         Entity e{(placeholder_tag_ << 20) | next_placeholder_++, Entity::placeholder_generation};
         has_placeholders_ = true;
         push<SpawnCommand>(e);
@@ -404,4 +404,4 @@ void CommandBuffer::append(CommandBuffer&& other) {
     other.block_used_ = 0;
 }
 
-} // namespace ph::ecs
+} // namespace bowl::ecs

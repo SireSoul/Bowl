@@ -1,13 +1,13 @@
 # Dev tools
 
-Dev builds (the `dev` and `debug` presets, or `PH_DEV_TOOLS=ON`) include an overlay built with
+Dev builds (the `dev` and `debug` presets, or `BOWL_DEV_TOOLS=ON`) include an overlay built with
 [Dear ImGui](https://github.com/ocornut/imgui). It runs inside the game, over the game, and needs no setup.
 
 <p align="center"><img src="../images/dev-overlay.png" width="80%" alt="The overlay with the profiler and the entity inspector"></p>
 
 **F1** shows and hides it. `--overlay` opens it at startup, and `--inspect N` opens it with entity index N selected.
 
-Release builds (`PH_DEV_TOOLS=OFF`) contain none of this: no ImGui, no runtime shader compiler, no file watching.
+Release builds (`BOWL_DEV_TOOLS=OFF`) contain none of this: no ImGui, no runtime shader compiler, no file watching.
 
 ## The main window
 
@@ -29,7 +29,7 @@ simulation bugs reproducible: pause just before the problem, then step tick by t
 ### Profiler
 
 The zones of the last frame, sorted by time, with call counts. Engine phases and every system appear automatically;
-add your own with `PH_PROFILE_SCOPE("name")` (see [jobs-and-profiling.md](jobs-and-profiling.md#profiling)).
+add your own with `BOWL_PROFILE_SCOPE("name")` (see [jobs-and-profiling.md](jobs-and-profiling.md#profiling)).
 
 ### Post & lighting
 
@@ -66,7 +66,7 @@ Recent log lines, colored by level.
 
 Selecting an entity opens its inspector window:
 
-- Every component, by type name. Reflected components (`PH_COMPONENT`, `PH_REFLECT`) show their fields as editable
+- Every component, by type name. Reflected components (`BOWL_COMPONENT`, `BOWL_REFLECT`) show their fields as editable
   controls: numbers, checkboxes, text, math vectors, colors with a color picker, nested reflected structs, and
   lists (`std::vector` and `std::array`, item by item; vectors get **+** and **-** to add or remove items at the end).
   Changes apply immediately. Fields of other types are listed with their type.
@@ -87,12 +87,12 @@ happens at 1 health?").
 ImGui windows there:
 
 ```cpp
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
 #include <imgui.h>
 #endif
 
 void dev_ui(Engine& engine) override {
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
     ImGui::Begin("Spawner");
     ImGui::SliderInt("per tick", &spawn_rate_, 1, 2000);
     if (ImGui::Button("Spawn 10k")) spawn(engine, 10000);
@@ -103,7 +103,7 @@ void dev_ui(Engine& engine) override {
 }
 ```
 
-Guard ImGui code with `#if PH_DEV_TOOLS` so release builds, which don't have ImGui, still compile. The sprites sample
+Guard ImGui code with `#if BOWL_DEV_TOOLS` so release builds, which don't have ImGui, still compile. The sprites sample
 has a working example.
 
 Window positions and sizes are remembered between runs in `devtools.ini` in the working directory.

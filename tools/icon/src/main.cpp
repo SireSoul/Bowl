@@ -1,30 +1,30 @@
-// ph-icon: application icons from one picture.
+// bowl-icon: application icons from one picture.
 //
-//     ph-icon icon.png [--icns out.icns] [--ico out.ico] [--png <size> out.png] [--cpp out.cpp] [--pixel-art]
+//     bowl-icon icon.png [--icns out.icns] [--ico out.ico] [--png <size> out.png] [--cpp out.cpp] [--pixel-art]
 //
-// Give it a square PNG, 1024 x 1024 at best (smaller ones are scaled up; --pixel-art keeps them crisp). ph_add_game's
+// Give it a square PNG, 1024 x 1024 at best (smaller ones are scaled up; --pixel-art keeps them crisp). bowl_add_game's
 // ICON runs it for you.
 
-#include "ph/core/file.hpp"
-#include "ph/icon/icon.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/icon/icon.hpp"
 
 #include <charconv>
 #include <cstdio>
 #include <string>
 #include <vector>
 
-using namespace ph;
+using namespace bowl;
 
 namespace {
 
 bool write(const std::string& path, std::span<const u8> bytes) {
     if (write_file_bytes(path, bytes.data(), bytes.size())) return true;
-    std::fprintf(stderr, "ph-icon: can't write %s\n", path.c_str());
+    std::fprintf(stderr, "bowl-icon: can't write %s\n", path.c_str());
     return false;
 }
 
 int usage() {
-    std::fprintf(stderr, "usage: ph-icon icon.png [--icns out.icns] [--ico out.ico] [--png <size> out.png] [--cpp out.cpp] "
+    std::fprintf(stderr, "usage: bowl-icon icon.png [--icns out.icns] [--ico out.ico] [--png <size> out.png] [--cpp out.cpp] "
                          "[--pixel-art]\n");
     return 2;
 }
@@ -56,16 +56,16 @@ int main(int argc, char** argv) {
 
     auto bytes = read_file_bytes(input);
     if (!bytes) {
-        std::fprintf(stderr, "ph-icon: can't read %s\n", input.c_str());
+        std::fprintf(stderr, "bowl-icon: can't read %s\n", input.c_str());
         return 1;
     }
     auto image = icon::decode_png(*bytes);
     if (!image) {
-        std::fprintf(stderr, "ph-icon: %s isn't a PNG\n", input.c_str());
+        std::fprintf(stderr, "bowl-icon: %s isn't a PNG\n", input.c_str());
         return 1;
     }
     if (image->width != image->height)
-        std::fprintf(stderr, "ph-icon: %s isn't square (%ux%u); centering it\n", input.c_str(), image->width, image->height);
+        std::fprintf(stderr, "bowl-icon: %s isn't square (%ux%u); centering it\n", input.c_str(), image->width, image->height);
 
     bool ok = true;
     if (!icns.empty()) ok &= write(icns, icon::make_icns(*image, pixel_art));

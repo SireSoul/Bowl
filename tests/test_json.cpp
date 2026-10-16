@@ -1,9 +1,9 @@
-#include "ph/core/json.hpp"
-#include "ph/core/json_text.hpp"
+#include "bowl/core/json.hpp"
+#include "bowl/core/json_text.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
+using namespace bowl;
 
 TEST_CASE("json: parse values and navigate forgivingly") {
     auto r = json::parse(R"({

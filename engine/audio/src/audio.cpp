@@ -1,9 +1,9 @@
-#include "ph/audio/audio.hpp"
+#include "bowl/audio/audio.hpp"
 
 #include "decoders.hpp"
 
-#include "ph/core/log.hpp"
-#include "ph/core/math.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/math.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -15,7 +15,7 @@
 #include <cmath>
 #include <cstring>
 
-namespace ph::audio {
+namespace bowl::audio {
 
 // Decoders
 
@@ -632,7 +632,7 @@ std::unique_ptr<Sound> decode_sound(std::string_view path, std::span<const u8> b
     if (detail::looks_like_opus(copy)) {
         auto decoder = detail::open_opus(copy);
         if (!decoder) {
-            log_asset_error(path, "Sound", opus_supported() ? "not a valid Ogg Opus file" : "Opus needs the engine built with -DPH_OPUS=ON");
+            log_asset_error(path, "Sound", opus_supported() ? "not a valid Ogg Opus file" : "Opus needs the engine built with -DBOWL_OPUS=ON");
             return nullptr;
         }
         std::vector<f32> samples; // already 48 kHz stereo
@@ -699,9 +699,9 @@ void register_asset_loaders(AssetManager& assets) {
             log_asset_error(ctx.path(), "Music",
                             !opus ? "not a valid mono/stereo Ogg Vorbis file"
                                   : (opus_supported() ? "not a valid Ogg Opus file"
-                                                      : "Opus needs the engine built with -DPH_OPUS=ON"));
+                                                      : "Opus needs the engine built with -DBOWL_OPUS=ON"));
         return music;
     });
 }
 
-} // namespace ph::audio
+} // namespace bowl::audio

@@ -18,7 +18,7 @@ One page per system.
 | [ECS](guides/ecs.md) | Entities, components, queries, command buffers, hooks, resources, hierarchy |
 | [Systems and scheduling](guides/systems.md) | Schedules, parallel systems, declared access, barriers, determinism |
 | [Rendering](guides/rendering.md) | Sprite batches, cameras, sorting, blend modes, materials, post-processing, 2D lighting |
-| [Shaders](guides/shaders.md) | Writing GLSL for the engine, descriptor sets, `ph-shaderc`, live editing |
+| [Shaders](guides/shaders.md) | Writing GLSL for the engine, descriptor sets, `bowl-shaderc`, live editing |
 | [Assets](guides/assets.md) | Virtual paths, mounts, loaders, `Asset<T>`, hot reload, custom asset types |
 | [Text](guides/text.md) | Fonts, `draw_text`, sizing on high-DPI screens, wrapping, typewriter reveals |
 | [Sprite sheets and animation](guides/sprite-animation.md) | Aseprite export, `SpriteSheet`, `SpriteAnimator`, `draw_frame` |
@@ -44,14 +44,14 @@ One page per system.
 
 | Page | What's in it |
 | --- | --- |
-| [CMake](reference/cmake.md) | Options, presets, `ph_add_game`, `ph_compile_shaders`, using the engine from your own project |
-| [Command line](reference/command-line.md) | Flags every game understands, and `ph-shaderc`'s |
+| [CMake](reference/cmake.md) | Options, presets, `bowl_add_game`, `bowl_compile_shaders`, using the engine from your own project |
+| [Command line](reference/command-line.md) | Flags every game understands, and `bowl-shaderc`'s |
 | [Project layout](reference/project-layout.md) | Every folder and what lives there; what a built game looks like on disk |
 | [Conventions](reference/conventions.md) | Coordinates, units, colors, naming, threading, error handling |
 | [API](reference/api/README.md) | Every public header: types, functions and their comments |
 
 The [API reference](reference/api/README.md) lists every public header with its types and functions, made from the
-headers' own comments. Start with [`ph/app/engine.hpp`](reference/api/app.md#phappenginehpp).
+headers' own comments. Start with [`bowl/app/engine.hpp`](reference/api/app.md#bowlappenginehpp).
 
 ## Help
 

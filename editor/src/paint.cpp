@@ -4,8 +4,8 @@
 
 #include "editor.hpp"
 
-#include "ph/core/file.hpp"
-#include "ph/gfx/sprite.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/gfx/sprite.hpp"
 
 #include <stb_image.h>
 
@@ -13,7 +13,7 @@
 #include <cmath>
 #include <format>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 namespace fs = std::filesystem;
 
@@ -398,4 +398,4 @@ void Editor::paint_workspace(Engine& engine) {
     paint_tool_ = held;
 }
 
-} // namespace ph::editor
+} // namespace bowl::editor

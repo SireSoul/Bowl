@@ -1,13 +1,13 @@
-#include "ph/gfx/sprite_sheet.hpp"
+#include "bowl/gfx/sprite_sheet.hpp"
 
-#include "ph/core/log.hpp"
+#include "bowl/core/log.hpp"
 
 #include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <format>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 const SpriteAnimation* SpriteSheet::find(std::string_view name) const {
     i32 i = index_of(name);
@@ -323,4 +323,4 @@ void register_sprite_sheet_loader(AssetManager& assets) {
     });
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

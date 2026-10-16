@@ -1,22 +1,22 @@
 # gfx
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/gfx/bidi.hpp](#phgfxbidihpp)
-- [ph/gfx/device.hpp](#phgfxdevicehpp)
-- [ph/gfx/gpu_particles.hpp](#phgfxgpu_particleshpp)
-- [ph/gfx/particles.hpp](#phgfxparticleshpp)
-- [ph/gfx/renderer.hpp](#phgfxrendererhpp)
-- [ph/gfx/sprite.hpp](#phgfxspritehpp)
-- [ph/gfx/sprite_sheet.hpp](#phgfxsprite_sheethpp)
-- [ph/gfx/sprites.hpp](#phgfxspriteshpp)
-- [ph/gfx/text.hpp](#phgfxtexthpp)
-- [ph/gfx/tilemap.hpp](#phgfxtilemaphpp)
+- [bowl/gfx/bidi.hpp](#bowlgfxbidihpp)
+- [bowl/gfx/device.hpp](#bowlgfxdevicehpp)
+- [bowl/gfx/gpu_particles.hpp](#bowlgfxgpu_particleshpp)
+- [bowl/gfx/particles.hpp](#bowlgfxparticleshpp)
+- [bowl/gfx/renderer.hpp](#bowlgfxrendererhpp)
+- [bowl/gfx/sprite.hpp](#bowlgfxspritehpp)
+- [bowl/gfx/sprite_sheet.hpp](#bowlgfxsprite_sheethpp)
+- [bowl/gfx/sprites.hpp](#bowlgfxspriteshpp)
+- [bowl/gfx/text.hpp](#bowlgfxtexthpp)
+- [bowl/gfx/tilemap.hpp](#bowlgfxtilemaphpp)
 
-## ph/gfx/bidi.hpp
+## bowl/gfx/bidi.hpp
 
-`#include "ph/gfx/bidi.hpp"` · namespace `ph::gfx::bidi`
+`#include "bowl/gfx/bidi.hpp"` · namespace `bowl::gfx::bidi`
 
 ```cpp
 enum class Type : u8 { L, R, AL, EN, AN, ES, ET, CS, NSM, B, S, WS, ON };
@@ -57,9 +57,9 @@ returned as they are.
 u32 mirror(u32 codepoint);
 ```
 
-## ph/gfx/device.hpp
+## bowl/gfx/device.hpp
 
-`#include "ph/gfx/device.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/device.hpp"` · namespace `bowl::gfx`
 
 ```cpp
 enum class Filter : u8 { Nearest, Linear };
@@ -112,7 +112,7 @@ u32 id() const;
 
 ### Shader
 
-One compiled shader stage on the GPU. Loaded as an asset from "&lt;path>" -> "&lt;path>.phsh" (or, in dev builds,
+One compiled shader stage on the GPU. Loaded as an asset from "&lt;path>" -> "&lt;path>.bowlsh" (or, in dev builds,
 compiled live from "&lt;path>.glsl" so edits hot-reload).
 
 ```cpp
@@ -136,7 +136,7 @@ u32 id() const;
 ### ComputeShader
 
 A compute shader on the GPU, ready to dispatch (Renderer::dispatch). Loaded as an asset like Shader, from a
-".comp.glsl" source: "&lt;path>" -> "&lt;path>.phsh", or the .glsl itself in dev builds. Resources follow SDL_GPU's
+".comp.glsl" source: "&lt;path>" -> "&lt;path>.bowlsh", or the .glsl itself in dev builds. Resources follow SDL_GPU's
 compute layout: set 0 = sampled textures and `readonly` storage, set 1 = read-write storage, set 2 = uniforms.
 
 ```cpp
@@ -181,7 +181,7 @@ bool upload(const void* data, u32 bytes, u32 offset = 0);
 
 ```cpp
 struct GpuDeviceDesc {
-    bool debug = PH_DEV_TOOLS; // backend validation layers
+    bool debug = BOWL_DEV_TOOLS; // backend validation layers
     bool vsync = true;
     // Force a backend ("vulkan", "metal", "direct3d12"); empty = SDL's best choice for the platform.
     std::string driver;
@@ -262,9 +262,9 @@ default_filter: Nearest for pixel art, Linear (with mipmaps) for everything else
 void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter default_filter = Filter::Linear);
 ```
 
-## ph/gfx/gpu_particles.hpp
+## bowl/gfx/gpu_particles.hpp
 
-`#include "ph/gfx/gpu_particles.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/gpu_particles.hpp"` · namespace `bowl::gfx`
 
 ### GpuParticleSettings
 
@@ -327,9 +327,9 @@ void clear();
 u32 capacity() const;
 ```
 
-## ph/gfx/particles.hpp
+## bowl/gfx/particles.hpp
 
-`#include "ph/gfx/particles.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/particles.hpp"` · namespace `bowl::gfx`
 
 ### ParticleSettings
 
@@ -354,7 +354,7 @@ struct ParticleSettings {
 ```
 
 ```cpp
-PH_REFLECT(ParticleSettings, rate, lifetime_min, lifetime_max, speed_min, speed_max, direction, spread, spawn_area,
+BOWL_REFLECT(ParticleSettings, rate, lifetime_min, lifetime_max, speed_min, speed_max, direction, spread, spawn_area,
            gravity, drag, size_start, size_end, color_start, color_end, spin_min, spin_max, max_particles)
 ```
 
@@ -418,7 +418,7 @@ struct ParticleEmitter {
 ```
 
 ```cpp
-PH_COMPONENT(ParticleEmitter, settings, emitting, origin, depth)
+BOWL_COMPONENT(ParticleEmitter, settings, emitting, origin, depth)
 ```
 
 ```cpp
@@ -426,9 +426,9 @@ void update_particle_emitters(ecs::World& world, f32 dt);
 void draw_particle_emitters(ecs::World& world, SpriteBatch& batch, const Texture& texture);
 ```
 
-## ph/gfx/renderer.hpp
+## bowl/gfx/renderer.hpp
 
-`#include "ph/gfx/renderer.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/renderer.hpp"` · namespace `bowl::gfx`
 
 ### PostSettings
 
@@ -691,9 +691,9 @@ Decodes a PNG (or JPEG, BMP, TGA) in memory to RGBA8 pixels. False if it isn't a
 bool decode_png(std::span<const u8> bytes, u32& width, u32& height, std::vector<u8>& rgba);
 ```
 
-## ph/gfx/sprite.hpp
+## bowl/gfx/sprite.hpp
 
-`#include "ph/gfx/sprite.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/sprite.hpp"` · namespace `bowl::gfx`
 
 ### Sprite
 
@@ -719,7 +719,7 @@ struct Sprite {
 ```
 
 ```cpp
-PH_COMPONENT(Sprite, texture, region, size, origin, color, depth, y_sort, visible)
+BOWL_COMPONENT(Sprite, texture, region, size, origin, color, depth, y_sort, visible)
 ```
 
 The sprite's size in world units before scaling: `size`, or the region's or texture's pixel size, or 32 x 32 for a
@@ -742,9 +742,9 @@ entity has no Sprite or no GlobalTransform2D.
 std::optional<Rect> sprite_bounds(const ecs::World& world, ecs::Entity e);
 ```
 
-## ph/gfx/sprite_sheet.hpp
+## bowl/gfx/sprite_sheet.hpp
 
-`#include "ph/gfx/sprite_sheet.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/sprite_sheet.hpp"` · namespace `bowl::gfx`
 
 ### SpriteFrame
 
@@ -817,7 +817,7 @@ const Key* at(u32 frame) const;
 
 Frames + named animations over one texture. Load Aseprite "Export Sprite Sheet" JSON (hash or array layout) as an
 asset, e.g. assets.load&lt;SpriteSheet>("characters/hero.json"); its PNG loads (and hot-reloads) alongside. Atlases made
-by ph-atlas load the same way.
+by bowl-atlas load the same way.
 
 ```cpp
 class SpriteSheet
@@ -924,9 +924,9 @@ void draw_nine_slice(SpriteBatch& batch, const SpriteSheet& sheet, std::string_v
 void register_sprite_sheet_loader(AssetManager& assets);
 ```
 
-## ph/gfx/sprites.hpp
+## bowl/gfx/sprites.hpp
 
-`#include "ph/gfx/sprites.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/sprites.hpp"` · namespace `bowl::gfx`
 
 ### SpriteInstance
 
@@ -1116,9 +1116,9 @@ The order a batch draws its sprites in (indices into it), per its SpriteSort.
 void sprite_order(const SpriteBatch& batch, std::vector<u32>& order);
 ```
 
-## ph/gfx/text.hpp
+## bowl/gfx/text.hpp
 
-`#include "ph/gfx/text.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/text.hpp"` · namespace `bowl::gfx`
 
 ### Font
 
@@ -1219,9 +1219,9 @@ A page's pixels (RGBA8, premultiplied, page_size x page_size), for tools and tes
 std::span<const u8> page_pixels(u16 index) const;
 ```
 
-Whether this build shapes text with HarfBuzz (PH_HARFBUZZ): joined Arabic letters, Indic and other complex scripts,
+Whether this build shapes text with HarfBuzz (BOWL_HARFBUZZ): joined Arabic letters, Indic and other complex scripts,
 ligatures and OpenType kerning. Without it, characters are drawn one by one; right-to-left text is still put in
-order (see ph/gfx/bidi.hpp).
+order (see bowl/gfx/bidi.hpp).
 
 ```cpp
 bool text_shaping();
@@ -1323,9 +1323,9 @@ A material for batches of SDF text. Keep it alive while the batch is used.
 Material sdf_text_material(AssetManager& assets, const SdfTextLook& look = {});
 ```
 
-## ph/gfx/tilemap.hpp
+## bowl/gfx/tilemap.hpp
 
-`#include "ph/gfx/tilemap.hpp"` · namespace `ph::gfx`
+`#include "bowl/gfx/tilemap.hpp"` · namespace `bowl::gfx`
 
 Tiled maps (mapeditor.org), loaded from Tiled's JSON (.tmj, .tsj) or XML (.tmx, .tsx) files. Orthogonal, isometric
 (diamond), staggered and hexagonal orientations; finite and infinite maps; CSV, XML and base64 (+zlib/gzip) data.

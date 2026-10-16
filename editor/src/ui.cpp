@@ -3,7 +3,7 @@
 #include <cmath>
 #include <string>
 
-namespace ph::editor::ui {
+namespace bowl::editor::ui {
 
 namespace {
 ImVec4 v(ImU32 c) { return ImGui::ColorConvertU32ToFloat4(c); }
@@ -297,4 +297,4 @@ void rule() {
     ImGui::Dummy({w, 5});
 }
 
-} // namespace ph::editor::ui
+} // namespace bowl::editor::ui

@@ -1,5 +1,5 @@
-#include "ph/audio/audio.hpp"
-#include "ph/core/file.hpp"
+#include "bowl/audio/audio.hpp"
+#include "bowl/core/file.hpp"
 
 #include <doctest/doctest.h>
 
@@ -7,8 +7,8 @@
 #include <filesystem>
 #include <vector>
 
-using namespace ph;
-using namespace ph::audio;
+using namespace bowl;
+using namespace bowl::audio;
 
 // The mixer runs without an audio device, so it is tested offline.
 
@@ -70,7 +70,7 @@ f32 frequency(const std::vector<f32>& stereo, int channel, usize first_frame, us
 AssetManager& test_assets() {
     static AssetManager assets;
     static bool once = [] {
-        assets.mount("", PH_TEST_DATA_DIR);
+        assets.mount("", BOWL_TEST_DATA_DIR);
         register_asset_loaders(assets);
         return true;
     }();
@@ -227,7 +227,7 @@ TEST_CASE("audio: positional sounds fade with distance and pan to their side") {
     CHECK(peak_of(out) == 0.0f);
 }
 
-#if PH_OPUS
+#if BOWL_OPUS
 #include <ogg/ogg.h>
 #include <opus.h>
 
@@ -289,12 +289,12 @@ std::vector<u8> make_opus(f32 seconds) {
 TEST_CASE("audio: Opus sounds and music") {
     CHECK(opus_supported());
     std::vector<u8> file = make_opus(0.5f);
-    auto path = std::filesystem::temp_directory_path() / "ph_test_tone.opus";
+    auto path = std::filesystem::temp_directory_path() / "bowl_test_tone.opus";
     REQUIRE(write_file_bytes(path, file.data(), file.size()));
     AssetManager assets;
     assets.mount("", path.parent_path());
     register_asset_loaders(assets);
-    auto sound = assets.load<Sound>("ph_test_tone.opus");
+    auto sound = assets.load<Sound>("bowl_test_tone.opus");
     REQUIRE(sound);
     CHECK(sound->seconds() == doctest::Approx(0.5).epsilon(0.02));
     CHECK(frequency(*sound->samples(), 0, 4000, 16000) == doctest::Approx(440).epsilon(0.03));
@@ -317,7 +317,7 @@ TEST_CASE("audio: Opus sounds and music") {
     std::filesystem::remove(path, ec);
 }
 #else
-TEST_CASE("audio: without PH_OPUS, Opus files are refused clearly") { CHECK_FALSE(opus_supported()); }
+TEST_CASE("audio: without BOWL_OPUS, Opus files are refused clearly") { CHECK_FALSE(opus_supported()); }
 #endif
 
 TEST_CASE("audio: a voice's own filters, and changing them while it plays") {

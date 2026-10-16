@@ -1,4 +1,4 @@
-#include "ph/core/jobs.hpp"
+#include "bowl/core/jobs.hpp"
 
 #include <doctest/doctest.h>
 
@@ -6,7 +6,7 @@
 #include <numeric>
 #include <vector>
 
-using namespace ph;
+using namespace bowl;
 
 TEST_CASE("jobs: parallel_for covers every index exactly once") {
     for (int workers : {0, 1, 3, 8}) {

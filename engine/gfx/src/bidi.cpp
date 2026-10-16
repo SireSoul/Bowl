@@ -1,8 +1,8 @@
-#include "ph/gfx/bidi.hpp"
+#include "bowl/gfx/bidi.hpp"
 
 #include <algorithm>
 
-namespace ph::gfx::bidi {
+namespace bowl::gfx::bidi {
 
 namespace {
 
@@ -216,4 +216,4 @@ u32 mirror(u32 cp) {
     return cp;
 }
 
-} // namespace ph::gfx::bidi
+} // namespace bowl::gfx::bidi

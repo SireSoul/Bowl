@@ -35,8 +35,8 @@ A warning, not an error. Everything works except game-code hot reload. Update CM
 
 **Errors about `std::format`, `<numbers>`, concepts or `requires`**
 The compiler is too old, or isn't in C++20 mode. You need Visual Studio 2022, Xcode 15, Clang 16 or GCC 13. If your
-own game target sees these errors in engine headers, make sure it links `ph::engine` (directly or through
-`ph_add_game`), which carries the C++20 requirement.
+own game target sees these errors in engine headers, make sure it links `bowl::engine` (directly or through
+`bowl_add_game`), which carries the C++20 requirement.
 
 **The first build takes a long time**
 It compiles SDL3 (unless installed), glslang and SPIRV-Cross. Later builds don't. On macOS and Linux, installing
@@ -44,8 +44,8 @@ It compiles SDL3 (unless installed), glslang and SPIRV-Cross. Later builds don't
 of a clean build folder fast too.
 
 **Warnings fail the build**
-`PH_WARNINGS_AS_ERRORS` is on. Fix the warning (CI builds with it on for Linux and macOS), or configure with
-`-DPH_WARNINGS_AS_ERRORS=OFF` locally.
+`BOWL_WARNINGS_AS_ERRORS` is on. Fix the warning (CI builds with it on for Linux and macOS), or configure with
+`-DBOWL_WARNINGS_AS_ERRORS=OFF` locally.
 
 **A shader fails to compile during the build**
 The build prints the compiler's message with file and line. A common cause is a resource in the wrong descriptor set;
@@ -108,8 +108,8 @@ The log names the file and the reason. The path is virtual and relative to your 
 not `"assets/characters/hero.png"`), with forward slashes. On Linux, paths are case-sensitive.
 
 **Editing a file doesn't update the game**
-Hot reload is a dev-build feature: check that the build has `PH_DEV_TOOLS=ON` and that the overlay's **Assets** panel
-has **hot reload** ticked. The game must read from your source folder, which `ph_add_game(... ASSETS dir)` sets up;
+Hot reload is a dev-build feature: check that the build has `BOWL_DEV_TOOLS=ON` and that the overlay's **Assets** panel
+has **hot reload** ticked. The game must read from your source folder, which `bowl_add_game(... ASSETS dir)` sets up;
 editing the copy in the build folder does nothing. Some editors save by writing a new file and renaming it, which is
 fine; the change is picked up within a quarter of a second.
 
@@ -121,14 +121,14 @@ If it failed to compile, the log has the error and the old version is still in u
 **Rebuilding doesn't reload anything**
 Rebuild the library target, `<game>_code`, and make sure the game was started from the host executable of the same
 build folder. Check the log for `hot reload: watching ...` at startup; if it's missing, hot reload isn't on (Windows,
-release build, CMake older than 3.27, or `HOT_RELOAD` missing from `ph_add_game`).
+release build, CMake older than 3.27, or `HOT_RELOAD` missing from `bowl_add_game`).
 
 **`the new build didn't load; still running the previous code`**
 The library failed to load. The lines before it say why: usually a missing symbol. The game keeps running the old
 code; fix the problem and rebuild.
 
 **Entities lose a component after reloading**
-That component isn't savable. Use `PH_COMPONENT`, or rebuild the component in `init` (see
+That component isn't savable. Use `BOWL_COMPONENT`, or rebuild the component in `init` (see
 [hot-reload.md](guides/hot-reload.md#writing-reloadable-code)).
 
 **State resets after reloading**
@@ -149,8 +149,8 @@ You created, destroyed, or added or removed a component while a query was runnin
 `get<T>(e)` asserts when the entity is dead or doesn't have `T`. Use `try_get<T>(e)` when it might not.
 
 **A component doesn't save, or loads as unknown**
-Savable components are reflected (`PH_COMPONENT`), have hooks, or are empty tags. A type must be registered before
-loading: `PH_COMPONENT` does that; otherwise call `ecs::register_components<T>()`. Renaming a type or moving it to
+Savable components are reflected (`BOWL_COMPONENT`), have hooks, or are empty tags. A type must be registered before
+loading: `BOWL_COMPONENT` does that; otherwise call `ecs::register_components<T>()`. Renaming a type or moving it to
 another namespace changes its saved name.
 
 **Results differ between runs**

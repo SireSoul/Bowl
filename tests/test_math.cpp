@@ -1,10 +1,10 @@
-#include "ph/core/math.hpp"
-#include "ph/core/shader_bundle.hpp"
-#include "ph/core/type_id.hpp"
+#include "bowl/core/math.hpp"
+#include "bowl/core/shader_bundle.hpp"
+#include "bowl/core/type_id.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
+using namespace bowl;
 
 namespace demo {
 struct Thing {};

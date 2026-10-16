@@ -6,18 +6,18 @@
 //
 // CI builds this file, so the tutorial's code always compiles against the current engine.
 
-#include "ph/app/main.hpp"
-#include "ph/gfx/particles.hpp"
-#include "ph/gfx/text.hpp"
-#include "ph/physics/collision.hpp"
-#include "ph/ui/ui.hpp"
+#include "bowl/app/main.hpp"
+#include "bowl/gfx/particles.hpp"
+#include "bowl/gfx/text.hpp"
+#include "bowl/physics/collision.hpp"
+#include "bowl/ui/ui.hpp"
 
 #include <cmath>
 #include <format>
 #include <memory>
 #include <vector>
 
-using namespace ph;
+using namespace bowl;
 
 // Components
 
@@ -25,19 +25,19 @@ struct Position {
     Vec2 value;
     Vec2 previous; // value at the previous fixed tick, so drawing can interpolate
 };
-PH_COMPONENT(Position, value, previous)
+BOWL_COMPONENT(Position, value, previous)
 
 struct Firefly {
     f32 heading = 0; // radians
     f32 turn = 0;    // radians per second
     f32 speed = 60;  // units per second
 };
-PH_COMPONENT(Firefly, heading, turn, speed)
+BOWL_COMPONENT(Firefly, heading, turn, speed)
 
 struct Player {
     f32 radius = 16;
 };
-PH_COMPONENT(Player, radius)
+BOWL_COMPONENT(Player, radius)
 
 // Resources
 
@@ -289,4 +289,4 @@ public:
     }
 };
 
-PH_MAIN(FirefliesGame)
+BOWL_MAIN(FirefliesGame)

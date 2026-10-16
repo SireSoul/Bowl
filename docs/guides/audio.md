@@ -26,7 +26,7 @@ engine.audio().play(jump, {.gain = 0.6f, .pan = -0.5f, .pitch = 1.2f});
 
 WAV files (anything SDL reads: PCM, float, ADPCM) and Ogg Vorbis files are supported, mono or stereo, at any sample
 rate; everything is converted to the mixer's 48 kHz stereo on load. Ogg Opus files (`.opus`) work too when the engine
-is built with `-DPH_OPUS=ON` (see [Opus](#opus)).
+is built with `-DBOWL_OPUS=ON` (see [Opus](#opus)).
 
 A small random pitch variation (`0.9` to `1.1`) keeps repeated sounds, like footsteps, from sounding mechanical.
 
@@ -182,7 +182,7 @@ attenuation)` returns the same gain and pan, for sounds you start with `play`.
 ## Opus
 
 Opus sounds better than Vorbis at the same size, especially for voices and at low bitrates. Configure with
-`-DPH_OPUS=ON` to load `.opus` files as sounds and music; it adds libogg, libopus and opusfile to the build.
+`-DBOWL_OPUS=ON` to load `.opus` files as sounds and music; it adds libogg, libopus and opusfile to the build.
 `audio::opus_supported()` says whether it's in. Without it, loading an Opus file logs an error that says how to
 turn it on.
 

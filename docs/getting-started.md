@@ -26,7 +26,7 @@ the first build, which compiles SDL3 (unless it's installed), glslang and SPIRV-
 The engine needs C++20, including `<format>`, which is why the compiler minimums are what they are.
 
 Every library the engine uses is downloaded by CMake at a pinned version and checked against a SHA-256 hash (see
-`cmake/PhDependencies.cmake`), so there's nothing else to install by hand. If SDL3 is already installed, the build
+`cmake/BowlDependencies.cmake`), so there's nothing else to install by hand. If SDL3 is already installed, the build
 uses it; otherwise it builds SDL3 from source.
 
 ## Windows
@@ -80,11 +80,11 @@ mesa-libEGL-devel alsa-lib-devel pulseaudio-libs-devel pipewire-devel dbus-devel
 ## Build
 
 ```bash
-git clone https://github.com/SireSoul/BOWL.git
+git clone https://github.com/SireSoul/Bowl.git
 ```
 
 ```bash
-cd BOWL
+cd Bowl
 ```
 
 ```bash
@@ -109,7 +109,7 @@ The build folder is `build/dev`. Later builds only recompile what changed. To bu
 | `release` | Release | off | Shipping: no dev tools, precompiled shaders only, SDL linked statically, macOS `.app` bundles |
 
 Each preset has a build preset with the same name, and `dev` and `release` have test presets. You can override any
-option on the configure line, for example `cmake --preset dev -DPH_FETCH_SDL=ON`. All options are listed in
+option on the configure line, for example `cmake --preset dev -DBOWL_FETCH_SDL=ON`. All options are listed in
 [reference/cmake.md](reference/cmake.md).
 
 ## Run the samples
@@ -138,18 +138,18 @@ Press **F1** in any of them for the dev overlay. Flags every game understands, s
 ctest --preset dev
 ```
 
-`ctest` runs one executable, `ph_tests`, which holds every test case. Running it directly gives more control, using
+`ctest` runs one executable, `bowl_tests`, which holds every test case. Running it directly gives more control, using
 [doctest's options](https://github.com/doctest/doctest/blob/master/doc/markdown/commandline.md):
 
 ```bash
-./build/dev/tests/ph_tests -tc="ecs*"
+./build/dev/tests/bowl_tests -tc="ecs*"
 ```
 
 There's also an ECS benchmark that prints timings. It isn't a test; run it from a `release` build for meaningful
 numbers:
 
 ```bash
-./build/release/tests/ph_bench_ecs
+./build/release/tests/bowl_bench_ecs
 ```
 
 ## Editors and IDEs

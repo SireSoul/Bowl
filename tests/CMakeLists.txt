@@ -1,4 +1,4 @@
-add_executable(ph_tests
+add_executable(bowl_tests
     main.cpp
     test_assets.cpp
     test_audio.cpp
@@ -26,28 +26,28 @@ add_executable(ph_tests
     test_tilemap.cpp
     test_xml.cpp
     test_ui.cpp)
-target_link_libraries(ph_tests PRIVATE ph::engine ph_atlas ph_icon ph_apidoc doctest::doctest)
-target_compile_definitions(ph_tests PRIVATE PH_ENGINE_ASSET_SOURCE_DIR="${PH_ENGINE_ASSET_SOURCE_DIR}"
-    PH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
-if(PH_BOX2D)
-    target_sources(ph_tests PRIVATE test_rigid_bodies.cpp)
+target_link_libraries(bowl_tests PRIVATE bowl::engine bowl_atlas bowl_icon bowl_apidoc doctest::doctest)
+target_compile_definitions(bowl_tests PRIVATE BOWL_ENGINE_ASSET_SOURCE_DIR="${BOWL_ENGINE_ASSET_SOURCE_DIR}"
+    BOWL_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+if(BOWL_BOX2D)
+    target_sources(bowl_tests PRIVATE test_rigid_bodies.cpp)
 endif()
-if(PH_OPUS)
-    target_link_libraries(ph_tests PRIVATE ogg opus)
-    target_compile_definitions(ph_tests PRIVATE PH_OPUS=1)
+if(BOWL_OPUS)
+    target_link_libraries(bowl_tests PRIVATE ogg opus)
+    target_compile_definitions(bowl_tests PRIVATE BOWL_OPUS=1)
 endif()
-if(TARGET ph_shaderc)
-    target_link_libraries(ph_tests PRIVATE ph_shaderc)
-    target_compile_definitions(ph_tests PRIVATE PH_TEST_SHADERC=1)
+if(TARGET bowl_shaderc)
+    target_link_libraries(bowl_tests PRIVATE bowl_shaderc)
+    target_compile_definitions(bowl_tests PRIVATE BOWL_TEST_SHADERC=1)
 endif()
-ph_configure_target(ph_tests)
+bowl_configure_target(bowl_tests)
 # doctest's own std forward declarations break on recent MSVC STLs.
-target_compile_definitions(ph_tests PRIVATE DOCTEST_CONFIG_USE_STD_HEADERS)
-set_target_properties(ph_tests PROPERTIES FOLDER tests)
-add_test(NAME ph_tests COMMAND ph_tests)
+target_compile_definitions(bowl_tests PRIVATE DOCTEST_CONFIG_USE_STD_HEADERS)
+set_target_properties(bowl_tests PROPERTIES FOLDER tests)
+add_test(NAME bowl_tests COMMAND bowl_tests)
 
 # Not a test: prints ECS throughput numbers. Run it from a Release build.
-add_executable(ph_bench_ecs bench_ecs.cpp)
-target_link_libraries(ph_bench_ecs PRIVATE ph_ecs)
-ph_configure_target(ph_bench_ecs)
-set_target_properties(ph_bench_ecs PROPERTIES FOLDER tests)
+add_executable(bowl_bench_ecs bench_ecs.cpp)
+target_link_libraries(bowl_bench_ecs PRIVATE bowl_ecs)
+bowl_configure_target(bowl_bench_ecs)
+set_target_properties(bowl_bench_ecs PROPERTIES FOLDER tests)

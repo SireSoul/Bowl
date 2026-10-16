@@ -1,16 +1,16 @@
 # net
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/net/host.hpp](#phnethosthpp)
-- [ph/net/lockstep.hpp](#phnetlockstephpp)
-- [ph/net/rollback.hpp](#phnetrollbackhpp)
-- [ph/net/socket.hpp](#phnetsockethpp)
+- [bowl/net/host.hpp](#bowlnethosthpp)
+- [bowl/net/lockstep.hpp](#bowlnetlockstephpp)
+- [bowl/net/rollback.hpp](#bowlnetrollbackhpp)
+- [bowl/net/socket.hpp](#bowlnetsockethpp)
 
-## ph/net/host.hpp
+## bowl/net/host.hpp
 
-`#include "ph/net/host.hpp"` · namespace `ph::net`
+`#include "bowl/net/host.hpp"` · namespace `bowl::net`
 
 Connections over UDP: the same Host is a server (others connect to it) or a client (it connects to one), or both.
 Messages are either reliable (delivered once, in order, resent until acknowledged; any size up to 64 KB) or
@@ -143,9 +143,9 @@ template <class T> std::vector<u8> to_bytes(const T& value);
 template <class T> std::optional<T> from_bytes(std::span<const u8> bytes);
 ```
 
-## ph/net/lockstep.hpp
+## bowl/net/lockstep.hpp
 
-`#include "ph/net/lockstep.hpp"` · namespace `ph::net`
+`#include "bowl/net/lockstep.hpp"` · namespace `bowl::net`
 
 ### InputMessage
 
@@ -233,9 +233,9 @@ Players whose input for tick() hasn't come yet.
 std::vector<u32> waiting_for() const;
 ```
 
-## ph/net/rollback.hpp
+## bowl/net/rollback.hpp
 
-`#include "ph/net/rollback.hpp"` · namespace `ph::net`
+`#include "bowl/net/rollback.hpp"` · namespace `bowl::net`
 
 ### Rollback
 
@@ -322,9 +322,9 @@ Another player's message. False if it isn't one.
 bool receive(std::span<const u8> bytes);
 ```
 
-## ph/net/socket.hpp
+## bowl/net/socket.hpp
 
-`#include "ph/net/socket.hpp"` · namespace `ph::net`
+`#include "bowl/net/socket.hpp"` · namespace `bowl::net`
 
 ### Address
 

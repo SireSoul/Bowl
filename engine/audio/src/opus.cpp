@@ -3,11 +3,11 @@
 #include <algorithm>
 #include <cstring>
 
-#if PH_OPUS
+#if BOWL_OPUS
 #include <opusfile.h>
 #endif
 
-namespace ph::audio::detail {
+namespace bowl::audio::detail {
 
 bool looks_like_opus(const std::vector<u8>& data) {
     // The first Ogg page of an Opus file carries the "OpusHead" packet.
@@ -17,7 +17,7 @@ bool looks_like_opus(const std::vector<u8>& data) {
     return false;
 }
 
-#if PH_OPUS
+#if BOWL_OPUS
 
 bool opus_built() { return true; }
 
@@ -72,4 +72,4 @@ std::unique_ptr<Decoder> open_opus(const std::vector<u8>&) { return nullptr; }
 
 #endif
 
-} // namespace ph::audio::detail
+} // namespace bowl::audio::detail

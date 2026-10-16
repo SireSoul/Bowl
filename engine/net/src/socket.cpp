@@ -1,6 +1,6 @@
-#include "ph/net/socket.hpp"
+#include "bowl/net/socket.hpp"
 
-#include "ph/core/log.hpp"
+#include "bowl/core/log.hpp"
 
 #include <cstring>
 #include <format>
@@ -20,7 +20,7 @@ using socklen = int;
 using socklen = socklen_t;
 #endif
 
-namespace ph::net {
+namespace bowl::net {
 
 namespace {
 
@@ -208,4 +208,4 @@ std::optional<usize> Socket::receive(Address& from, std::span<u8> buffer) {
     return static_cast<usize>(got);
 }
 
-} // namespace ph::net
+} // namespace bowl::net

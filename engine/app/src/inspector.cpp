@@ -1,13 +1,13 @@
-#include "ph/app/inspector.hpp"
+#include "bowl/app/inspector.hpp"
 
-#include "ph/ecs/hierarchy.hpp"
+#include "bowl/ecs/hierarchy.hpp"
 
 #include <algorithm>
 #include <string>
 
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
 
-#include "ph/core/reflect.hpp"
+#include "bowl/core/reflect.hpp"
 
 #include <imgui.h>
 
@@ -16,7 +16,7 @@
 #include <format>
 #include <string>
 
-namespace ph::inspector {
+namespace bowl::inspector {
 
 namespace {
 
@@ -140,7 +140,7 @@ bool component(ecs::World& world, ecs::Entity e, ecs::ComponentId c, AssetManage
     } else if (info.size == 0) {
         ImGui::TextDisabled("tag");
     } else {
-        ImGui::TextDisabled("not reflected: add PH_COMPONENT(%.*s, fields...) to edit it here",
+        ImGui::TextDisabled("not reflected: add BOWL_COMPONENT(%.*s, fields...) to edit it here",
                             static_cast<int>(info.name.size()), info.name.data());
     }
     ImGui::PopID();
@@ -199,11 +199,11 @@ bool add_component_menu(ecs::World& world, ecs::Entity e) {
     return added;
 }
 
-} // namespace ph::inspector
+} // namespace bowl::inspector
 
 #endif
 
-namespace ph::inspector {
+namespace bowl::inspector {
 
 bool text_matches(std::string_view text, std::string_view filter) {
     auto lower = [](char c) { return static_cast<char>(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c); };
@@ -231,4 +231,4 @@ bool matches(const ecs::World& world, ecs::Entity e, std::string_view filter) {
     return true;
 }
 
-} // namespace ph::inspector
+} // namespace bowl::inspector

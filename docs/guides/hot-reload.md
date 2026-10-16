@@ -27,11 +27,11 @@ entity, where it was, with its health, inventory and everything else that's save
 
 ### Setting it up
 
-Add `HOT_RELOAD` to `ph_add_game`:
+Add `HOT_RELOAD` to `bowl_add_game`:
 
 ```cmake
 add_executable(my_game main.cpp)
-ph_add_game(my_game ASSETS assets HOT_RELOAD)
+bowl_add_game(my_game ASSETS assets HOT_RELOAD)
 ```
 
 It needs CMake 3.27 or newer and takes effect only in dev builds. Elsewhere (release builds, older CMake) the game
@@ -85,8 +85,8 @@ engine owns. Of your own component types:
 
 - **Plain data** (trivially copyable: numbers, vectors, colors, entity references, fixed arrays) stays exactly where
   it is, reflected or not. Most components are this.
-- **Savable** ones (`PH_COMPONENT`, or serialization hooks) that hold strings, vectors or assets are saved, and loaded
-  back through the new code. `PH_COMPONENT` registers the type as soon as the library loads, which that relies on.
+- **Savable** ones (`BOWL_COMPONENT`, or serialization hooks) that hold strings, vectors or assets are saved, and loaded
+  back through the new code. `BOWL_COMPONENT` registers the type as soon as the library loads, which that relies on.
 - **Anything else** (not plain data and not savable) is dropped, with a warning naming it.
 
 Plain data should hold no pointers into game code (string literals, function pointers): the code they point at is

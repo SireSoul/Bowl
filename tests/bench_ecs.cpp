@@ -1,14 +1,14 @@
-// ECS throughput. Build Release and run: ph_bench_ecs [entities]
+// ECS throughput. Build Release and run: bowl_bench_ecs [entities]
 
-#include "ph/core/log.hpp"
-#include "ph/core/time.hpp"
-#include "ph/ecs/ecs.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/time.hpp"
+#include "bowl/ecs/ecs.hpp"
 
 #include <cstdlib>
 #include <string>
 
-using namespace ph;
-using namespace ph::ecs;
+using namespace bowl;
+using namespace bowl::ecs;
 
 namespace {
 struct Position {

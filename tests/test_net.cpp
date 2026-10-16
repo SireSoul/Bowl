@@ -1,14 +1,14 @@
-#include "ph/net/host.hpp"
-#include "ph/net/lockstep.hpp"
-#include "ph/net/rollback.hpp"
+#include "bowl/net/host.hpp"
+#include "bowl/net/lockstep.hpp"
+#include "bowl/net/rollback.hpp"
 
 #include <doctest/doctest.h>
 
 #include <deque>
 #include <string>
 
-using namespace ph;
-using namespace ph::net;
+using namespace bowl;
+using namespace bowl::net;
 
 namespace {
 

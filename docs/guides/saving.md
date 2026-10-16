@@ -2,7 +2,7 @@
 
 Three layers, each built on the one before:
 
-1. **Reflection:** `PH_REFLECT` / `PH_COMPONENT` list a struct's fields.
+1. **Reflection:** `BOWL_REFLECT` / `BOWL_COMPONENT` list a struct's fields.
 2. **Serialization:** reflected structs (and most standard types) convert to and from JSON.
 3. **World files:** whole worlds, or chosen entities, save and load as JSON, with references between entities kept
    intact. Prefabs use the same format.
@@ -16,17 +16,17 @@ struct Inventory {
     std::vector<std::string> items;
     i32 coins = 0;
 };
-PH_REFLECT(Inventory, items, coins)
+BOWL_REFLECT(Inventory, items, coins)
 
 struct Health {
     i32 current = 100;
     i32 max = 100;
 };
-PH_COMPONENT(Health, current, max)   // PH_REFLECT + registration as a component
+BOWL_COMPONENT(Health, current, max)   // BOWL_REFLECT + registration as a component
 ```
 
-Put the macro after the struct, at namespace scope, in the struct's namespace. Up to 32 fields. Use `PH_COMPONENT`
-for components and `PH_REFLECT` for everything else (structs used as fields, settings, save headers).
+Put the macro after the struct, at namespace scope, in the struct's namespace. Up to 32 fields. Use `BOWL_COMPONENT`
+for components and `BOWL_REFLECT` for everything else (structs used as fields, settings, save headers).
 
 With reflection you get:
 
@@ -82,16 +82,16 @@ you must rename, keep reading the old name with hooks for a while.
 
 ### Custom conversion: hooks
 
-For types that need their own format, define `ph_to_json` and `ph_from_json` next to the type (found by
+For types that need their own format, define `bowl_to_json` and `bowl_from_json` next to the type (found by
 argument-dependent lookup):
 
 ```cpp
 struct Version { u8 major, minor; };
 
-json::Value ph_to_json(const Version& v, serial::Context&) {
+json::Value bowl_to_json(const Version& v, serial::Context&) {
     return std::format("{}.{}", v.major, v.minor);
 }
-bool ph_from_json(const json::Value& j, Version& v, serial::Context&) {
+bool bowl_from_json(const json::Value& j, Version& v, serial::Context&) {
     int major = 0, minor = 0;
     if (std::sscanf(std::string(j.as_string()).c_str(), "%d.%d", &major, &minor) != 2) return false;
     v = {static_cast<u8>(major), static_cast<u8>(minor)};
@@ -104,7 +104,7 @@ A type with hooks can be a field of reflected structs and a savable component.
 ## World files
 
 ```cpp
-#include "ph/ecs/world_io.hpp"
+#include "bowl/ecs/world_io.hpp"
 
 auto file = engine.user_data_path() / "slot1.json";
 serial::Context ctx{&engine.assets()};
@@ -142,7 +142,7 @@ The format:
 - **Savable components** are reflected ones, ones with hooks, and empty tags. Others are skipped (one warning per
   type), so runtime-only components (caches, GPU handles, animator state) aren't saved.
 - **Components are found by type name** when loading, as written by the compiler (including namespaces). A type must
-  be registered before it can load: `PH_COMPONENT` registers it when the program starts. For components without it,
+  be registered before it can load: `BOWL_COMPONENT` registers it when the program starts. For components without it,
   call `ecs::register_components<A, B>()` before loading. Unknown names are skipped with a warning.
 - **Entity references** (`ecs::Entity` fields, including inside vectors and nested structs) are written as file ids
   and turned back into the new entities' ids when loading, so they stay correct even when loading into a world that
@@ -206,7 +206,7 @@ structs work too:
 
 ```cpp
 struct VideoSettings { bool fullscreen = false; bool vsync = true; f32 ui_scale = 1; };
-PH_REFLECT(VideoSettings, fullscreen, vsync, ui_scale)
+BOWL_REFLECT(VideoSettings, fullscreen, vsync, ui_scale)
 
 auto video = engine.settings().get("video", VideoSettings{});
 ```
@@ -226,7 +226,7 @@ struct SaveHeader {
     f64 play_time = 0;
     i32 day = 1;
 };
-PH_REFLECT(SaveHeader, location, play_time, day)
+BOWL_REFLECT(SaveHeader, location, play_time, day)
 
 json::Value doc;
 doc.set("header", serial::to_json(header, ctx));

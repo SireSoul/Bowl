@@ -1,9 +1,9 @@
-#include "ph/physics/collision.hpp"
+#include "bowl/physics/collision.hpp"
 
 #include <algorithm>
 #include <limits>
 
-namespace ph::physics {
+namespace bowl::physics {
 
 bool overlaps(const Rect& a, const Rect& b) { return a.overlaps(b); }
 
@@ -142,4 +142,4 @@ MoveResult move_and_slide(Rect& box, Vec2 delta, SolidQuery solids, int max_iter
     return result;
 }
 
-} // namespace ph::physics
+} // namespace bowl::physics

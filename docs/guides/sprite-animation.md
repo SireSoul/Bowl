@@ -19,7 +19,7 @@ Frame durations come from Aseprite's per-frame durations.
 ## Loading and drawing
 
 ```cpp
-#include "ph/gfx/sprite_sheet.hpp"
+#include "bowl/gfx/sprite_sheet.hpp"
 
 Asset<gfx::SpriteSheet> hero = engine.assets().load<gfx::SpriteSheet>("characters/hero.json");
 ```
@@ -121,13 +121,13 @@ facing left is where the character's sword is.
 `sheet.frame_index("door_open")` finds a frame by its exported name (with or without the file extension), which is
 the natural way to use an atlas of separate pictures.
 
-## Packing pictures into an atlas: ph-atlas
+## Packing pictures into an atlas: bowl-atlas
 
-Many small pictures drawn from one texture cost one draw call instead of many. `ph-atlas` packs a folder of PNGs into
+Many small pictures drawn from one texture cost one draw call instead of many. `bowl-atlas` packs a folder of PNGs into
 one atlas image and writes JSON next to it that `SpriteSheet` loads like an Aseprite export:
 
 ```bash
-ph-atlas art/props -o assets/props.png
+bowl-atlas art/props -o assets/props.png
 ```
 
 - Each picture becomes a frame named after its file (with its subfolder: `"trees/oak"`).
@@ -141,7 +141,7 @@ Asset<gfx::SpriteSheet> props = engine.assets().load<gfx::SpriteSheet>("props.js
 gfx::draw_frame(batch, *props, props->frame_index("trees/oak"), position);
 ```
 
-The tool is in `build/<preset>/tools/atlas/`. Its packing code is the `ph_atlas` library, for tools of your own.
+The tool is in `build/<preset>/tools/atlas/`. Its packing code is the `bowl_atlas` library, for tools of your own.
 
 ## Sheets without Aseprite
 

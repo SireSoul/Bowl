@@ -1,9 +1,9 @@
-#include "ph/core/settings.hpp"
+#include "bowl/core/settings.hpp"
 
-#include "ph/core/file.hpp"
-#include "ph/core/log.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/log.hpp"
 
-namespace ph {
+namespace bowl {
 
 namespace fs = std::filesystem;
 
@@ -68,4 +68,4 @@ json::Value& Settings::slot(std::string_view key) {
     }
 }
 
-} // namespace ph
+} // namespace bowl

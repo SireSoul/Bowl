@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] Builds with `-DPH_WARNINGS_AS_ERRORS=ON` and `ctest --preset dev` passes
+- [ ] Builds with `-DBOWL_WARNINGS_AS_ERRORS=ON` and `ctest --preset dev` passes
 - [ ] New behavior has tests (or a note on why it can't)
 - [ ] Header comments, guides in `docs/`, and the tutorial (if affected) are updated
 - [ ] `CHANGELOG.md` has a line under Unreleased, if a game developer would notice

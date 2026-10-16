@@ -7,7 +7,7 @@ preprocessing step.
 ## Drawing text
 
 ```cpp
-#include "ph/gfx/text.hpp"
+#include "bowl/gfx/text.hpp"
 
 Asset<gfx::Font> font = engine.assets().load<gfx::Font>("fonts/Alegreya-Regular.ttf");
 
@@ -174,18 +174,18 @@ Hebrew and Arabic run right to left, and lines often mix them with left-to-right
 reading order by itself: each paragraph takes its direction from its first letter (or from `style.direction`), runs
 of the other direction are turned around inside it, numbers keep their digits in order, and brackets in right-to-left
 runs are mirrored. `max_glyphs` reveals characters in reading order, and `PlacedGlyph::index` counts that way too.
-`ph/gfx/bidi.hpp` has the pieces (character types, levels, visual order) for laying out text your own way. It follows
+`bowl/gfx/bidi.hpp` has the pieces (character types, levels, visual order) for laying out text your own way. It follows
 the Unicode bidirectional algorithm, without explicit direction controls (U+202A..U+202E, U+2066..U+2069).
 
 Some scripts need more than order. Arabic letters join, and change shape depending on their neighbours; Devanagari and
 other Indic scripts rearrange and combine characters; many fonts have ligatures ("fi") and kerning only in their
-OpenType tables. That's *shaping*, done by [HarfBuzz](https://harfbuzz.github.io) in builds with `PH_HARFBUZZ`:
+OpenType tables. That's *shaping*, done by [HarfBuzz](https://harfbuzz.github.io) in builds with `BOWL_HARFBUZZ`:
 
 ```bash
-cmake --preset dev -DPH_HARFBUZZ=ON
+cmake --preset dev -DBOWL_HARFBUZZ=ON
 ```
 
-| | Without `PH_HARFBUZZ` | With it |
+| | Without `BOWL_HARFBUZZ` | With it |
 | --- | --- | --- |
 | Latin, Cyrillic, Greek, CJK | yes (kerning from the font's `kern` table) | yes, with OpenType kerning and ligatures |
 | Hebrew | yes | yes, with vowel marks placed |

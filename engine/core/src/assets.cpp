@@ -1,7 +1,7 @@
-#include "ph/core/assets.hpp"
+#include "bowl/core/assets.hpp"
 
-#include "ph/core/log.hpp"
-#include "ph/core/profiler.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/profiler.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -10,7 +10,7 @@
 #include <mutex>
 #include <thread>
 
-namespace ph {
+namespace bowl {
 
 namespace fs = std::filesystem;
 
@@ -248,4 +248,4 @@ std::vector<AssetManager::Info> AssetManager::list() const {
     return out;
 }
 
-} // namespace ph
+} // namespace bowl

@@ -1,11 +1,11 @@
-#include "ph/ecs/schedule.hpp"
+#include "bowl/ecs/schedule.hpp"
 
-#include "ph/core/profiler.hpp"
-#include "ph/core/time.hpp"
+#include "bowl/core/profiler.hpp"
+#include "bowl/core/time.hpp"
 
 #include <algorithm>
 
-namespace ph::ecs {
+namespace bowl::ecs {
 
 Schedule::Builder Schedule::add(std::string name, std::function<void(SystemContext&)> fn) {
     auto s = std::make_unique<System>();
@@ -113,4 +113,4 @@ void Schedule::run(World& world, JobSystem& jobs, f32 dt) {
     world.flush();
 }
 
-} // namespace ph::ecs
+} // namespace bowl::ecs

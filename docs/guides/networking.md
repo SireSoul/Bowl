@@ -1,6 +1,6 @@
 # Networking
 
-`ph_net` connects games over UDP. `net::Host` makes connections and carries messages; `net::Lockstep` and
+`bowl_net` connects games over UDP. `net::Host` makes connections and carries messages; `net::Lockstep` and
 `net::Rollback` keep a simulation in step across machines. Everything runs on your thread, inside calls you make:
 there are no network threads and no callbacks.
 
@@ -9,7 +9,7 @@ there are no network threads and no callbacks.
 The same `Host` is a server (it takes connections), a client (it makes one), or both:
 
 ```cpp
-#include "ph/net/host.hpp"
+#include "bowl/net/host.hpp"
 
 net::Host server;
 server.start({.port = 27015});
@@ -77,7 +77,7 @@ for it has arrived, so the machines never disagree, and the only thing sent is i
 ahead (`delay`) so they have time to arrive. If one player's input is late, everyone waits.
 
 ```cpp
-#include "ph/net/lockstep.hpp"
+#include "bowl/net/lockstep.hpp"
 
 struct Input { // a plain struct with an ==
     i8 move_x = 0, move_y = 0;
@@ -110,7 +110,7 @@ its saved state from that tick and runs forward again with the right input, all 
 their own input with no delay, at the cost of the occasional correction.
 
 ```cpp
-#include "ph/net/rollback.hpp"
+#include "bowl/net/rollback.hpp"
 
 net::Rollback<Input, GameState> rollback({.players = 2, .local = my_player, .delay = 1, .max_rollback = 8}, {
     .step = [&](u32 tick, std::span<const Input> inputs) { simulate(inputs); },
@@ -153,7 +153,7 @@ To catch a desync, hash the state of a confirmed tick now and then, and compare 
 
 ## What it doesn't do
 
-`ph_net` doesn't do encryption or authentication (the connection key only stops strangers from mixing in packets),
+`bowl_net` doesn't do encryption or authentication (the connection key only stops strangers from mixing in packets),
 NAT punch-through, relays, lobbies or matchmaking. Over the internet, players need a reachable host (an open port, or
 a server with a public address), or a service such as Steam networking.
 

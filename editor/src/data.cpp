@@ -3,13 +3,13 @@
 
 #include "editor.hpp"
 
-#include "ph/core/file.hpp"
+#include "bowl/core/file.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <format>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 namespace fs = std::filesystem;
 
@@ -265,4 +265,4 @@ void Editor::data_workspace(Engine& engine) {
     data_shortcuts(engine);
 }
 
-} // namespace ph::editor
+} // namespace bowl::editor

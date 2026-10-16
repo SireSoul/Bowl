@@ -1,9 +1,9 @@
-#include "ph/ecs/ecs.hpp"
+#include "bowl/ecs/ecs.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
-using namespace ph::ecs;
+using namespace bowl;
+using namespace bowl::ecs;
 
 namespace {
 struct A {
@@ -89,7 +89,7 @@ struct Link { // a reflected component pointing at other entities
     Entity to;
     std::vector<Entity> also;
 };
-PH_REFLECT(Link, to, also)
+BOWL_REFLECT(Link, to, also)
 } // namespace
 
 TEST_CASE("schedule: stand-in ids from parallel systems become real ones, inside components too") {

@@ -24,9 +24,9 @@ The rules the engine follows everywhere, so you can rely on them.
 
 ## Names
 
-- Namespace `ph`, with sub-namespaces for modules whose names would be too generic otherwise: `ph::ecs`, `ph::gfx`,
-  `ph::audio`, `ph::physics`, `ph::ui`, `ph::json`, `ph::serial`, `ph::reflect`.
-- `snake_case` for functions, variables and files; `PascalCase` for types; `PH_UPPER_CASE` for macros. Member
+- Namespace `bowl`, with sub-namespaces for modules whose names would be too generic otherwise: `bowl::ecs`, `bowl::gfx`,
+  `bowl::audio`, `bowl::physics`, `bowl::ui`, `bowl::json`, `bowl::serial`, `bowl::reflect`.
+- `snake_case` for functions, variables and files; `PascalCase` for types; `BOWL_UPPER_CASE` for macros. Member
   variables end in `_`.
 - Short numeric aliases: `u8`..`u64`, `i8`..`i64`, `f32`, `f64`, `usize`.
 - Getters are named after the thing (`size()`, not `get_size()`); setters are `set_...`.

@@ -7,12 +7,12 @@
 //
 // Run with --frames N to quit after N frames (used for automated smoke runs).
 
-#include "ph/app/main.hpp"
-#include "ph/gfx/gpu_particles.hpp"
-#include "ph/gfx/sprite_sheet.hpp"
-#include "ph/gfx/text.hpp"
+#include "bowl/app/main.hpp"
+#include "bowl/gfx/gpu_particles.hpp"
+#include "bowl/gfx/sprite_sheet.hpp"
+#include "bowl/gfx/text.hpp"
 
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
 #include <imgui.h>
 #endif
 
@@ -20,39 +20,39 @@
 #include <format>
 #include <vector>
 
-using namespace ph;
-using namespace ph::ecs;
+using namespace bowl;
+using namespace bowl::ecs;
 
 // Components
 
-// PH_COMPONENT makes a component savable, editable in the F1 inspector, and kept across game-code hot reloads.
+// BOWL_COMPONENT makes a component savable, editable in the F1 inspector, and kept across game-code hot reloads.
 struct Transform {
     Vec2 position;
     Vec2 previous; // position at the previous fixed tick, for interpolated rendering
     f32 rotation = 0;
 };
-PH_COMPONENT(Transform, position, previous, rotation)
+BOWL_COMPONENT(Transform, position, previous, rotation)
 struct Velocity {
     Vec2 value;
 };
-PH_COMPONENT(Velocity, value)
+BOWL_COMPONENT(Velocity, value)
 struct Spin {
     f32 speed = 0;
 };
-PH_COMPONENT(Spin, speed)
+BOWL_COMPONENT(Spin, speed)
 struct Look {
     Color color;
     f32 size = 16;
 };
-PH_COMPONENT(Look, color, size)
+BOWL_COMPONENT(Look, color, size)
 struct Lifetime {
     f32 seconds = 0;
 };
-PH_COMPONENT(Lifetime, seconds)
+BOWL_COMPONENT(Lifetime, seconds)
 struct Banner {
     int slot = 0; // position in the row of animated sprites
 };
-PH_COMPONENT(Banner, slot)
+BOWL_COMPONENT(Banner, slot)
 
 // Resources
 
@@ -240,7 +240,7 @@ public:
     }
 
     void dev_ui(Engine& engine) override {
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
         ImGui::SetNextWindowPos({450, 12}, ImGuiCond_FirstUseEver);
         ImGui::Begin("Sprites sample");
         ImGui::Text("%zu sprites", engine.world().query<const Look>().count());
@@ -353,4 +353,4 @@ private:
     static constexpr u32 palette_[] = {0xff5c8a, 0xffb84d, 0xffe066, 0x5cd6a9, 0x4dc3ff, 0x9d7bff};
 };
 
-PH_MAIN(SpritesGame)
+BOWL_MAIN(SpritesGame)

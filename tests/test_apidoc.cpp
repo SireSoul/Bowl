@@ -1,22 +1,22 @@
-#include "ph/apidoc/apidoc.hpp"
+#include "bowl/apidoc/apidoc.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
+using namespace bowl;
 using apidoc::Item;
 
 namespace {
 
 constexpr std::string_view sample = R"(#pragma once
 
-#include "ph/core/types.hpp"
+#include "bowl/core/types.hpp"
 
 // Widgets for testing. Use them like this:
 //
 //     Widget w;
 //     w.spin(3);
 
-namespace ph::demo {
+namespace bowl::demo {
 
 class Engine; // forward, left out
 
@@ -65,20 +65,20 @@ std::vector<f32> Widget::spin(i32 times) {
 }
 
 // Reflected.
-PH_REFLECT(Settings, speed, axis,
+BOWL_REFLECT(Settings, speed, axis,
            friction)
 
-#define PH_DEMO(x) do_it(x) // a macro
+#define BOWL_DEMO(x) do_it(x) // a macro
 
-} // namespace ph::demo
+} // namespace bowl::demo
 )";
 
 } // namespace
 
 TEST_CASE("apidoc: headers become comments and declarations") {
-    apidoc::Header h = apidoc::parse("ph/demo/widget.hpp", sample);
-    CHECK(h.path == "ph/demo/widget.hpp");
-    CHECK(h.namespaces == std::vector<std::string>{"ph::demo"});
+    apidoc::Header h = apidoc::parse("bowl/demo/widget.hpp", sample);
+    CHECK(h.path == "bowl/demo/widget.hpp");
+    CHECK(h.namespaces == std::vector<std::string>{"bowl::demo"});
     REQUIRE(h.intro.size() == 4);
     CHECK(h.intro[0] == "Widgets for testing. Use them like this:");
     CHECK(h.intro[2] == "    Widget w;");
@@ -87,7 +87,7 @@ TEST_CASE("apidoc: headers become comments and declarations") {
     for (const Item& item : h.items) codes.push_back(item.kind == Item::Kind::Class ? "class " + item.name : item.code);
     CHECK(codes == std::vector<std::string>{"enum class Spin : u8 {\n    Left,\n    Right, // clockwise\n};", "class Settings",
                                             "class Widget", "template <class T> T twice(T v);",
-                                            "PH_REFLECT(Settings, speed, axis,\n           friction)", "#define PH_DEMO(x) do_it(x) // a macro"});
+                                            "BOWL_REFLECT(Settings, speed, axis,\n           friction)", "#define BOWL_DEMO(x) do_it(x) // a macro"});
     CHECK(h.items[0].comment == std::vector<std::string>{"How a widget turns."});
 
     const Item& settings = h.items[1];
@@ -107,10 +107,10 @@ TEST_CASE("apidoc: headers become comments and declarations") {
 }
 
 TEST_CASE("apidoc: Markdown pages") {
-    std::vector<apidoc::Header> headers{apidoc::parse("ph/demo/widget.hpp", sample)};
+    std::vector<apidoc::Header> headers{apidoc::parse("bowl/demo/widget.hpp", sample)};
     std::string page = apidoc::render_module("demo", headers);
     CHECK(page.starts_with("# demo\n"));
-    CHECK(page.find("- [ph/demo/widget.hpp](#phdemowidgethpp)") != std::string::npos);
+    CHECK(page.find("- [bowl/demo/widget.hpp](#bowldemowidgethpp)") != std::string::npos);
     CHECK(page.find("```cpp\nWidget w;\nw.spin(3);\n```") != std::string::npos);    // the intro's example
     CHECK(page.find("Returns Vector&lt;T> of angles.") != std::string::npos);        // no stray HTML tags
     CHECK(page.find("`times`") != std::string::npos);
@@ -126,8 +126,8 @@ TEST_CASE("apidoc: Markdown pages") {
     CHECK(page.find("return v + v") == std::string::npos);
 
     std::string index = apidoc::render_index({{"demo", headers}});
-    CHECK(index.find("| [ph/demo/widget.hpp](demo.md#phdemowidgethpp) | Widgets for testing. |") !=
+    CHECK(index.find("| [bowl/demo/widget.hpp](demo.md#bowldemowidgethpp) | Widgets for testing. |") !=
           std::string::npos);
-    CHECK(apidoc::anchor("ph/net/host.hpp") == "phnethosthpp");
+    CHECK(apidoc::anchor("bowl/net/host.hpp") == "bowlnethosthpp");
     CHECK(apidoc::anchor("Two Words") == "two-words");
 }

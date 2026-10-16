@@ -3,12 +3,12 @@
 
 #include "editor.hpp"
 
-#include "ph/physics/colliders.hpp"
+#include "bowl/physics/colliders.hpp"
 
 #include <cmath>
 #include <format>
 
-namespace ph::editor {
+namespace bowl::editor {
 
 namespace {
 
@@ -181,4 +181,4 @@ bool Editor::region_mouse(Engine& engine) {
     return false;
 }
 
-} // namespace ph::editor
+} // namespace bowl::editor

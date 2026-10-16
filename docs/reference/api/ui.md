@@ -1,13 +1,13 @@
 # ui
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/ui/ui.hpp](#phuiuihpp)
+- [bowl/ui/ui.hpp](#bowluiuihpp)
 
-## ph/ui/ui.hpp
+## bowl/ui/ui.hpp
 
-`#include "ph/ui/ui.hpp"` · namespace `ph::ui`
+`#include "bowl/ui/ui.hpp"` · namespace `bowl::ui`
 
 Immediate-mode game UI: menus, settings screens, HUD widgets, dialogue. Call widgets every frame between begin and
 end; they return what happened. Works with the mouse, and with keyboard/gamepad focus (up/down to move, confirm to

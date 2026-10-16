@@ -4,15 +4,15 @@
 // PNG strikes, Noto Color Emoji) and COLR/CPAL version 0 (layers of plain glyphs in palette colors, Windows' Segoe UI
 // Emoji). Fonts are read with bounds checks: a broken table gives no color glyph, never a crash.
 
-#include "ph/core/math.hpp"
-#include "ph/core/types.hpp"
+#include "bowl/core/math.hpp"
+#include "bowl/core/types.hpp"
 
 #include <optional>
 #include <span>
 #include <utility>
 #include <vector>
 
-namespace ph::gfx::color {
+namespace bowl::gfx::color {
 
 struct Tables {
     u32 sbix = 0, cblc = 0, cbdt = 0, colr = 0, cpal = 0; // offsets in the font data; 0: none
@@ -38,4 +38,4 @@ std::vector<std::pair<u32, std::optional<Color>>> layers(std::span<const u8> fon
 // Resizes premultiplied RGBA8: averaged when shrinking, bilinear when growing.
 std::vector<u8> resize(std::span<const u8> rgba, u32 width, u32 height, u32 new_width, u32 new_height);
 
-} // namespace ph::gfx::color
+} // namespace bowl::gfx::color

@@ -1,8 +1,8 @@
-#include "ph/gfx/sprite.hpp"
+#include "bowl/gfx/sprite.hpp"
 
 #include <algorithm>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 Vec2 sprite_size(const Sprite& s) {
     if (s.size.x != 0 || s.size.y != 0) return s.size;
@@ -50,4 +50,4 @@ std::optional<Rect> sprite_bounds(const ecs::World& world, ecs::Entity e) {
     return Rect{lo.x, lo.y, hi.x - lo.x, hi.y - lo.y};
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

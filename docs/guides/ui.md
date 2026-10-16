@@ -7,7 +7,7 @@ returns what happened to it. There are no widget objects to create, keep in sync
 <p align="center"><img src="../images/ui-menu.jpg" width="70%" alt="A pause menu over the isometric sample"></p>
 
 ```cpp
-#include "ph/ui/ui.hpp"
+#include "bowl/ui/ui.hpp"
 
 ui::Context ui;              // keep it: it remembers focus and panel sizes between frames
 gfx::SpriteBatch ui_batch;

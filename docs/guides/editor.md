@@ -1,4 +1,4 @@
-# BOWL Editor
+# Bowl Editor
 
 Bowl Editor lays out levels: it places art and markers in a `.world` file that the game loads. It draws with the
 game's own renderer, so what you see is what the game shows.
@@ -88,9 +88,9 @@ the Outline shows that thing.
 ### The game's own components
 
 A level often carries components only the game knows: a spawn point's kind, a door's destination. Start the editor
-with `--game` pointing at the game's hot-reload library (`HOT_RELOAD` in `ph_add_game`) and those components get
+with `--game` pointing at the game's hot-reload library (`HOT_RELOAD` in `bowl_add_game`) and those components get
 proper fields, and can be added from **+ Add**. The editor never runs the game's code; loading the library only
-registers its `PH_COMPONENT` types.
+registers its `BOWL_COMPONENT` types.
 
 Without `--game`, those components are kept as JSON: shown as text you can edit, and written back exactly when
 saving. Opening and saving a level never loses anything.

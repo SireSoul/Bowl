@@ -1,9 +1,9 @@
-#include "ph/core/assert.hpp"
-#include "ph/core/log.hpp"
-#include "ph/core/time.hpp"
-#include "ph/core/type_id.hpp"
+#include "bowl/core/assert.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/core/time.hpp"
+#include "bowl/core/type_id.hpp"
 
-#if PH_TRACY
+#if BOWL_TRACY
 #include <tracy/TracyC.h>
 #endif
 
@@ -13,7 +13,7 @@
 #include <deque>
 #include <mutex>
 
-namespace ph {
+namespace bowl {
 
 namespace {
 const auto process_start = std::chrono::steady_clock::now();
@@ -76,7 +76,7 @@ void logging::write(LogLevel level, std::string_view text) {
     std::fprintf(out, "[%9.3f] %s | %.*s\n", t, level_name(level), static_cast<int>(text.size()), text.data());
     std::fflush(out);
     for (const Sink& sink : s.sinks) sink.fn(level, text, sink.user);
-#if PH_TRACY
+#if BOWL_TRACY
     // Log lines show up on Tracy's timeline next to the zones around them; warnings and errors in color.
     u32 color = level == LogLevel::Error ? 0xff5050 : level == LogLevel::Warn ? 0xffc040 : 0;
     if (___tracy_connected()) ___tracy_emit_messageC(text.data(), text.size(), color, 0);
@@ -101,4 +101,4 @@ void detail::assert_fail(const char* condition, const char* file, int line, cons
     std::abort();
 }
 
-} // namespace ph
+} // namespace bowl

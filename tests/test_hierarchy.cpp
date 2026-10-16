@@ -1,10 +1,10 @@
-#include "ph/ecs/ecs.hpp"
-#include "ph/ecs/hierarchy.hpp"
+#include "bowl/ecs/ecs.hpp"
+#include "bowl/ecs/hierarchy.hpp"
 
 #include <doctest/doctest.h>
 
-using namespace ph;
-using namespace ph::ecs;
+using namespace bowl;
+using namespace bowl::ecs;
 
 TEST_CASE("hierarchy: children follow their parent's position, rotation and scale") {
     World w;

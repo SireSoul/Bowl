@@ -8,17 +8,17 @@
 // The map is built in code to keep the sample self-contained; games load Tiled maps with
 // assets.load<gfx::Tilemap>("maps/town.tmj") and draw them the same way.
 
-#include "ph/app/main.hpp"
-#include "ph/gfx/particles.hpp"
-#include "ph/gfx/text.hpp"
-#include "ph/gfx/tilemap.hpp"
-#include "ph/physics/collision.hpp"
-#include "ph/ui/ui.hpp"
+#include "bowl/app/main.hpp"
+#include "bowl/gfx/particles.hpp"
+#include "bowl/gfx/text.hpp"
+#include "bowl/gfx/tilemap.hpp"
+#include "bowl/physics/collision.hpp"
+#include "bowl/ui/ui.hpp"
 
 #include <cmath>
 
-using namespace ph;
-using namespace ph::ecs;
+using namespace bowl;
+using namespace bowl::ecs;
 
 namespace {
 
@@ -380,4 +380,4 @@ private:
     };
 };
 
-PH_MAIN(IsometricGame)
+BOWL_MAIN(IsometricGame)

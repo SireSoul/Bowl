@@ -23,7 +23,7 @@ What it changes from `dev`:
 | Assertions | on | off |
 | SDL | installed copy if present, else static | always built from source and linked statically |
 | macOS | plain executables | `.app` bundles |
-| Assets read from | your source folders first | next to the executable only, packed into `.phpak` archives (`PH_PACK_ASSETS`) |
+| Assets read from | your source folders first | next to the executable only, packed into `.bowlpak` archives (`BOWL_PACK_ASSETS`) |
 
 Static SDL means the game has no SDL library to ship alongside it.
 
@@ -33,7 +33,7 @@ Static SDL means the game has no SDL library to ship alongside it.
 cmake --install build/release --prefix dist
 ```
 
-Every game target (every `ph_add_game`) is laid out in `dist`:
+Every game target (every `bowl_add_game`) is laid out in `dist`:
 
 **Windows and Linux**: one folder per game.
 
@@ -41,8 +41,8 @@ Every game target (every `ph_add_game`) is laid out in `dist`:
 dist/
   my_game/
     my_game(.exe)
-    engine.phpak   engine shaders and the default font
-    assets.phpak   your assets, with compiled shaders
+    engine.bowlpak   engine shaders and the default font
+    assets.bowlpak   your assets, with compiled shaders
 ```
 
 **macOS**: one self-contained application bundle per game.
@@ -52,27 +52,27 @@ dist/
   my_game.app/
     Contents/
       MacOS/my_game
-      Resources/engine.phpak
-      Resources/assets.phpak
+      Resources/engine.bowlpak
+      Resources/assets.bowlpak
       Info.plist
 ```
 
 The bundle's identifier defaults to `com.bowl.<target>`; set yours with
-`ph_add_game(my_game ... BUNDLE_ID com.yourstudio.mygame)`. The bundle version comes from the `project(... VERSION)`
+`bowl_add_game(my_game ... BUNDLE_ID com.yourstudio.mygame)`. The bundle version comes from the `project(... VERSION)`
 in your `CMakeLists.txt`.
 
-Without `PH_PACK_ASSETS` (the default outside the `release` preset), `engine/` and `assets/` are folders of loose files
+Without `BOWL_PACK_ASSETS` (the default outside the `release` preset), `engine/` and `assets/` are folders of loose files
 instead of archives; the engine reads either (see [Assets](assets.md#archives)).
 
 Zip the folder (or the `.app`) and it runs on another machine of the same OS and architecture. Or let
-[`ph_package`](#installers) make installers.
+[`bowl_package`](#installers) make installers.
 
 ## The icon
 
-Give `ph_add_game` a picture and a name:
+Give `bowl_add_game` a picture and a name:
 
 ```cmake
-ph_add_game(my_game ASSETS assets NAME "My Game" ICON art/icon.png)
+bowl_add_game(my_game ASSETS assets NAME "My Game" ICON art/icon.png)
 ```
 
 The icon is a square PNG, 1024 x 1024 at best. The build turns it into what each platform wants:
@@ -87,17 +87,17 @@ The icon is a square PNG, 1024 x 1024 at best. The build turns it into what each
 A small pixel-art icon scales up blurry; add `ICON_PIXEL_ART` to keep its pixels hard-edged. The samples use
 `samples/icon.png`, 64 x 64, that way.
 
-The `ph-icon` tool does the work, and you can run it yourself:
+The `bowl-icon` tool does the work, and you can run it yourself:
 
 ```bash
-ph-icon icon.png --icns my_game.icns --ico my_game.ico --png 512 my_game-512.png
+bowl-icon icon.png --icns my_game.icns --ico my_game.ico --png 512 my_game-512.png
 ```
 
 ## Signing and notarization
 
 ### macOS
 
-Installing signs each `.app` with `codesign`. By default the signature is ad hoc (`PH_MACOS_SIGN_IDENTITY` is `-`):
+Installing signs each `.app` with `codesign`. By default the signature is ad hoc (`BOWL_MACOS_SIGN_IDENTITY` is `-`):
 the bundle is sealed, so nothing in it can change unnoticed, but it doesn't say who made it. That's enough on your own
 Mac. On other Macs, Gatekeeper warns about an app from the internet unless it's signed with a Developer ID and
 notarized by Apple.
@@ -108,7 +108,7 @@ To ship, join the Apple Developer Program, then:
    notarization needs:
 
    ```bash
-   cmake --preset release -DPH_MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+   cmake --preset release -DBOWL_MACOS_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
    ```
 
 2. Store your notarization credentials once (an app-specific password, or an App Store Connect API key):
@@ -120,27 +120,27 @@ To ship, join the Apple Developer Program, then:
 3. Have Apple check the app or disk image, and staple the result to it:
 
    ```bash
-   cmake -DFILE=build/release/MyGame-1.2.0-Darwin.dmg -DPROFILE=my-profile -P cmake/PhNotarize.cmake
+   cmake -DFILE=build/release/MyGame-1.2.0-Darwin.dmg -DPROFILE=my-profile -P cmake/BowlNotarize.cmake
    ```
 
-`PH_MACOS_ENTITLEMENTS` takes an entitlements file, if the game needs any. Set `PH_MACOS_SIGN_IDENTITY` to empty to
+`BOWL_MACOS_ENTITLEMENTS` takes an entitlements file, if the game needs any. Set `BOWL_MACOS_SIGN_IDENTITY` to empty to
 skip signing.
 
 ### Windows
 
-Windows SmartScreen warns about unsigned programs. With a code-signing certificate, set `PH_WINDOWS_SIGN_COMMAND` to
+Windows SmartScreen warns about unsigned programs. With a code-signing certificate, set `BOWL_WINDOWS_SIGN_COMMAND` to
 the command that signs a file; installing runs it on each game's `.exe`:
 
 ```bash
-cmake --preset release -DPH_WINDOWS_SIGN_COMMAND="signtool;sign;/fd;SHA256;/a;/tr;http://timestamp.digicert.com;/td;SHA256"
+cmake --preset release -DBOWL_WINDOWS_SIGN_COMMAND="signtool;sign;/fd;SHA256;/a;/tr;http://timestamp.digicert.com;/td;SHA256"
 ```
 
 ## Installers
 
-`ph_package` in your `CMakeLists.txt`, after `ph_add_game`, sets up installers for the game:
+`bowl_package` in your `CMakeLists.txt`, after `bowl_add_game`, sets up installers for the game:
 
 ```cmake
-ph_package(my_game VENDOR "Your Studio" DESCRIPTION "A game about bowls" LICENSE LICENSE.txt)
+bowl_package(my_game VENDOR "Your Studio" DESCRIPTION "A game about bowls" LICENSE LICENSE.txt)
 ```
 
 Build, then run `cpack` in the build folder:
@@ -177,9 +177,9 @@ than the one it was built on.
 
 ### Flatpak
 
-`ph_package` writes `build/release/<bundle id>.flatpak.json`, a manifest for `flatpak-builder`. It builds the game from
+`bowl_package` writes `build/release/<bundle id>.flatpak.json`, a manifest for `flatpak-builder`. It builds the game from
 your source folder with the freedesktop runtime, and installs the desktop file and icon where Flatpak looks
-(`PH_LINUX_SHARE`):
+(`BOWL_LINUX_SHARE`):
 
 ```bash
 flatpak-builder --user --install --force-clean build/flatpak build/release/com.yourstudio.mygame.flatpak.json
@@ -191,7 +191,7 @@ game gets the display, the GPU, sound and gamepads; add `--share=network` to `fi
 
 ## Steam Deck
 
-On a Steam Deck (Steam says so, or the hardware is one), `ph::is_steam_deck()` is true and the game starts fullscreen
+On a Steam Deck (Steam says so, or the hardware is one), `bowl::is_steam_deck()` is true and the game starts fullscreen
 (turn that off with `AppConfig::fullscreen_on_steam_deck`). To see how a game looks there, run it with `--deck`: a
 1280 x 800 window that also makes `is_steam_deck()` true.
 

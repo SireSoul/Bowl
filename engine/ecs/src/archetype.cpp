@@ -1,4 +1,4 @@
-#include "ph/ecs/archetype.hpp"
+#include "bowl/ecs/archetype.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -6,7 +6,7 @@
 #include <mutex>
 #include <string>
 
-namespace ph::ecs {
+namespace bowl::ecs {
 
 // Component registry
 
@@ -59,7 +59,7 @@ ComponentId detail::register_component(const ComponentInfo& info) {
             }
             return static_cast<ComponentId>(i);
         }
-    PH_ASSERT(count < max_components, "too many component types: raise PH_ECS_MAX_COMPONENTS");
+    BOWL_ASSERT(count < max_components, "too many component types: raise BOWL_ECS_MAX_COMPONENTS");
     r.names[count] = std::string(info.name);
     r.infos[count] = info;
     r.infos[count].name = r.names[count];
@@ -68,7 +68,7 @@ ComponentId detail::register_component(const ComponentInfo& info) {
 }
 
 const ComponentInfo& component_info(ComponentId id) {
-    PH_ASSERT(id < registry().count.load(std::memory_order_acquire));
+    BOWL_ASSERT(id < registry().count.load(std::memory_order_acquire));
     return registry().infos[id];
 }
 
@@ -198,4 +198,4 @@ u32 Archetype::move_to(u32 row, Archetype& dst, Entity& moved) {
     return dst_row;
 }
 
-} // namespace ph::ecs
+} // namespace bowl::ecs

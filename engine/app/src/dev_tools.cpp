@@ -2,12 +2,12 @@
 
 #include <SDL3/SDL.h>
 
-#if PH_DEV_TOOLS
+#if BOWL_DEV_TOOLS
 
-#include "ph/app/inspector.hpp"
-#include "ph/core/file.hpp"
-#include "ph/core/profiler.hpp"
-#include "ph/ecs/hierarchy.hpp"
+#include "bowl/app/inspector.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/core/profiler.hpp"
+#include "bowl/ecs/hierarchy.hpp"
 
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -17,7 +17,7 @@
 #include <cstring>
 #include <format>
 
-namespace ph {
+namespace bowl {
 
 DevTools::DevTools(Engine& engine) : engine_(engine) {
     IMGUI_CHECKVERSION();
@@ -321,16 +321,16 @@ void DevTools::draw_log() {
     ImGui::EndChild();
 }
 
-} // namespace ph
+} // namespace bowl
 
-#else // !PH_DEV_TOOLS
+#else // !BOWL_DEV_TOOLS
 
-namespace ph {
+namespace bowl {
 DevTools::DevTools(Engine& engine) : engine_(engine) {}
 DevTools::~DevTools() = default;
 void DevTools::handle_event(const SDL_Event&) {}
 void DevTools::begin_frame() {}
 void DevTools::end_frame(Game&) {}
-} // namespace ph
+} // namespace bowl
 
 #endif

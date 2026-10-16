@@ -1,8 +1,8 @@
-#include "ph/core/log.hpp"
-#include "ph/gfx/device.hpp"
+#include "bowl/core/log.hpp"
+#include "bowl/gfx/device.hpp"
 
-#if PH_RUNTIME_SHADER_COMPILER
-#include "ph/shaderc/shaderc.hpp"
+#if BOWL_RUNTIME_SHADER_COMPILER
+#include "bowl/shaderc/shaderc.hpp"
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -22,22 +22,22 @@
 #pragma GCC diagnostic pop
 #endif
 
-#include "ph/core/file.hpp"
-#include "ph/gfx/renderer.hpp"
-#include "ph/gfx/sprite_sheet.hpp"
-#include "ph/gfx/text.hpp"
-#include "ph/gfx/tilemap.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/gfx/renderer.hpp"
+#include "bowl/gfx/sprite_sheet.hpp"
+#include "bowl/gfx/text.hpp"
+#include "bowl/gfx/tilemap.hpp"
 
 #include <string>
 
-namespace ph::gfx {
+namespace bowl::gfx {
 
 namespace {
 
-// The bundle for "<path>": compiled from "<path>.glsl" in dev builds, read from "<path>.phsh" otherwise.
+// The bundle for "<path>": compiled from "<path>.glsl" in dev builds, read from "<path>.bowlsh" otherwise.
 std::optional<ShaderBundle> load_bundle(AssetLoadContext& ctx, std::string_view type) {
     std::string base(ctx.path());
-#if PH_RUNTIME_SHADER_COMPILER
+#if BOWL_RUNTIME_SHADER_COMPILER
     // Dev builds compile the GLSL source directly, so saving a .glsl file updates the running game.
     if (auto file = ctx.assets().resolve(base + ".glsl")) {
         auto source = ctx.read_text(base + ".glsl");
@@ -63,13 +63,13 @@ std::optional<ShaderBundle> load_bundle(AssetLoadContext& ctx, std::string_view 
         return std::move(result.bundle);
     }
 #endif
-    auto bytes = ctx.read(base + ".phsh");
+    auto bytes = ctx.read(base + ".bowlsh");
     if (!bytes) {
-        log_asset_error(ctx.path(), type, "no " + base + ".phsh (or .glsl in dev builds) in any mount");
+        log_asset_error(ctx.path(), type, "no " + base + ".bowlsh (or .glsl in dev builds) in any mount");
         return std::nullopt;
     }
     auto bundle = ShaderBundle::parse(*bytes);
-    if (!bundle) log_asset_error(ctx.path(), type, "corrupt or outdated .phsh bundle; rebuild shaders");
+    if (!bundle) log_asset_error(ctx.path(), type, "corrupt or outdated .bowlsh bundle; rebuild shaders");
     return bundle;
 }
 
@@ -169,4 +169,4 @@ void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter defa
     register_tilemap_loader(assets);
 }
 
-} // namespace ph::gfx
+} // namespace bowl::gfx

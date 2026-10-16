@@ -1,11 +1,11 @@
-#include "ph/ui/ui.hpp"
+#include "bowl/ui/ui.hpp"
 
-#include "ph/core/type_id.hpp"
-#include "ph/core/utf8.hpp"
+#include "bowl/core/type_id.hpp"
+#include "bowl/core/utf8.hpp"
 
 #include <algorithm>
 
-namespace ph::ui {
+namespace bowl::ui {
 
 namespace {
 
@@ -252,4 +252,4 @@ bool Context::dialogue(std::string_view speaker, Typewriter& tw) {
     return advance;
 }
 
-} // namespace ph::ui
+} // namespace bowl::ui

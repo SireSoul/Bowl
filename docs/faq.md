@@ -20,7 +20,7 @@ No, and none is planned. Game code is C++, and game-code hot reload rebuilds and
 which is the quick iteration a scripting language would otherwise be for.
 
 **Why "Bowl"?**
-The full name is Bowl Engine; everyone calls it Bowl. In code it's the namespace `ph`.
+The full name is Bowl Engine; everyone calls it Bowl. In code it's the namespace `bowl`.
 
 ## Design
 
@@ -62,20 +62,20 @@ game carrying on. Programming errors are caught by assertions in dev builds.
 ## Practical
 
 **How do I make a game without putting it in the engine repository?**
-Add the engine as a submodule or with FetchContent and call `ph_add_game`. See
+Add the engine as a submodule or with FetchContent and call `bowl_add_game`. See
 [reference/cmake.md](reference/cmake.md#using-the-engine-in-your-own-project).
 
 **How do I get a value into the inspector?**
-Put it in a component with `PH_COMPONENT(Type, fields...)`. For values that aren't per-entity, draw your own window
+Put it in a component with `BOWL_COMPONENT(Type, fields...)`. For values that aren't per-entity, draw your own window
 in `Game::dev_ui`.
 
 **How many entities can it handle?**
 Hundreds of thousands of simple entities update in a few milliseconds when systems run in parallel. Drawing is usually
 the limit before the ECS is: tens of thousands of sprites per frame are fine; more depends on the GPU. Measure with
-the overlay and `ph_bench_ecs`.
+the overlay and `bowl_bench_ecs`.
 
 **Can I use my own renderer, or skip the ECS?**
-The modules are separate libraries. Tools can link only `ph::core` and `ph::ecs`, for example. A game is expected to use
+The modules are separate libraries. Tools can link only `bowl::core` and `bowl::ecs`, for example. A game is expected to use
 the `app` module, which brings the renderer and the rest, but nothing forces a game to create entities.
 
 **How do I add a third-party library?**

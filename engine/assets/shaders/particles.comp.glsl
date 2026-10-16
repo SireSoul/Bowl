@@ -14,7 +14,7 @@ struct Particle {
     float spin;
 };
 
-struct Sprite { // ph::gfx::SpriteInstance
+struct Sprite { // bowl::gfx::SpriteInstance
     vec2 position;
     vec2 size;
     vec2 origin;

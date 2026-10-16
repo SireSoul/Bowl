@@ -1,20 +1,20 @@
 # Collision
 
-`ph/physics/collision.hpp` has the collision tools most 2D games need: overlap tests that say how to separate,
+`bowl/physics/collision.hpp` has the collision tools most 2D games need: overlap tests that say how to separate,
 swept boxes that never pass through walls, raycasts, a broadphase for many moving things, and `move_and_slide` for
-characters. `ph/physics/colliders.hpp` puts shapes on entities and reports trigger events. For forces, stacking and
+characters. `bowl/physics/colliders.hpp` puts shapes on entities and reports trigger events. For forces, stacking and
 bouncing there's optional [rigid-body physics](#rigid-body-physics) through Box2D, but most 2D games want tight,
 predictable movement more than a physics simulation.
 
 Everything works in any consistent unit: pixels, tiles, or the cell space of an isometric map.
 
 ```cpp
-#include "ph/physics/collision.hpp"
+#include "bowl/physics/collision.hpp"
 ```
 
 ## Shapes
 
-- `Rect` (from `ph/core/math.hpp`): `{x, y, w, h}`, top-left corner and size. `Rect::from_center(center, size)` makes
+- `Rect` (from `bowl/core/math.hpp`): `{x, y, w, h}`, top-left corner and size. `Rect::from_center(center, size)` makes
   one around a point.
 - `physics::Circle`: `{center, radius}`.
 - `physics::Capsule`: `{a, b, radius}`, a segment with thickness. Good for characters: it slides over small steps and
@@ -139,7 +139,7 @@ once, even when it spans several cells. Store it as a world resource to share it
 scale all apply, and it saves with the world and shows in the inspector like any component.
 
 ```cpp
-#include "ph/physics/colliders.hpp"
+#include "bowl/physics/colliders.hpp"
 
 using physics::Collider;
 world.create(ecs::Transform2D{{40, 80}}, Collider{.kind = Collider::Kind::Circle, .radius = 12, .layer = 0b01});
@@ -177,12 +177,12 @@ transform)` gives a collider's shape in the world, for raycasts and your own tes
 ## Rigid-body physics
 
 For stacking, tipping over, bouncing and joints of all kinds, Bowl can drive [Box2D v3](https://box2d.org). It's
-optional: configure with `-DPH_BOX2D=ON` (and `#if PH_BOX2D` in code that should build without it).
+optional: configure with `-DBOWL_BOX2D=ON` (and `#if BOWL_BOX2D` in code that should build without it).
 
 An entity with a `Transform2D`, a `Collider` (its shape) and a `RigidBody` is a body:
 
 ```cpp
-#include "ph/physics/rigid_bodies.hpp"
+#include "bowl/physics/rigid_bodies.hpp"
 
 using physics::RigidBody;
 world.create(ecs::Transform2D{{0, 400}}, Collider{.size = {800, 20}}, RigidBody{.type = RigidBody::Type::Static});

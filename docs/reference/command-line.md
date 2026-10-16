@@ -35,34 +35,34 @@ isometric --driver direct3d12 --night --frames 30 --screenshot d3d12.png
 
 Games add their own the same way: `if (engine.has_arg("--skip-intro")) ...`.
 
-## ph-shaderc
+## bowl-shaderc
 
 ```bash
-ph-shaderc <input.(vert|frag|comp).glsl> -o <output.phsh> [--depfile <file>] [-g] [--print-msl] [--print-hlsl]
+bowl-shaderc <input.(vert|frag|comp).glsl> -o <output.bowlsh> [--depfile <file>] [-g] [--print-msl] [--print-hlsl]
            [--include <prefix>=<folder>]
 ```
 
 | Option | |
 | --- | --- |
-| `-o <file>` | Write the `.phsh` bundle |
+| `-o <file>` | Write the `.bowlsh` bundle |
 | `--depfile <file>` | Write a Makefile-style list of the files the shader includes |
 | `-g` | Keep debug information in the SPIR-V |
 | `--print-msl` | Print the generated Metal source to stdout |
 | `--print-hlsl` | Print the generated HLSL to stdout |
-| `--include <prefix>=<folder>` | Look for includes that start with `prefix` in `folder`; repeatable. `ph_add_game` passes `engine/shaders/=<engine shader folder>` |
+| `--include <prefix>=<folder>` | Look for includes that start with `prefix` in `folder`; repeatable. `bowl_add_game` passes `engine/shaders/=<engine shader folder>` |
 | `-h`, `--help` | Usage |
 
 Exit codes: 0 on success, 1 for compile or file errors, 2 for bad arguments. The executable is in
-`build/<preset>/tools/shaderc/`. See [shaders.md](../guides/shaders.md#ph-shaderc).
+`build/<preset>/tools/shaderc/`. See [shaders.md](../guides/shaders.md#bowl-shaderc).
 
-## ph-atlas
+## bowl-atlas
 
 ```bash
-ph-atlas <folder or images...> -o <atlas.png> [--padding N] [--max N] [--no-trim] [--fps N]
+bowl-atlas <folder or images...> -o <atlas.png> [--padding N] [--max N] [--no-trim] [--fps N]
 ```
 
 Packs PNGs into one atlas image and writes sprite-sheet JSON with the same name next to it. See
-[sprite-animation.md](../guides/sprite-animation.md#packing-pictures-into-an-atlas-ph-atlas).
+[sprite-animation.md](../guides/sprite-animation.md#packing-pictures-into-an-atlas-bowl-atlas).
 
 | Option | Default | |
 | --- | --- | --- |
@@ -72,13 +72,13 @@ Packs PNGs into one atlas image and writes sprite-sheet JSON with the same name 
 | `--no-trim` | | Keep transparent edges |
 | `--fps N` | 10 | Speed of animations made from numbered files |
 
-## BOWL Editor
+## Bowl Editor
 
 See [editor.md](../guides/editor.md#starting-it).
 
 ## Test runner
 
-`ph_tests` accepts [doctest's options](https://github.com/doctest/doctest/blob/master/doc/markdown/commandline.md).
+`bowl_tests` accepts [doctest's options](https://github.com/doctest/doctest/blob/master/doc/markdown/commandline.md).
 The useful ones:
 
 | | |

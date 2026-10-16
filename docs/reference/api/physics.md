@@ -1,15 +1,15 @@
 # physics
 
-Made by `ph-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
-`cmake --build <build folder> --target ph_api_docs`.
+Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
+`cmake --build <build folder> --target bowl_api_docs`.
 
-- [ph/physics/colliders.hpp](#phphysicscollidershpp)
-- [ph/physics/collision.hpp](#phphysicscollisionhpp)
-- [ph/physics/rigid_bodies.hpp](#phphysicsrigid_bodieshpp)
+- [bowl/physics/colliders.hpp](#bowlphysicscollidershpp)
+- [bowl/physics/collision.hpp](#bowlphysicscollisionhpp)
+- [bowl/physics/rigid_bodies.hpp](#bowlphysicsrigid_bodieshpp)
 
-## ph/physics/colliders.hpp
+## bowl/physics/colliders.hpp
 
-`#include "ph/physics/colliders.hpp"` · namespace `ph::physics`
+`#include "bowl/physics/colliders.hpp"` · namespace `bowl::physics`
 
 ### Collider
 
@@ -38,7 +38,7 @@ struct Collider {
 ```
 
 ```cpp
-PH_COMPONENT(Collider, kind, size, radius, length, points, offset, trigger, layer, mask)
+BOWL_COMPONENT(Collider, kind, size, radius, length, points, offset, trigger, layer, mask)
 ```
 
 The collider's shape in the world.
@@ -93,9 +93,9 @@ Every entity whose collider overlaps `shape` and whose layer matches `mask`, tri
 std::vector<ecs::Entity> overlapping(ecs::World& world, const Shape& shape, u32 mask = 0xFFFFFFFFu);
 ```
 
-## ph/physics/collision.hpp
+## bowl/physics/collision.hpp
 
-`#include "ph/physics/collision.hpp"` · namespace `ph::physics`
+`#include "bowl/physics/collision.hpp"` · namespace `bowl::physics`
 
 Collision for games that move things around a world: overlap tests that say how to separate, swept boxes that
 never tunnel, raycasts, a spatial hash broadphase, and move_and_slide for characters. Shapes are rectangles,
@@ -290,12 +290,12 @@ template <class F> void query(const Rect& area, F&& f);
 usize size() const;
 ```
 
-## ph/physics/rigid_bodies.hpp
+## bowl/physics/rigid_bodies.hpp
 
-`#include "ph/physics/rigid_bodies.hpp"` · namespace `ph::physics`
+`#include "bowl/physics/rigid_bodies.hpp"` · namespace `bowl::physics`
 
 Rigid-body physics through Box2D v3: gravity, stacking, bouncing, things that tip over. Optional: build with
--DPH_BOX2D=ON (PH_BOX2D is then 1 in code). Most games don't need it: move_and_slide and triggers cover precise
+-DBOWL_BOX2D=ON (BOWL_BOX2D is then 1 in code). Most games don't need it: move_and_slide and triggers cover precise
 character movement better.
 
 A body is an entity with a Transform2D, a Collider (its shape) and a RigidBody:
@@ -330,7 +330,7 @@ struct RigidBody {
 ```
 
 ```cpp
-PH_COMPONENT(RigidBody, type, density, friction, restitution, linear_damping, angular_damping, gravity_scale,
+BOWL_COMPONENT(RigidBody, type, density, friction, restitution, linear_damping, angular_damping, gravity_scale,
              fixed_rotation, bullet, velocity, angular_velocity)
 ```
 
@@ -379,7 +379,7 @@ struct Joint {
 ```
 
 ```cpp
-PH_COMPONENT(Joint, kind, a, b, anchor_a, anchor_b, axis, length, min_length, max_length, collide, spring_hertz,
+BOWL_COMPONENT(Joint, kind, a, b, anchor_a, anchor_b, axis, length, min_length, max_length, collide, spring_hertz,
              spring_damping, limit, lower, upper, motor, motor_speed, max_motor_force)
 ```
 

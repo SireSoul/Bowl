@@ -41,7 +41,7 @@ The backend in use is printed at startup (`ready: 17 worker threads, metal backe
 
 SDL3 offers two ways to run a program: a classic `main()` with a loop, or callbacks (`SDL_AppInit`,
 `SDL_AppIterate`, `SDL_AppEvent`, `SDL_AppQuit`) that SDL calls. The web, iOS and Android need the callback style,
-because the operating system owns the loop there. The engine uses callbacks on every platform, through `PH_MAIN`, so
+because the operating system owns the loop there. The engine uses callbacks on every platform, through `BOWL_MAIN`, so
 a game written on a desktop doesn't need changes later.
 
 ## High-DPI displays
@@ -65,9 +65,9 @@ PulseAudio or ALSA, whichever is available.
 
 ## iOS and iPadOS
 
-Games build for iPhone and iPad as they are: the same code, the same `ph_add_game`. You need a Mac with Xcode.
+Games build for iPhone and iPad as they are: the same code, the same `bowl_add_game`. You need a Mac with Xcode.
 
-1. Build the tools the build runs (the shader compiler, `ph-icon`, `ph-pack`) for the Mac, once:
+1. Build the tools the build runs (the shader compiler, `bowl-icon`, `bowl-pack`) for the Mac, once:
 
    ```bash
    cmake --preset host-tools
@@ -93,11 +93,11 @@ Games build for iPhone and iPad as they are: the same code, the same `ph_add_gam
    ID), then build with `--preset ios-device` or run from Xcode:
 
    ```bash
-   cmake --preset ios -DPH_IOS_TEAM=ABCDE12345
+   cmake --preset ios -DBOWL_IOS_TEAM=ABCDE12345
    ```
 
 Each game is an app with its `NAME`, `BUNDLE_ID` and `ICON` (as an asset catalog), runs full screen in landscape
-(`ph_add_game(... ORIENTATION portrait)` or `any` to change that), and needs iOS 17 or later. Its assets are packed
+(`bowl_add_game(... ORIENTATION portrait)` or `any` to change that), and needs iOS 17 or later. Its assets are packed
 into the app as archives.
 
 Things that work differently on a phone or tablet:
@@ -115,12 +115,12 @@ Things that work differently on a phone or tablet:
 ## Cross-compiling
 
 To build for a platform that can't run the build tools (iOS, Android, consoles), build the tools for this machine
-first (the `host-tools` preset puts `ph-shaderc`, `ph-icon` and `ph-pack` in `build/host-tools/bin`) and point the
+first (the `host-tools` preset puts `bowl-shaderc`, `bowl-icon` and `bowl-pack` in `build/host-tools/bin`) and point the
 target build at them:
 
 ```bash
-cmake -B build/my-target ... -DPH_HOST_TOOLS=$PWD/build/host-tools/bin
+cmake -B build/my-target ... -DBOWL_HOST_TOOLS=$PWD/build/host-tools/bin
 ```
 
-The target build then uses those and builds none of its own. `PH_SHADERC_EXECUTABLE` points at just the shader
+The target build then uses those and builds none of its own. `BOWL_SHADERC_EXECUTABLE` points at just the shader
 compiler, for builds that need nothing else.

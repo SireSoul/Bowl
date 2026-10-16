@@ -1,4 +1,4 @@
-#include "ph/gfx/tilemap.hpp"
+#include "bowl/gfx/tilemap.hpp"
 
 #include <doctest/doctest.h>
 
@@ -6,10 +6,10 @@
 #include <format>
 #include <map>
 
-using namespace ph;
-using namespace ph::gfx;
+using namespace bowl;
+using namespace bowl::gfx;
 
-// Implemented by stb_image_write inside ph_gfx; reused here to build zlib-compressed layer data.
+// Implemented by stb_image_write inside bowl_gfx; reused here to build zlib-compressed layer data.
 extern "C" unsigned char* stbi_zlib_compress(unsigned char* data, int data_len, int* out_len, int quality);
 
 namespace {

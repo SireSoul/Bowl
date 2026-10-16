@@ -1,19 +1,19 @@
-#if PH_TEST_SHADERC
+#if BOWL_TEST_SHADERC
 
-#include "ph/core/file.hpp"
-#include "ph/shaderc/shaderc.hpp"
+#include "bowl/core/file.hpp"
+#include "bowl/shaderc/shaderc.hpp"
 
 #include <doctest/doctest.h>
 
 #include <filesystem>
 #include <string>
 
-using namespace ph;
+using namespace bowl;
 namespace fs = std::filesystem;
 
 namespace {
 shaderc::CompileResult compile_engine_shader(const char* file) {
-    fs::path path = fs::path(PH_ENGINE_ASSET_SOURCE_DIR) / "shaders" / file;
+    fs::path path = fs::path(BOWL_ENGINE_ASSET_SOURCE_DIR) / "shaders" / file;
     auto source = read_file_text(path);
     REQUIRE(source);
     shaderc::CompileOptions options;
@@ -127,7 +127,7 @@ void main() { out_color = premultiply(v_color); })";
     options.source_path = fs::temp_directory_path() / "game.frag.glsl"; // not next to the engine's shaders
     auto without = shaderc::compile_glsl(source, options);
     CHECK_FALSE(without.ok);
-    options.include_roots.emplace_back("engine/shaders/", fs::path(PH_ENGINE_ASSET_SOURCE_DIR) / "shaders");
+    options.include_roots.emplace_back("engine/shaders/", fs::path(BOWL_ENGINE_ASSET_SOURCE_DIR) / "shaders");
     auto with = shaderc::compile_glsl(source, options);
     INFO(with.log);
     CHECK(with.ok);

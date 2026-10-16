@@ -1,4 +1,4 @@
-#include "ph/platform/system.hpp"
+#include "bowl/platform/system.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-namespace ph {
+namespace bowl {
 
 namespace {
 
@@ -40,4 +40,4 @@ bool is_steam_deck() {
 
 void set_steam_deck(std::optional<bool> value) { override_deck = value; }
 
-} // namespace ph
+} // namespace bowl

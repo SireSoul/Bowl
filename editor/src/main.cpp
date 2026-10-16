@@ -2,6 +2,6 @@
 
 #include "editor.hpp"
 
-#include "ph/app/main.hpp"
+#include "bowl/app/main.hpp"
 
-PH_MAIN(ph::editor::Editor)
+BOWL_MAIN(bowl::editor::Editor)
