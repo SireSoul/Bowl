@@ -220,7 +220,10 @@ game is built on it; [CHANGELOG.md](CHANGELOG.md) records what changed.
 
 ## License
 
-No license has been chosen yet; until one is, all rights are reserved. Third-party code keeps its own license: SDL
-(zlib), stb (public domain or MIT), glslang (BSD-3-Clause and others), SPIRV-Cross (Apache-2.0), Dear ImGui (MIT),
-doctest (MIT) and the Roboto font (Apache-2.0, in `engine/assets/fonts`). Optional ones, fetched only when their
-option is on: Box2D (MIT), HarfBuzz (Old MIT), libogg, libopus and opusfile (BSD-3-Clause) and Tracy (BSD-3-Clause).
+BOWL is not open source: all rights are reserved ([LICENSE](LICENSE)). You're welcome to read the code, but not to
+use, copy or redistribute it without permission.
+
+Third-party code keeps its own license: SDL (zlib), stb (public domain or MIT), glslang (BSD-3-Clause and others),
+SPIRV-Cross (Apache-2.0), Dear ImGui (MIT), doctest (MIT) and the Roboto font (Apache-2.0, in `engine/assets/fonts`).
+Optional ones, fetched only when their option is on: Box2D (MIT), HarfBuzz (Old MIT), libogg, libopus and opusfile
+(BSD-3-Clause) and Tracy (BSD-3-Clause).

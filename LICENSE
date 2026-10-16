@@ -1,0 +1,12 @@
+Copyright (c) 2026 SireSoul. All rights reserved.
+
+This repository is public so that its source code can be read. It is not open source, and no license is granted.
+You may not use, copy, modify, merge, publish, distribute, sublicense or sell this software or any part of it, in
+source or binary form, without prior written permission from the copyright holder.
+
+Viewing and forking this repository on GitHub, as GitHub's Terms of Service allow for public repositories, is
+permitted. That grants no other rights.
+
+Third-party components keep their own licenses. The font in engine/assets/fonts is under the Apache License 2.0
+(see LICENSE-Apache-2.0.txt next to it). Dependencies downloaded at build time are under the licenses listed in the
+License section of README.md.
