@@ -280,9 +280,8 @@ TEST_CASE("text: COLR emoji are layers in palette colors") {
     CHECK(placed[1].color.a == 0.5f);
 }
 
-TEST_CASE("text: CBDT emoji are pictures, scaled to the text size") {
-    TinyFont tiny;
-    std::vector<u8> png = png_of(20, 0, 200, 0);
+// Gives the tiny font's 😀 (glyph 2) a 20 x 20 CBDT picture of one color, drawn 16 px above the baseline.
+void add_cbdt(TinyFont& tiny, const std::vector<u8>& png) {
     std::vector<u8> cblc, cbdt;
     TinyFont::be16(cblc, 3), TinyFont::be16(cblc, 0), TinyFont::be32(cblc, 1);
     TinyFont::be32(cblc, 56), TinyFont::be32(cblc, 16), TinyFont::be32(cblc, 1), TinyFont::be32(cblc, 0);
@@ -298,6 +297,11 @@ TEST_CASE("text: CBDT emoji are pictures, scaled to the text size") {
     cbdt.insert(cbdt.end(), png.begin(), png.end());
     tiny.tables.push_back({"CBLC", cblc});
     tiny.tables.push_back({"CBDT", cbdt});
+}
+
+TEST_CASE("text: CBDT emoji are pictures, scaled to the text size") {
+    TinyFont tiny;
+    add_cbdt(tiny, png_of(20, 0, 200, 0));
     auto font = gfx::Font::from_memory(nullptr, tiny.build(), "tiny cbdt");
     REQUIRE(font);
 
@@ -340,6 +344,26 @@ TEST_CASE("text: sbix emoji, and fonts without color tables") {
     REQUIRE(plain);
     CHECK_FALSE(plain->glyph(0x1F600, 20).color); // just the outline
     CHECK(plain->glyph(0x1F600, 20).visible);
+}
+
+TEST_CASE("text: fonts with only pictures load, like Noto Color Emoji") {
+    // Noto Color Emoji has CBDT pictures and no outlines at all: no glyf or loca table.
+    TinyFont tiny;
+    std::erase_if(tiny.tables, [](const auto& t) { return t.first == "glyf" || t.first == "loca"; });
+    add_cbdt(tiny, png_of(20, 0, 200, 0));
+    auto font = gfx::Font::from_memory(nullptr, tiny.build(), "pictures only");
+    REQUIRE(font);
+    CHECK(font->has_glyph(0x1F600));
+    const auto& g = font->glyph(0x1F600, 20);
+    REQUIRE(g.visible);
+    CHECK(g.color);
+    CHECK(g.source.w == 20);
+    CHECK(pixel(*font, g, 0.5f, 0.5f) == std::array<u8, 4>{0, 200, 0, 255});
+    CHECK(g.advance == doctest::Approx(20.0f)); // hmtx: 1000 units at 20 px per em
+
+    const auto& a = font->glyph('A', 20); // in the character map, but there's no picture or outline to draw
+    CHECK_FALSE(a.visible);
+    CHECK(a.advance == doctest::Approx(20.0f));
 }
 
 TEST_CASE("text: the system's emoji font, where there is one") {

@@ -60,6 +60,39 @@ struct Font::Face {
 
 namespace {
 
+// stbtt_InitFont needs outlines (glyf or CFF), and fonts made only of pictures, such as Noto Color Emoji (CBDT), have
+// none. This sets one up the way stbtt_InitFont would, for character lookup, metrics and kerning. numGlyphs 0 makes
+// every outline lookup come back empty instead of reading a glyf table that isn't there; the pictures come from the
+// font's color tables.
+bool init_bitmap_only_font(stbtt_fontinfo& info, const unsigned char* bytes, int start) {
+    auto* data = const_cast<unsigned char*>(bytes); // stb keeps a non-const pointer but only reads through it
+    auto table = [&](const char* tag) { return stbtt__find_table(data, static_cast<stbtt_uint32>(start), tag); };
+    stbtt_uint32 cmap = table("cmap");
+    info = {};
+    info.data = data;
+    info.fontstart = start;
+    info.cff = stbtt__new_buf(nullptr, 0);
+    info.head = static_cast<int>(table("head"));
+    info.hhea = static_cast<int>(table("hhea"));
+    info.hmtx = static_cast<int>(table("hmtx"));
+    info.kern = static_cast<int>(table("kern"));
+    info.gpos = static_cast<int>(table("GPOS"));
+    if (!cmap || !info.head || !info.hhea || !info.hmtx) return false;
+    info.numGlyphs = 0;
+    info.svg = -1;
+    for (stbtt_int32 i = 0, n = ttUSHORT(data + cmap + 2); i < n; ++i) { // a Unicode character map, as stb picks
+        stbtt_uint32 record = cmap + 4 + 8 * static_cast<stbtt_uint32>(i);
+        stbtt_uint16 platform = ttUSHORT(data + record), encoding = ttUSHORT(data + record + 2);
+        bool unicode = platform == STBTT_PLATFORM_ID_UNICODE ||
+                       (platform == STBTT_PLATFORM_ID_MICROSOFT &&
+                        (encoding == STBTT_MS_EID_UNICODE_BMP || encoding == STBTT_MS_EID_UNICODE_FULL));
+        if (unicode) info.index_map = static_cast<int>(cmap + ttULONG(data + record + 4));
+    }
+    if (!info.index_map) return false;
+    info.indexToLocFormat = ttUSHORT(data + info.head + 50);
+    return true;
+}
+
 // A color glyph's picture at `scale` (emoji): a PNG from sbix or CBDT, or COLR layers drawn in their palette colors.
 // Nothing for a plain glyph.
 std::optional<color::Bitmap> color_picture(const stbtt_fontinfo* info, std::span<const u8> data, const color::Tables& tables,
@@ -111,11 +144,18 @@ std::unique_ptr<Font> Font::from_memory(GpuDevice* device, std::vector<u8> ttf, 
     font->impl_->data = std::move(ttf);
     const unsigned char* data = font->impl_->data.data();
     int offset = stbtt_GetFontOffsetForIndex(data, 0);
-    if (offset < 0 || !stbtt_InitFont(&font->impl_->info, data, offset)) {
+    if (offset < 0) {
         error("font '{}': not a TrueType/OpenType font", name);
         return nullptr;
     }
     font->impl_->colors = color::find_tables(font->impl_->data, static_cast<u32>(offset));
+    const color::Tables& colors = font->impl_->colors;
+    bool bitmap_glyphs = colors.sbix || (colors.cblc && colors.cbdt);
+    if (!stbtt_InitFont(&font->impl_->info, data, offset) &&
+        !(bitmap_glyphs && init_bitmap_only_font(font->impl_->info, data, offset))) {
+        error("font '{}': not a TrueType/OpenType font", name);
+        return nullptr;
+    }
 #if BOWL_HARFBUZZ
     // HarfBuzz reads the same bytes (which the Impl keeps alive), the first font of a collection as stb does.
     hb_blob_t* blob = hb_blob_create(reinterpret_cast<const char*>(data), static_cast<unsigned>(font->impl_->data.size()),
