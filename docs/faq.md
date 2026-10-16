@@ -25,7 +25,8 @@ no fees or royalties. The build ships Bowl's `LICENSE` and `NOTICE` files with y
 mark them as changed.
 
 **Why "Bowl"?**
-The full name is Bowl Engine; everyone calls it Bowl. In code it's the namespace `bowl`.
+I was convinced by my friends. The full name is Bowl Engine, but everyone calls it Bowl. In
+code, it's the namespace `bowl`. This was a bad idea, and I regret it.
 
 ## Design
 
