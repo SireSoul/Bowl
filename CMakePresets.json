@@ -31,12 +31,46 @@
         "PH_MACOS_BUNDLES": "ON",
         "PH_PACK_ASSETS": "ON"
       }
+    },
+    {
+      "name": "host-tools",
+      "displayName": "Host tools (ph-shaderc, ph-icon, ph-pack for cross-compiled builds, in build/host-tools/bin)",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PH_DEV_TOOLS": "OFF",
+        "PH_BUILD_TESTS": "OFF",
+        "PH_BUILD_SAMPLES": "OFF",
+        "PH_BUILD_EDITOR": "OFF"
+      }
+    },
+    {
+      "name": "ios",
+      "displayName": "iOS and iPadOS (Xcode project; build host-tools first)",
+      "inherits": "base",
+      "generator": "Xcode",
+      "cacheVariables": {
+        "CMAKE_SYSTEM_NAME": "iOS",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "17.0",
+        "PH_DEV_TOOLS": "OFF",
+        "PH_FETCH_SDL": "ON",
+        "PH_BUILD_TESTS": "OFF",
+        "PH_BUILD_EDITOR": "OFF",
+        "PH_PACK_ASSETS": "ON",
+        "PH_HOST_TOOLS": "${sourceDir}/build/host-tools/bin"
+      }
     }
   ],
   "buildPresets": [
     { "name": "dev", "configurePreset": "dev", "configuration": "RelWithDebInfo" },
     { "name": "debug", "configurePreset": "debug", "configuration": "Debug" },
-    { "name": "release", "configurePreset": "release", "configuration": "Release" }
+    { "name": "release", "configurePreset": "release", "configuration": "Release" },
+    { "name": "host-tools", "configurePreset": "host-tools", "configuration": "Release",
+      "targets": ["ph-shaderc", "ph-icon", "ph-pack"] },
+    { "name": "ios-simulator", "configurePreset": "ios", "configuration": "Release",
+      "nativeToolOptions": ["-sdk", "iphonesimulator", "-arch", "arm64"] },
+    { "name": "ios-device", "configurePreset": "ios", "configuration": "Release",
+      "nativeToolOptions": ["-sdk", "iphoneos"] }
   ],
   "testPresets": [
     { "name": "dev", "configurePreset": "dev", "configuration": "RelWithDebInfo", "output": { "outputOnFailure": true } },

@@ -7,6 +7,7 @@
 #include <array>
 #include <bitset>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -92,8 +93,18 @@ public:
     f32 axis(GamepadAxis a, int pad = 0) const;
     void rumble(int pad, f32 low, f32 high, u32 milliseconds);
 
+    // Fingers on a touch screen, in window coordinates (logical points). A touch is listed from the frame it goes down
+    // (pressed) to the frame it lifts (released). Taps also click: the first finger moves the mouse and presses
+    // MouseButton::Left, so buttons and the UI work by touch as they are.
+    struct Touch {
+        u64 id = 0;
+        Vec2 position, start; // now, and where it went down
+        bool pressed = false, released = false;
+    };
+    std::span<const Touch> touches() const { return touches_; }
+
     // What the player used last: show gamepad buttons in prompts while it's a gamepad, keys while it's the keyboard.
-    enum class Device : u8 { KeyboardMouse, Gamepad };
+    enum class Device : u8 { KeyboardMouse, Gamepad, Touch };
     Device last_device() const { return last_device_; }
 
     // Text typed this frame (UTF-8), for name entry and chat.
@@ -165,6 +176,7 @@ private:
     std::array<std::bitset<code_count>, 2> pressed_, released_;
     Vec2 mouse_, mouse_delta_;
     f32 wheel_ = 0;
+    std::vector<Touch> touches_;
     std::string text_;
     std::array<SDL_Gamepad*, max_gamepads> pads_{};
     std::array<u32, max_gamepads> pad_ids_{};

@@ -43,6 +43,15 @@ Vec2 Window::pixel_size() const {
 
 f32 Window::pixel_density() const { return SDL_GetWindowPixelDensity(window_); }
 
+Rect Window::safe_area() const {
+    SDL_Rect r{};
+    if (!window_ || !SDL_GetWindowSafeArea(window_, &r)) {
+        Vec2 s = size();
+        return {0, 0, s.x, s.y};
+    }
+    return {static_cast<f32>(r.x), static_cast<f32>(r.y), static_cast<f32>(r.w), static_cast<f32>(r.h)};
+}
+
 void Window::set_title(std::string_view title) { SDL_SetWindowTitle(window_, std::string(title).c_str()); }
 
 void Window::set_fullscreen(bool fullscreen) { SDL_SetWindowFullscreen(window_, fullscreen); }

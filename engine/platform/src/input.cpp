@@ -45,6 +45,8 @@ void Input::begin_frame() {
     mouse_delta_ = {};
     wheel_ = 0;
     text_.clear();
+    std::erase_if(touches_, [](const Touch& t) { return t.released; });
+    for (Touch& t : touches_) t.pressed = false;
 }
 
 void Input::end_events() { update_axis_edges(0); }
@@ -81,15 +83,34 @@ void Input::handle_event(const SDL_Event& e) {
     case SDL_EVENT_MOUSE_BUTTON_DOWN:
     case SDL_EVENT_MOUSE_BUTTON_UP:
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && block_mouse_) break;
-        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) last_device_ = Device::KeyboardMouse;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.which != SDL_TOUCH_MOUSEID) last_device_ = Device::KeyboardMouse;
         set_down(static_cast<u16>(mouse_base + e.button.button), e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
         break;
     case SDL_EVENT_MOUSE_MOTION:
         mouse_ = {e.motion.x, e.motion.y};
         if (!block_mouse_) mouse_delta_ += {e.motion.xrel, e.motion.yrel};
-        // A real move, not the jiggle of a bumped desk.
-        if (!block_mouse_ && std::abs(e.motion.xrel) + std::abs(e.motion.yrel) > 4) last_device_ = Device::KeyboardMouse;
+        // A real move, not the jiggle of a bumped desk (or a finger: that's a touch).
+        if (!block_mouse_ && e.motion.which != SDL_TOUCH_MOUSEID && std::abs(e.motion.xrel) + std::abs(e.motion.yrel) > 4)
+            last_device_ = Device::KeyboardMouse;
         break;
+    case SDL_EVENT_FINGER_DOWN:
+    case SDL_EVENT_FINGER_MOTION:
+    case SDL_EVENT_FINGER_UP:
+    case SDL_EVENT_FINGER_CANCELED: {
+        // Finger positions come as 0..1 across the window.
+        int w = 0, h = 0;
+        if (SDL_Window* window = SDL_GetWindowFromID(e.tfinger.windowID)) SDL_GetWindowSize(window, &w, &h);
+        Vec2 at{e.tfinger.x * static_cast<f32>(w), e.tfinger.y * static_cast<f32>(h)};
+        auto it = std::find_if(touches_.begin(), touches_.end(), [&](const Touch& t) { return t.id == e.tfinger.fingerID && !t.released; });
+        if (e.type == SDL_EVENT_FINGER_DOWN) {
+            last_device_ = Device::Touch;
+            touches_.push_back({e.tfinger.fingerID, at, at, true, false});
+        } else if (it != touches_.end()) {
+            it->position = at;
+            if (e.type != SDL_EVENT_FINGER_MOTION) it->released = true;
+        }
+        break;
+    }
     case SDL_EVENT_MOUSE_WHEEL:
         if (!block_mouse_) wheel_ += e.wheel.y;
         break;
@@ -142,6 +163,7 @@ void Input::handle_event(const SDL_Event& e) {
         // Release everything so nothing stays held while the window is in the background.
         for (usize code = 0; code < code_count; ++code)
             if (down_.test(code)) set_down(static_cast<u16>(code), false);
+        for (Touch& t : touches_) t.released = true;
         break;
     default: break;
     }

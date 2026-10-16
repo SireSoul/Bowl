@@ -32,6 +32,9 @@ public:
     Vec2 size() const;
     Vec2 pixel_size() const;
     f32 pixel_density() const;
+    // The part of the window nothing covers, in logical points: on phones, inside the notch, the rounded corners and
+    // the home indicator. Keep buttons and text in it. The whole window elsewhere.
+    Rect safe_area() const;
 
     void set_title(std::string_view title);
     void set_fullscreen(bool fullscreen);

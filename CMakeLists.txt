@@ -17,6 +17,13 @@ option(PH_HARFBUZZ      "Shape text with HarfBuzz: Arabic, Indic and other compl
 option(PH_BUILD_EDITOR "Build Bowl Editor (needs PH_DEV_TOOLS)"                   ${PROJECT_IS_TOP_LEVEL})
 set(PH_SHADERC_EXECUTABLE "" CACHE FILEPATH
     "Prebuilt host ph-shaderc to use when cross-compiling (iOS, Android, consoles)")
+# Cross-compiling: the build runs ph-shaderc, ph-icon and ph-pack, so they come from a build for this machine (the
+# host-tools preset puts them in build/host-tools/bin) instead of being built for the target.
+set(PH_HOST_TOOLS "" CACHE PATH "Folder with ph-shaderc, ph-icon and ph-pack built for this machine, for cross-compiling")
+if(PH_HOST_TOOLS AND NOT PH_SHADERC_EXECUTABLE)
+    set(PH_SHADERC_EXECUTABLE "${PH_HOST_TOOLS}/ph-shaderc${CMAKE_HOST_EXECUTABLE_SUFFIX}" CACHE FILEPATH "" FORCE)
+endif()
+set(PH_TOOLS_DIR "${CMAKE_BINARY_DIR}/bin") # where the tools this build makes go
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,10 +43,12 @@ include(PhPackaging)
 
 add_subdirectory(tools/shaderc)
 add_subdirectory(engine)
-add_subdirectory(tools/atlas)
-add_subdirectory(tools/icon)
-add_subdirectory(tools/pack)
-add_subdirectory(tools/apidoc)
+if(NOT PH_HOST_TOOLS) # built for this machine; a cross build uses the host's instead
+    add_subdirectory(tools/atlas)
+    add_subdirectory(tools/icon)
+    add_subdirectory(tools/pack)
+    add_subdirectory(tools/apidoc)
+endif()
 
 if(PH_BUILD_TESTS)
     enable_testing()

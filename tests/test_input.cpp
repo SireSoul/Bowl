@@ -92,3 +92,34 @@ TEST_CASE("platform: Steam Deck detection can be overridden") {
     ph::set_steam_deck(std::nullopt);
     CHECK(ph::is_steam_deck() == detected);
 }
+
+TEST_CASE("input: touches last from the frame they go down to the frame they lift") {
+    Input input;
+    auto finger = [](Uint32 type, SDL_FingerID id) {
+        SDL_Event e{};
+        e.type = type;
+        e.tfinger.fingerID = id;
+        return e;
+    };
+    input.handle_event(finger(SDL_EVENT_FINGER_DOWN, 7));
+    REQUIRE(input.touches().size() == 1);
+    CHECK(input.touches()[0].id == 7);
+    CHECK(input.touches()[0].pressed);
+    CHECK(input.last_device() == Input::Device::Touch);
+
+    input.begin_frame();
+    CHECK_FALSE(input.touches()[0].pressed); // still down, no longer new
+    input.handle_event(finger(SDL_EVENT_FINGER_DOWN, 8));
+    input.handle_event(finger(SDL_EVENT_FINGER_UP, 7));
+    REQUIRE(input.touches().size() == 2);
+    CHECK(input.touches()[0].released);
+    CHECK(input.touches()[1].pressed);
+
+    input.begin_frame();
+    REQUIRE(input.touches().size() == 1); // the lifted one is gone
+    CHECK(input.touches()[0].id == 8);
+    SDL_Event lost{};
+    lost.type = SDL_EVENT_WINDOW_FOCUS_LOST;
+    input.handle_event(lost);
+    CHECK(input.touches()[0].released);
+}

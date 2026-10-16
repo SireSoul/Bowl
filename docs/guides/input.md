@@ -77,9 +77,25 @@ Convert the cursor to world coordinates with the camera: `engine.camera().screen
 
 Gamepads are picked up when they're connected, in up to four slots, and released when they're unplugged.
 
-`input.last_device()` says what the player used last, `Input::Device::KeyboardMouse` or `Input::Device::Gamepad`.
-Use it to show the right prompts ("Press A" or "Press Space") and switch the moment the player does. A stick only
-counts once it's pushed past halfway, and the mouse once it really moves, so drift and a bumped desk don't flip it.
+`input.last_device()` says what the player used last: `Input::Device::KeyboardMouse`, `Gamepad` or `Touch`. Use it
+to show the right prompts ("Press A" or "Press Space") and switch the moment the player does. A stick only counts once
+it's pushed past halfway, and the mouse once it really moves, so drift and a bumped desk don't flip it.
+
+### Touch
+
+On touch screens, `input.touches()` lists the fingers down this frame, in window coordinates:
+
+```cpp
+for (const Input::Touch& t : input.touches()) {
+    if (t.pressed) start_drag(t.id, t.position);  // went down this frame
+    else if (t.released) end_drag(t.id);          // lifted this frame
+    else drag(t.id, t.position - t.start);        // held: `start` is where it went down
+}
+```
+
+A touch is listed from the frame it goes down to the frame it lifts, so a quick tap is never missed. Taps are also
+mouse clicks (the first finger moves the mouse and presses `MouseButton::Left`), so anything bound to the mouse, and
+the UI, works by touch without changes. Touches are per frame: read them in `update`, not `fixed_update`.
 
 ## Rebinding
 

@@ -32,7 +32,9 @@ Set them on the configure line (`-DPH_DEV_TOOLS=OFF`) or in your own presets.
 | `PH_BOX2D` | `OFF` | Rigid-body physics through Box2D v3 ([collision.md](../guides/collision.md)) |
 | `PH_OPUS` | `OFF` | Ogg Opus sounds and music; fetches libogg, libopus and opusfile ([audio.md](../guides/audio.md#opus)) |
 | `PH_HARFBUZZ` | `OFF` | Shape text with HarfBuzz: joined Arabic, Indic scripts, ligatures ([text.md](../guides/text.md#right-to-left-text-and-shaping)) |
-| `PH_SHADERC_EXECUTABLE` | empty | A prebuilt host `ph-shaderc` for cross-compiling; when set, the shader compiler isn't built |
+| `PH_HOST_TOOLS` | empty | Cross-compiling: a folder with `ph-shaderc`, `ph-icon` and `ph-pack` built for this machine (the `host-tools` preset makes `build/host-tools/bin`); the build uses them instead of building its own |
+| `PH_SHADERC_EXECUTABLE` | empty | A prebuilt host `ph-shaderc` for cross-compiling; when set, the shader compiler isn't built (`PH_HOST_TOOLS` sets it) |
+| `PH_IOS_TEAM` | empty | iOS: the Apple development team that signs apps for devices; empty signs ad hoc, for the simulator |
 | `PH_ECS_MAX_COMPONENTS` | 256 | (A preprocessor define, not a CMake option.) Maximum component types; a multiple of 64 |
 
 ## Presets
@@ -44,8 +46,11 @@ From `CMakePresets.json`. Each configure preset has a matching build preset; `de
 | `dev` | `RelWithDebInfo` | `PH_DEV_TOOLS=ON` |
 | `debug` | `Debug` | `PH_DEV_TOOLS=ON` |
 | `release` | `Release` | `PH_DEV_TOOLS=OFF`, `PH_FETCH_SDL=ON`, `PH_MACOS_BUNDLES=ON`, `PH_PACK_ASSETS=ON` |
+| `host-tools` | `Release` | Only the tools cross builds run; its build preset makes `ph-shaderc`, `ph-icon` and `ph-pack` |
+| `ios` | (Xcode) | The Xcode generator, `CMAKE_SYSTEM_NAME=iOS`, iOS 17, `PH_PACK_ASSETS=ON`, `PH_HOST_TOOLS=build/host-tools/bin`. Build presets `ios-simulator` and `ios-device` |
 
-All presets build into `build/<preset>` and export `compile_commands.json`.
+All presets build into `build/<preset>` and export `compile_commands.json`. The tools a build makes (`ph-shaderc`,
+`ph-icon`, `ph-pack`, `ph-atlas`, `ph-apidoc`) go in its `bin` folder.
 
 ## Targets
 
@@ -86,7 +91,8 @@ Turns an executable target into a game:
 | `NAME <name>` | The name players see: the macOS bundle name, Linux menus, installers. Default `<target>` |
 | `ICON <png>` | The application icon: a square PNG, 1024 x 1024 at best. Becomes the macOS `.icns`, the Windows `.ico` (in the `.exe`), the Linux PNG, and the window's icon |
 | `ICON_PIXEL_ART` | Scale the icon with hard pixel edges, for small pixel-art icons |
-| `BUNDLE_ID <id>` | macOS bundle identifier and Flatpak app id. Default `com.bowl.<target>` |
+| `BUNDLE_ID <id>` | macOS and iOS bundle identifier, Flatpak app id. Default `com.bowl.<target>` |
+| `ORIENTATION <which>` | iOS: `landscape` (the default), `portrait` or `any` |
 | `HOT_RELOAD` | Build the game's sources as `<target>_code`, a library the `<target>` host reloads when it's rebuilt (and rebuilds it when a source file is saved). Dev builds with CMake 3.27+; ignored elsewhere. See [hot-reload.md](../guides/hot-reload.md#game-code) |
 
 Add sources to the target before calling `ph_add_game` when using `HOT_RELOAD`: the sources are moved into the library

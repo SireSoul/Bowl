@@ -5,7 +5,8 @@ set(PH_MACOS_SIGN_IDENTITY "-" CACHE STRING
 set(PH_MACOS_ENTITLEMENTS "" CACHE FILEPATH "macOS: entitlements file for codesign (optional)")
 set(PH_WINDOWS_SIGN_COMMAND "" CACHE STRING
     "Windows: a command run on each installed .exe to sign it, as a list (e.g. signtool;sign;/fd;SHA256;/a;/tr;http://timestamp.digicert.com;/td;SHA256)")
-option(PH_LINUX_SHARE "Linux: also install the desktop file and icon under share/, and the game under bin/ (Flatpak, distro packages)" OFF)
+set(PH_IOS_TEAM "" CACHE STRING "iOS: Apple development team ID that signs apps for devices (empty: ad hoc, simulator only)")
+option(PH_LINUX_SHARE"Linux: also install the desktop file and icon under share/, and the game under bin/ (Flatpak, distro packages)" OFF)
 
 set(PH_CMAKE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 
@@ -18,17 +19,45 @@ function(_ph_quote out_var)
     set(${out_var} "${quoted}" PARENT_SCOPE)
 endfunction()
 
+# ph_host_tool(<out_var> <name>): the command for a build tool (ph-icon, ph-pack): the host's copy when cross-compiling
+# (PH_HOST_TOOLS), otherwise the one this build makes.
+function(ph_host_tool out_var name)
+    if(PH_HOST_TOOLS)
+        set(${out_var} "${PH_HOST_TOOLS}/${name}${CMAKE_HOST_EXECUTABLE_SUFFIX}" PARENT_SCOPE)
+    else()
+        set(${out_var} ${name} PARENT_SCOPE)
+    endif()
+endfunction()
+
 # The game's icon in every form its platform wants, and in the executable for the window (ph::embedded_icon).
 function(_ph_game_icon target icon pixel_art bundle)
     get_filename_component(icon_abs "${icon}" ABSOLUTE)
     set(dir "${CMAKE_CURRENT_BINARY_DIR}/${target}_icon")
     file(MAKE_DIRECTORY "${dir}")
-    set(args "${icon_abs}" --cpp "${dir}/icon.cpp")
-    set(outputs "${dir}/icon.cpp")
+    ph_host_tool(ph_icon ph-icon)
+    set(args "${icon_abs}")
+    set(outputs "")
+    if(NOT IOS) # iOS windows have no icon of their own
+        list(APPEND args --cpp "${dir}/icon.cpp")
+        list(APPEND outputs "${dir}/icon.cpp")
+        target_sources(${target} PRIVATE "${dir}/icon.cpp")
+    endif()
     if(pixel_art)
         list(APPEND args --pixel-art)
     endif()
-    if(APPLE)
+    if(IOS)
+        # An asset catalog with one 1024 x 1024 picture; Xcode makes every size from it.
+        set(catalog "${dir}/Assets.xcassets")
+        set(platform_icon "${catalog}/AppIcon.appiconset/icon-1024.png")
+        file(MAKE_DIRECTORY "${catalog}/AppIcon.appiconset")
+        file(CONFIGURE OUTPUT "${catalog}/Contents.json" CONTENT "{ \"info\": { \"author\": \"bowl\", \"version\": 1 } }\n")
+        file(CONFIGURE OUTPUT "${catalog}/AppIcon.appiconset/Contents.json" CONTENT [=[{
+  "images": [{ "filename": "icon-1024.png", "idiom": "universal", "platform": "ios", "size": "1024x1024" }],
+  "info": { "author": "bowl", "version": 1 }
+}
+]=])
+        list(APPEND args --png 1024 "${platform_icon}")
+    elseif(APPLE)
         set(platform_icon "${dir}/${target}.icns")
         list(APPEND args --icns "${platform_icon}")
     elseif(WIN32)
@@ -39,12 +68,15 @@ function(_ph_game_icon target icon pixel_art bundle)
         list(APPEND args --png 256 "${platform_icon}")
     endif()
     list(APPEND outputs "${platform_icon}")
-    add_custom_command(OUTPUT ${outputs} COMMAND ph-icon ${args} DEPENDS ph-icon "${icon_abs}"
+    add_custom_command(OUTPUT ${outputs} COMMAND ${ph_icon} ${args} DEPENDS ${ph_icon} "${icon_abs}"
         COMMENT "Making ${target}'s icons" VERBATIM)
-    target_sources(${target} PRIVATE "${dir}/icon.cpp")
     set_target_properties(${target} PROPERTIES PH_PLATFORM_ICON "${platform_icon}")
 
-    if(APPLE AND bundle)
+    if(IOS)
+        target_sources(${target} PRIVATE "${platform_icon}" "${catalog}")
+        set_source_files_properties("${catalog}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+        set_target_properties(${target} PROPERTIES XCODE_ATTRIBUTE_ASSETCATALOG_COMPILER_APPICON_NAME AppIcon)
+    elseif(APPLE AND bundle)
         target_sources(${target} PRIVATE "${platform_icon}")
         set_source_files_properties("${platform_icon}" PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
         set_target_properties(${target} PROPERTIES MACOSX_BUNDLE_ICON_FILE "${target}.icns")
@@ -92,7 +124,7 @@ endfunction()
 
 # Signs the installed game: codesign on macOS bundles, PH_WINDOWS_SIGN_COMMAND on Windows.
 function(_ph_sign_installed target bundle)
-    if(APPLE AND bundle AND PH_MACOS_SIGN_IDENTITY)
+    if(APPLE AND NOT IOS AND bundle AND PH_MACOS_SIGN_IDENTITY) # Xcode signs iOS apps (PH_IOS_TEAM)
         set(args codesign --force --sign "${PH_MACOS_SIGN_IDENTITY}")
         if(NOT PH_MACOS_SIGN_IDENTITY STREQUAL "-")
             list(APPEND args --options runtime --timestamp) # what notarization asks for

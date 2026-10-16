@@ -6,6 +6,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- iOS and iPadOS: the `ios` preset (Xcode project, iOS 17+; `ios-simulator` and `ios-device` build presets) and
+  `host-tools`; `ph_add_game` makes app bundles with an Info.plist, an asset-catalog icon and packed assets
+  (`ORIENTATION`, `PH_IOS_TEAM`). `PH_HOST_TOOLS` for cross builds. `Input::touches()` and `Device::Touch`,
+  `Window::safe_area()`, and `Engine::suspended()`: games stop updating and drawing in the background.
 - Right-to-left text: paragraphs mixing Hebrew or Arabic with left-to-right text are drawn in reading order, with
   mirrored brackets (`ph/gfx/bidi.hpp`, `TextStyle::direction`); typewriter reveals follow reading order.
 - Text shaping with HarfBuzz (`PH_HARFBUZZ`, `gfx::text_shaping()`): joined Arabic, Devanagari and other complex
@@ -106,6 +110,7 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- The tools a build makes (`ph-shaderc`, `ph-icon`, `ph-pack`, `ph-atlas`, `ph-apidoc`) are in its `bin` folder.
 - Systems' command buffers hand out stand-in ids (`Entity::is_placeholder`) that become real entities, in system and
   chunk order, when applied: entity ids are now the same every run whatever the thread count. Stand-ins in the
   buffer's commands and in reflected components' entity fields are swapped for the real ids.

@@ -123,6 +123,9 @@ public:
     f32 time_scale() const { return time_scale_; }
 
     void quit() { quit_ = true; }
+    // In the background (phones and tablets): nothing updates or draws until the game comes back. Save the game when
+    // SDL_EVENT_WILL_ENTER_BACKGROUND reaches Game::event, since the system may close it from there without warning.
+    bool suspended() const { return suspended_; }
 
 private:
     friend struct AppRunner;
@@ -149,7 +152,7 @@ private:
     f64 time_ = 0, accumulator_ = 0;
     f32 delta_ = 0, alpha_ = 0, time_scale_ = 1;
     u64 frame_ = 0, tick_ = 0;
-    bool paused_ = false, step_ = false, quit_ = false;
+    bool paused_ = false, step_ = false, quit_ = false, suspended_ = false;
 };
 
 } // namespace ph

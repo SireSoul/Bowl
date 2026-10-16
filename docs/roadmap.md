@@ -48,7 +48,9 @@ would otherwise be for.
 ## M5: everywhere
 - ~~Packaging: release builds with static SDL, macOS .app bundles, `cmake --install` layouts, app icons, code signing
   and notarization, installers (DMG, NSIS), Linux AppImage and Flatpak, Steam Deck checks, asset archives~~ (done)
-- iOS and Android projects (SDL3 already supports them; needs bundle and asset packaging)
+- ~~iOS and iPadOS: the `ios` preset, app bundles with icons and packed assets, touch input, the safe area,
+  backgrounding~~ (done; built for the simulator, not yet run on a simulator or device)
+- Android project (SDL3 supports it; needs the Android SDK and NDK, Gradle packaging and asset packaging)
 - Web build (Emscripten + WebGPU once SDL_GPU supports it)
 - Consoles through SDL's console ports (needs developer agreements)
 

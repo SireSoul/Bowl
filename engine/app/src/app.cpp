@@ -175,6 +175,10 @@ struct AppRunner {
 
     SDL_AppResult iterate() {
         Engine& e = *engine;
+        if (e.suspended_) { // in the background: nothing to update, and no drawing allowed
+            SDL_Delay(50);
+            return e.quit_ ? SDL_APP_SUCCESS : SDL_APP_CONTINUE;
+        }
         profiler::begin_frame();
         u64 now = SDL_GetTicksNS();
         f64 real_dt = std::min(static_cast<f64>(now - last_ticks) / 1e9, 0.25);
@@ -258,6 +262,19 @@ struct AppRunner {
     SDL_AppResult event(SDL_Event& ev) {
         Engine& e = *engine;
         if (ev.type == SDL_EVENT_QUIT) return SDL_APP_SUCCESS;
+        // Phones and tablets: in the background the GPU is off limits (iOS ends apps that use it), and the system may
+        // close the app without warning, so settings are saved on the way out.
+        if (ev.type == SDL_EVENT_WILL_ENTER_BACKGROUND) {
+            e.suspended_ = true;
+            e.settings_.save();
+            info("app: in the background");
+        } else if (ev.type == SDL_EVENT_DID_ENTER_FOREGROUND) {
+            e.suspended_ = false;
+            last_ticks = SDL_GetTicksNS(); // the time away isn't a frame
+            info("app: back in the foreground");
+        } else if (ev.type == SDL_EVENT_LOW_MEMORY) {
+            warn("app: the system is low on memory");
+        }
         dev->handle_event(ev);
         e.input_.handle_event(ev);
         game->event(e, ev);

@@ -121,10 +121,28 @@ f32 axis(GamepadAxis a, int pad = 0) const;
 void rumble(int pad, f32 low, f32 high, u32 milliseconds);
 ```
 
+#### Touch
+
+Fingers on a touch screen, in window coordinates (logical points). A touch is listed from the frame it goes down
+(pressed) to the frame it lifts (released). Taps also click: the first finger moves the mouse and presses
+MouseButton::Left, so buttons and the UI work by touch as they are.
+
+```cpp
+struct Touch {
+    u64 id = 0;
+    Vec2 position, start; // now, and where it went down
+    bool pressed = false, released = false;
+};
+```
+
+```cpp
+std::span<const Touch> touches() const;
+```
+
 What the player used last: show gamepad buttons in prompts while it's a gamepad, keys while it's the keyboard.
 
 ```cpp
-enum class Device : u8 { KeyboardMouse, Gamepad };
+enum class Device : u8 { KeyboardMouse, Gamepad, Touch };
 Device last_device() const;
 ```
 
@@ -261,6 +279,13 @@ Size in logical points (what game coordinates use) and in physical pixels (high-
 Vec2 size() const;
 Vec2 pixel_size() const;
 f32 pixel_density() const;
+```
+
+The part of the window nothing covers, in logical points: on phones, inside the notch, the rounded corners and
+the home indicator. Keep buttons and text in it. The whole window elsewhere.
+
+```cpp
+Rect safe_area() const;
 ```
 
 ```cpp

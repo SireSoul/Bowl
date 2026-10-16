@@ -10,7 +10,7 @@ everywhere; no `#ifdef`s are needed for the supported platforms.
 | Windows 10, 11 | x64 | Direct3D 12 (default), Vulkan | Built and tested on CI. Every CI run renders the isometric sample on Direct3D 12 through WARP (Microsoft's software renderer) and keeps the screenshot |
 | macOS | Apple silicon, Intel | Metal | Built and tested on CI. The main development platform |
 | Linux | x64 | Vulkan | Built and tested on CI (X11 and Wayland) |
-| iOS, iPadOS | arm64 | Metal | Not set up yet |
+| iOS 17+, iPadOS 17+ | arm64 | Metal | The engine and samples build for the simulator (the `ios` preset; see [below](#ios-and-ipados)). Not run on a simulator or device yet |
 | Android | arm64 | Vulkan | Not set up yet |
 | Web | wasm | (needs WebGPU in SDL_GPU) | Planned |
 | Consoles | | | Through SDL's console ports, which need developer agreements with each platform holder |
@@ -56,19 +56,71 @@ window has more physical pixels than points: `window().size()` is in points, `wi
 **Windows.** The default generator is Visual Studio, a multi-config generator: executables are in a
 `RelWithDebInfo` or `Release` subfolder. The editor can't load a game's code library there yet (`--game`).
 
-**macOS.** Release builds produce `.app` bundles; dev builds produce plain executables for faster iteration. Apps
-aren't signed or notarized yet, so other Macs show a Gatekeeper warning.
+**macOS.** Release builds produce `.app` bundles; dev builds produce plain executables for faster iteration.
+Installing signs bundles ad hoc; to ship without a Gatekeeper warning, sign with a Developer ID and notarize (see
+[packaging](packaging.md#signing-and-notarization)).
 
 **Linux.** SDL builds with X11 and Wayland support and picks one at runtime. Audio goes through PipeWire,
 PulseAudio or ALSA, whichever is available.
 
+## iOS and iPadOS
+
+Games build for iPhone and iPad as they are: the same code, the same `ph_add_game`. You need a Mac with Xcode.
+
+1. Build the tools the build runs (the shader compiler, `ph-icon`, `ph-pack`) for the Mac, once:
+
+   ```bash
+   cmake --preset host-tools
+   ```
+
+   ```bash
+   cmake --build --preset host-tools
+   ```
+
+2. Make the Xcode project, and build for the simulator:
+
+   ```bash
+   cmake --preset ios
+   ```
+
+   ```bash
+   cmake --build --preset ios-simulator
+   ```
+
+   Or open `build/ios/Bowl.xcodeproj` in Xcode, pick a game's scheme and a simulator, and run.
+
+3. For a real iPhone or iPad, give the project your Apple development team (Xcode → Settings → Accounts shows its
+   ID), then build with `--preset ios-device` or run from Xcode:
+
+   ```bash
+   cmake --preset ios -DPH_IOS_TEAM=ABCDE12345
+   ```
+
+Each game is an app with its `NAME`, `BUNDLE_ID` and `ICON` (as an asset catalog), runs full screen in landscape
+(`ph_add_game(... ORIENTATION portrait)` or `any` to change that), and needs iOS 17 or later. Its assets are packed
+into the app as archives.
+
+Things that work differently on a phone or tablet:
+
+- **Touch.** `input.touches()` lists the fingers on the screen. Taps also count as mouse clicks, so buttons and the
+  [UI](ui.md) work by touch without changes. `input.last_device()` is `Touch` after a touch. See [input](input.md).
+- **The safe area.** `window().safe_area()` is the part of the screen clear of the notch, the rounded corners and the
+  home indicator. Keep buttons and text inside it.
+- **The background.** When the player switches away, the game stops updating and drawing (iOS ends apps that use the
+  GPU in the background) and settings are saved; `engine.suspended()` is true until it comes back. iOS may close a
+  game in the background without warning, so save the game when `SDL_EVENT_WILL_ENTER_BACKGROUND` reaches
+  `Game::event`.
+- **No dev tools.** iOS builds are like `release`: no overlay, no hot reload, precompiled shaders.
+
 ## Cross-compiling
 
-To build for a platform that can't run the build tools (iOS, Android, consoles), build `ph-shaderc` for the host
-first and point the target build at it:
+To build for a platform that can't run the build tools (iOS, Android, consoles), build the tools for this machine
+first (the `host-tools` preset puts `ph-shaderc`, `ph-icon` and `ph-pack` in `build/host-tools/bin`) and point the
+target build at them:
 
 ```bash
-cmake -B build/ios ... -DPH_SHADERC_EXECUTABLE=/path/to/host/ph-shaderc
+cmake -B build/my-target ... -DPH_HOST_TOOLS=$PWD/build/host-tools/bin
 ```
 
-The engine then doesn't need to build the shader compiler for the target.
+The target build then uses those and builds none of its own. `PH_SHADERC_EXECUTABLE` points at just the shader
+compiler, for builds that need nothing else.

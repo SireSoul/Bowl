@@ -149,7 +149,7 @@ endfunction()
 #   HOT_RELOAD                   dev builds: the game's sources become <target>_code, a library the
 #                                <target> executable reloads whenever it's rebuilt (see ph/app/hot_reload.hpp)
 function(ph_add_game target)
-    cmake_parse_arguments(ARG "HOT_RELOAD;ICON_PIXEL_ART" "ASSETS;BUNDLE_ID;NAME;ICON" "" ${ARGN})
+    cmake_parse_arguments(ARG "HOT_RELOAD;ICON_PIXEL_ART" "ASSETS;BUNDLE_ID;NAME;ICON;ORIENTATION" "" ${ARGN})
     target_link_libraries(${target} PRIVATE ph::engine)
     ph_configure_target(${target})
     if(NOT ARG_NAME)
@@ -169,13 +169,48 @@ function(ph_add_game target)
     endif()
 
     set(bundle OFF)
-    if(APPLE AND NOT IOS AND PH_MACOS_BUNDLES)
+    if(IOS OR (APPLE AND PH_MACOS_BUNDLES))
         set(bundle ON)
     endif()
     if(ARG_ICON)
         _ph_game_icon(${target} "${ARG_ICON}" "${ARG_ICON_PIXEL_ART}" ${bundle})
     endif()
-    if(bundle)
+    if(IOS)
+        # An iOS app: everything at the top of the bundle, which Xcode signs (ad hoc for the simulator; PH_IOS_TEAM for
+        # devices).
+        if(NOT ARG_ORIENTATION)
+            set(ARG_ORIENTATION landscape)
+        endif()
+        set(PH_IOS_ORIENTATIONS "")
+        if(ARG_ORIENTATION STREQUAL "landscape" OR ARG_ORIENTATION STREQUAL "any")
+            string(APPEND PH_IOS_ORIENTATIONS "<string>UIInterfaceOrientationLandscapeLeft</string><string>UIInterfaceOrientationLandscapeRight</string>")
+        endif()
+        if(ARG_ORIENTATION STREQUAL "portrait" OR ARG_ORIENTATION STREQUAL "any")
+            string(APPEND PH_IOS_ORIENTATIONS "<string>UIInterfaceOrientationPortrait</string>")
+        endif()
+        if(ARG_ICON)
+            set(PH_IOS_ICON "<key>CFBundleIconName</key><string>AppIcon</string>")
+        else()
+            set(PH_IOS_ICON "")
+        endif()
+        configure_file("${PH_CMAKE_DIR}/Info-iOS.plist.in" "${CMAKE_CURRENT_BINARY_DIR}/${target}-Info.plist.in" @ONLY)
+        set_target_properties(${target} PROPERTIES
+            MACOSX_BUNDLE TRUE
+            MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_BINARY_DIR}/${target}-Info.plist.in"
+            MACOSX_BUNDLE_BUNDLE_NAME "${ARG_NAME}"
+            MACOSX_BUNDLE_GUI_IDENTIFIER "${ARG_BUNDLE_ID}"
+            MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+            MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+            XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "${ARG_BUNDLE_ID}"
+            XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2") # iPhone and iPad
+        if(PH_IOS_TEAM)
+            set_target_properties(${target} PROPERTIES XCODE_ATTRIBUTE_DEVELOPMENT_TEAM "${PH_IOS_TEAM}"
+                                                       XCODE_ATTRIBUTE_CODE_SIGN_STYLE Automatic)
+        else()
+            set_target_properties(${target} PROPERTIES XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "-")
+        endif()
+        set(dest "$<TARGET_BUNDLE_CONTENT_DIR:${target}>")
+    elseif(bundle)
         set_target_properties(${target} PROPERTIES
             MACOSX_BUNDLE TRUE
             MACOSX_BUNDLE_BUNDLE_NAME "${ARG_NAME}"
@@ -207,16 +242,17 @@ function(ph_add_game target)
         list(APPEND folders assets)
     endif()
     if(PH_PACK_ASSETS)
+        ph_host_tool(ph_pack ph-pack)
         foreach(folder IN LISTS folders)
             list(APPEND commands
-                COMMAND ph-pack "${dest}/${folder}" -o "${dest}/${folder}.phpak"
+                COMMAND ${ph_pack} "${dest}/${folder}" -o "${dest}/${folder}.phpak"
                 COMMAND ${CMAKE_COMMAND} -E rm -rf "${dest}/${folder}")
         endforeach()
     endif()
 
     add_custom_target(${target}_assets ${commands} DEPENDS ${shader_outputs} VERBATIM)
     add_dependencies(${target}_assets ph_engine_assets)
-    if(PH_PACK_ASSETS)
+    if(PH_PACK_ASSETS AND NOT PH_HOST_TOOLS)
         add_dependencies(${target}_assets ph-pack)
     endif()
     add_dependencies(${target} ${target}_assets)

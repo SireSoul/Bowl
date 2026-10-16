@@ -205,6 +205,13 @@ f32 time_scale() const;
 void quit();
 ```
 
+In the background (phones and tablets): nothing updates or draws until the game comes back. Save the game when
+SDL_EVENT_WILL_ENTER_BACKGROUND reaches Game::event, since the system may close it from there without warning.
+
+```cpp
+bool suspended() const;
+```
+
 ## ph/app/entry.hpp
 
 `#include "ph/app/entry.hpp"`

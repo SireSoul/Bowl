@@ -6,6 +6,7 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <unordered_map>
@@ -162,8 +163,18 @@ private:
                                     s_[pos_] == 'e' || s_[pos_] == 'E' || s_[pos_] == '+' || s_[pos_] == '-'))
             ++pos_;
         f64 value = 0;
+#if defined(__APPLE__)
+        // Apple's floating-point from_chars needs iOS 26 / macOS 26; strtod reads the same text ("C" locale, which
+        // games run in: nothing calls setlocale).
+        std::string number(s_.substr(start, pos_ - start));
+        char* end = nullptr;
+        value = std::strtod(number.c_str(), &end);
+        bool ok = !number.empty() && end == number.c_str() + number.size();
+#else
         auto [end, ec] = std::from_chars(s_.data() + start, s_.data() + pos_, value);
-        if (ec != std::errc() || end != s_.data() + pos_) {
+        bool ok = ec == std::errc() && end == s_.data() + pos_;
+#endif
+        if (!ok) {
             pos_ = start;
             return fail("malformed number");
         }

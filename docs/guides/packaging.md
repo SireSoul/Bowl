@@ -228,4 +228,4 @@ real Deck before shipping: performance, suspend and resume, and the on-screen ke
 
 These are on the [roadmap](../roadmap.md):
 
-- iOS and Android packaging.
+- Android packaging. (iOS apps come from the `ios` preset; see [platforms](platforms.md#ios-and-ipados).)

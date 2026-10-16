@@ -12,7 +12,7 @@ set_target_properties(ph_apidoc PROPERTIES FOLDER tools)
 add_executable(ph-apidoc src/main.cpp)
 target_link_libraries(ph-apidoc PRIVATE ph_apidoc)
 ph_configure_target(ph-apidoc)
-set_target_properties(ph-apidoc PROPERTIES FOLDER tools)
+set_target_properties(ph-apidoc PROPERTIES FOLDER tools RUNTIME_OUTPUT_DIRECTORY "${PH_TOOLS_DIR}")
 
 add_custom_target(ph_api_docs
     COMMAND ph-apidoc "${PH_ENGINE_SOURCE_DIR}" "${PROJECT_SOURCE_DIR}/docs/reference/api"
