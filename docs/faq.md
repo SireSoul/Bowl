@@ -19,6 +19,10 @@ the primary way to make games.
 No, and none is planned. Game code is C++, and game-code hot reload rebuilds and swaps it in when you save a file,
 which is the quick iteration a scripting language would otherwise be for.
 
+**Can I use it for a commercial game?**
+Yes. Bowl is under the [Apache License 2.0](../LICENSE): free for any game, free or paid, open or closed source, with
+no fees or royalties. Ship Bowl's `LICENSE` and `NOTICE` files with your game, and mark engine files you changed.
+
 **Why "Bowl"?**
 The full name is Bowl Engine; everyone calls it Bowl. In code it's the namespace `bowl`.
 

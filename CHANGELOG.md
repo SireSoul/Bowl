@@ -110,6 +110,7 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   troubleshooting, FAQ, contributing guide, issue and pull request templates.
 
 ### Changed
+- Bowl is under the Apache License 2.0 (`LICENSE`, `NOTICE`).
 - **Breaking**: the `ph` prefix is now `bowl` everywhere: the `bowl` namespace and `bowl/...` include paths,
   `BOWL_` macros and CMake options, `bowl_add_game` and the other CMake functions, the `bowl-shaderc`, `bowl-atlas`,
   `bowl-icon`, `bowl-pack` and `bowl-apidoc` tools, and the `.bowlpak` and `.bowlsh` file extensions. Archives, binary

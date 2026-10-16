@@ -12,6 +12,9 @@ How work on the engine is done: branches, building and testing, code style, comm
 - [Adding a dependency](#adding-a-dependency)
 - [Reporting bugs and asking for features](#reporting-bugs-and-asking-for-features)
 
+Bowl is under the [Apache License 2.0](LICENSE). Anything you contribute is under it too (section 5 of the license),
+and you keep the copyright of what you wrote.
+
 ## Branches and pull requests
 
 - `main` is the last known-good state. It only moves forward from `develop` when CI is green.

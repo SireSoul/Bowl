@@ -220,8 +220,9 @@ game is built on it; [CHANGELOG.md](CHANGELOG.md) records what changed.
 
 ## License
 
-Bowl is not open source: all rights are reserved ([LICENSE](LICENSE)). You're welcome to read the code, but not to
-use, copy or redistribute it without permission.
+Bowl is free and open source under the [Apache License 2.0](LICENSE). Use it for any game, free or paid, and change
+it as you need. A game that ships Bowl includes its [LICENSE](LICENSE) and [NOTICE](NOTICE) files, and engine files
+you changed say so. Copyright 2026 SireSoul.
 
 Third-party code keeps its own license: SDL (zlib), stb (public domain or MIT), glslang (BSD-3-Clause and others),
 SPIRV-Cross (Apache-2.0), Dear ImGui (MIT), doctest (MIT) and the Roboto font (Apache-2.0, in `engine/assets/fonts`).

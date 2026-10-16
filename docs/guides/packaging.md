@@ -222,6 +222,9 @@ real Deck before shipping: performance, suspend and resume, and the on-screen ke
 - **Version.** Set `project(my_game VERSION 1.2.0 ...)`; it goes into the macOS bundle.
 - **Logging.** Release builds log at `Info` by default; consider `Warn` in `AppConfig::log_level`, or add a log sink
   that writes a file players can send you.
+- **Bowl's license.** Ship Bowl's `LICENSE` and `NOTICE` files with your game, for example next to the executable
+  or in its credits; the Apache License 2.0 asks for both. Do the same for the licenses of the libraries your build
+  uses (the README's License section lists them).
 - **Check a clean machine.** Run the installed copy, not the build folder: it proves every asset was installed.
 
 ## Not done yet
