@@ -182,7 +182,8 @@ cmake --build build/release --target my_game_appimage
 
 This installs the game into `build/release/my_game.AppDir`, adds what an AppImage needs (`AppRun`, the desktop file and
 the icon, so the game needs an `ICON`), and packs it with
-[appimagetool](https://github.com/AppImage/appimagetool/releases) if that's on `PATH`. Without it, the AppDir is left
+[appimagetool](https://github.com/AppImage/appimagetool/releases) if that's on `PATH` (it also needs
+`desktop-file-validate`, from the `desktop-file-utils` package). Without it, the AppDir is left
 ready for you to pack. Build on the oldest distribution you support: an AppImage runs on systems as new as or newer
 than the one it was built on.
 

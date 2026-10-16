@@ -120,13 +120,13 @@ jobs:
           sudo apt-get install -y libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
             libxss-dev libxfixes-dev libxtst-dev libwayland-dev libxkbcommon-dev wayland-protocols libegl1-mesa-dev \
             libasound2-dev libpulse-dev libpipewire-0.3-dev libdbus-1-dev libudev-dev \
-            xvfb libvulkan1 mesa-vulkan-drivers
+            xvfb libvulkan1 mesa-vulkan-drivers desktop-file-utils
 
       - name: appimagetool
         run: |
           curl -fsSL -o "$RUNNER_TEMP/appimagetool" \
             https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage
-          sha256sum "$RUNNER_TEMP/appimagetool"
+          echo "46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1  $RUNNER_TEMP/appimagetool" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/appimagetool"
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
@@ -213,7 +213,9 @@ jobs:
       - name: Build for the simulator
         run: cmake --build --preset ios-simulator --target isometric
 
-      # Boot an iPhone simulator, install the app and run it until it quits after its frames.
+      # Boot an iPhone simulator, install the app and run it until it quits after its frames. The simulators on GitHub's
+      # Macs have a virtual GPU that SDL_GPU's Metal backend turns down, so there the run proves the app installs,
+      # launches and opens its window, and stops at the GPU; that one outcome is a warning, any other failure an error.
       - name: Run in the simulator
         run: |
           app=$(find build/ios -type d -path "*iphonesimulator*/isometric.app" | head -1)
@@ -226,12 +228,21 @@ jobs:
           xcrun simctl boot "$udid"
           xcrun simctl bootstatus "$udid" -b
           xcrun simctl install "$udid" "$app"
-          xcrun simctl launch --console-pty "$udid" "$id" --frames 120 --screenshot "$PWD/ios-simulator.png"
-          test -f ios-simulator.png
+          xcrun simctl launch --console-pty "$udid" "$id" --frames 120 --screenshot "$PWD/ios-simulator.png" \
+            2>&1 | tee ios-console.txt || true
+          if [ -f ios-simulator.png ]; then exit 0; fi
+          grep -q "on iOS" ios-console.txt || { echo "::error::the app didn't start"; exit 1; }
+          if grep -q "does not meet the hardware requirements for SDL_GPU" ios-console.txt; then
+            echo "::warning::The app launched and opened its window; this simulator's GPU can't run SDL_GPU, so nothing was drawn"
+            exit 0
+          fi
+          echo "::error::the app stopped before drawing a frame"; exit 1
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ios
-          path: ios-simulator.png
+          path: |
+            ios-simulator.png
+            ios-console.txt
           if-no-files-found: warn

@@ -14,6 +14,7 @@
     <key>CFBundleVersion</key><string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
     @BOWL_IOS_ICON@
     <key>LSRequiresIPhoneOS</key><true/>
+    <key>UIApplicationSupportsIndirectInputEvents</key><true/> <!-- a mouse or trackpad on an iPad -->
     <key>UILaunchScreen</key><dict/>
     <key>UIRequiredDeviceCapabilities</key><array><string>arm64</string><string>metal</string></array>
     <key>UIRequiresFullScreen</key><true/>
