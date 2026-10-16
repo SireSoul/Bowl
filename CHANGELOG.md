@@ -9,7 +9,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 - Fuzzers for everything that reads data a stranger could control (`tests/fuzz`, `BOWL_FUZZ`, the `fuzz` preset):
   network packets for `net::Host` and `net::Rendezvous`, `Address::read`, JSON text and binary, `json::TextDocument`,
   saved worlds and prefabs, XML, Tiled maps, Aseprite sheets, asset archives, fonts and pictures. libFuzzer with
-  AddressSanitizer and UBSan; `tests/fuzz/run.sh` runs them. See [CONTRIBUTING](CONTRIBUTING.md#fuzzing).
+  AddressSanitizer and UBSan; `tests/fuzz/run.sh` runs them, and CI runs each for 20 seconds on Linux. See
+  [CONTRIBUTING](CONTRIBUTING.md#fuzzing).
 
 ### Changed
 - Fonts are checked before stb_truetype reads them (it checks nothing itself): a font whose tables run past the end of

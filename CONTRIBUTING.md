@@ -132,6 +132,9 @@ the matching `tests/test_<area>.cpp` so it stays fixed without a fuzzer: inline 
 When you add a parser for files or packets that can come from outside the game, add a fuzzer for it: a `fuzz_<name>.cpp`
 next to the others, a `bowl_fuzzer(<name> <libraries>)` line in `tests/fuzz/CMakeLists.txt`, and seeds in `seeds.cpp`.
 
+CI's `fuzz` job builds the fuzzers on Linux and runs each for 20 seconds, carrying on from the corpus earlier runs left;
+when one finds something, the inputs and logs are attached to the run.
+
 ## Documentation
 
 - The headers document the API. Update the comment when you change a function, then regenerate the
