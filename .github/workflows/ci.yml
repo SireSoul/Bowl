@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  workflow_dispatch: # the Run workflow button on the Actions tab
 
 # A newer push to the same branch makes older runs pointless.
 concurrency:
