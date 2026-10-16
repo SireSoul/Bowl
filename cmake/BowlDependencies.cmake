@@ -6,9 +6,11 @@ set(FETCHCONTENT_QUIET ON)
 # Some dependencies still declare ancient cmake_minimum_required versions that CMake 4 refuses.
 set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
-# SYSTEM: third-party headers never trip our warning flags (-Wshadow etc. with -Werror on CI).
+# SYSTEM: third-party headers never trip our warning flags (-Wshadow etc. with -Werror on CI). INACTIVITY_TIMEOUT: a
+# download that stalls fails after a minute and CMake retries it, instead of waiting forever.
 function(bowl_fetch name url sha256)
-    FetchContent_Declare(${name} URL ${url} URL_HASH SHA256=${sha256} DOWNLOAD_EXTRACT_TIMESTAMP TRUE SYSTEM ${ARGN})
+    FetchContent_Declare(${name} URL ${url} URL_HASH SHA256=${sha256} DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        INACTIVITY_TIMEOUT 60 SYSTEM ${ARGN})
 endfunction()
 
 # SDL3: window, input, audio, GPU (Vulkan / Metal / D3D12), filesystem, threads

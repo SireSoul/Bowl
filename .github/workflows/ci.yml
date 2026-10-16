@@ -19,6 +19,8 @@ jobs:
         os: [ubuntu-24.04, windows-latest, macos-latest]
         preset: [dev, release]
     runs-on: ${{ matrix.os }}
+    # Jobs take a few minutes (the Windows hot reload check can wait up to 15); anything stuck stops here, not at 6 h.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
