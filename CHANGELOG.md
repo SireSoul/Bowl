@@ -6,6 +6,13 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Asset cooking (`bowl-cook`, `tools/cook`): shipping builds with `BOWL_PACK_ASSETS` cook each folder before packing it
+  (`BOWL_COOK_ASSETS`, on by default), keeping every path. Worlds, prefabs and `lang/*.json` become binary JSON; Tiled
+  maps become one binary-JSON document with their tilesets and templates inside and layer data as plain arrays
+  (`gfx::Tilemap::flatten`); PNG and JPEG pictures become BWTX (`bowl/gfx/bwtx.hpp`), a QOI stream that decodes several
+  times faster. Everything else is copied. The tilemap, string table and sprite sheet loaders read binary JSON, and the
+  texture loader and `decode_png` read BWTX. A fuzzer for BWTX (`fuzz_bwtx`). See
+  [Packaging](docs/guides/packaging.md#cooking-assets).
 - Tiled layers with the bool property `above` draw over everything y-sorted, for what characters walk under (roofs,
   the tops of arches and gates), like Stardew Valley's Front layer. `TilemapCache` leaves them to `draw_tilemap` with
   `Layers::Sorted`.

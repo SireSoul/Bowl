@@ -67,7 +67,7 @@ PulseAudio or ALSA, whichever is available.
 
 Games build for iPhone and iPad as they are: the same code, the same `bowl_add_game`. You need a Mac with Xcode.
 
-1. Build the tools the build runs (the shader compiler, `bowl-icon`, `bowl-pack`) for the Mac, once:
+1. Build the tools the build runs (the shader compiler, `bowl-icon`, `bowl-cook`, `bowl-pack`) for the Mac, once:
 
    ```bash
    cmake --preset host-tools
@@ -120,8 +120,8 @@ Things that work differently on a phone or tablet:
 ## Cross-compiling
 
 To build for a platform that can't run the build tools (iOS, Android, consoles), build the tools for this machine
-first (the `host-tools` preset puts `bowl-shaderc`, `bowl-icon` and `bowl-pack` in `build/host-tools/bin`) and point the
-target build at them:
+first (the `host-tools` preset puts `bowl-shaderc`, `bowl-icon`, `bowl-cook` and `bowl-pack` in `build/host-tools/bin`)
+and point the target build at them:
 
 ```bash
 cmake -B build/my-target ... -DBOWL_HOST_TOOLS=$PWD/build/host-tools/bin

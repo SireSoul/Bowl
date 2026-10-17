@@ -4,6 +4,7 @@
 #include "bowl/core/log.hpp"
 
 #include <format>
+#include <span>
 
 namespace bowl {
 
@@ -22,9 +23,13 @@ static void flatten(const json::Value& v, const std::string& prefix, StringTable
 }
 
 bool StringTable::parse(std::string_view json_text, StringTable& out, std::string& error) {
-    auto parsed = json::parse(json_text);
+    // Text, or the binary JSON bowl-cook makes of it.
+    auto bytes = std::span(reinterpret_cast<const u8*>(json_text.data()), json_text.size());
+    auto parsed = json::parse_any(bytes);
     if (!parsed) {
-        error = std::format("{}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message);
+        error = json::is_binary(bytes)
+                    ? std::format("byte {}: {}", parsed.error->column, parsed.error->message)
+                    : std::format("{}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message);
         return false;
     }
     if (!parsed.value.is_object()) {

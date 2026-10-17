@@ -16,6 +16,7 @@
 #include <format>
 #include <optional>
 #include <span>
+#include <unordered_map>
 
 namespace bowl::gfx {
 
@@ -708,6 +709,163 @@ u32 MapLayer::at(i32 x, i32 y) const {
 
 // Tilemap
 
+namespace {
+
+using ReadFile = std::function<std::optional<std::string>(const std::string& path)>;
+
+// An external tileset file: .tsj, or .tsx turned into the same shape.
+std::optional<json::Value> read_tileset(const std::string& path, const ReadFile& read_file, std::string& error) {
+    auto text = read_file(path);
+    if (!text) {
+        error = std::format("can't read tileset '{}'", path);
+        return std::nullopt;
+    }
+    if (path.ends_with(".tsx")) {
+        auto parsed = xml::parse(*text);
+        if (!parsed || parsed.root.name != "tileset") {
+            error = parsed ? std::format("tileset '{}' has no <tileset>", path)
+                           : std::format("tileset '{}' {}:{}: {}", path, parsed.error->line, parsed.error->column,
+                                         parsed.error->message);
+            return std::nullopt;
+        }
+        return xml_tileset(parsed.root);
+    }
+    auto parsed = json::parse(*text);
+    if (!parsed) {
+        error = std::format("tileset '{}' {}:{}: {}", path, parsed.error->line, parsed.error->column,
+                            parsed.error->message);
+        return std::nullopt;
+    }
+    return std::move(parsed.value);
+}
+
+// Object templates (.tj, .tx): an object that names one gets the template's fields, with its own winning.
+class Templates {
+public:
+    // `first_gid` finds where the map numbers a tileset from (by its normalized path), for tile templates.
+    Templates(std::string_view base_dir, const ReadFile& read_file,
+              std::function<std::optional<u32>(const std::string& source)> first_gid)
+        : base_dir_(base_dir), read_file_(read_file), first_gid_(std::move(first_gid)) {}
+
+    json::Value expand(const json::Value& o) {
+        if (!o.contains("template")) return o;
+        std::string path = normalize_path(base_dir_ + std::string(o["template"].as_string()));
+        auto found = templates_.find(path);
+        if (found == templates_.end()) {
+            json::Value t;
+            if (auto text = read_file_(path)) {
+                if (path.ends_with(".tx")) {
+                    if (auto parsed = xml::parse(*text); parsed && parsed.root.name == "template") t = xml_template(parsed.root);
+                } else if (auto parsed = json::parse(*text)) {
+                    t = std::move(parsed.value);
+                }
+            }
+            if (t.is_null()) warn("tilemap: can't read object template '{}'", path);
+            else files.push_back(path);
+            found = templates_.emplace(path, std::move(t)).first;
+        }
+        const json::Value& t = found->second;
+        json::Value merged = t["object"];
+        merged.make_object();
+        // A tile template's gid is in its own tileset's numbering: move it onto the map's copy of that tileset.
+        if (merged.contains("gid") && t["tileset"].contains("source")) {
+            std::string source = normalize_path(dir_of(path) + std::string(t["tileset"]["source"].as_string()));
+            u32 gid = static_cast<u32>(merged["gid"].as_int());
+            u32 local = (gid & tile_gid_mask) - static_cast<u32>(t["tileset"]["firstgid"].as_int(1));
+            if (auto first = first_gid_(source)) merged.set("gid", static_cast<f64>((*first + local) | (gid & ~tile_gid_mask)));
+        }
+        for (const auto& [key, value] : o.object()) {
+            if (key == "template") continue;
+            if (key != "properties") {
+                merged.set(key, value);
+                continue;
+            }
+            // Properties one by one: the instance's replace the template's of the same name.
+            json::Value props = merged["properties"];
+            props.make_array();
+            for (const json::Value& p : value.array()) {
+                bool replaced = false;
+                for (json::Value& q : props.make_array())
+                    if (q["name"].as_string() == p["name"].as_string()) {
+                        q = p;
+                        replaced = true;
+                    }
+                if (!replaced) props.push(p);
+            }
+            merged.set("properties", std::move(props));
+        }
+        return merged;
+    }
+
+    std::vector<std::string> files; // the templates read
+
+private:
+    std::string base_dir_;
+    const ReadFile& read_file_;
+    std::function<std::optional<u32>(const std::string&)> first_gid_;
+    std::unordered_map<std::string, json::Value> templates_;
+};
+
+// `path` (normalized) as seen from the folder `dir` ("maps/"): "tiles/a.png" -> "../tiles/a.png".
+std::string relative_to(std::string_view dir, std::string_view path) {
+    usize common = 0; // length of the folders both start with
+    for (usize i = 0; i < dir.size() && i < path.size() && dir[i] == path[i]; ++i)
+        if (dir[i] == '/') common = i + 1;
+    std::string out;
+    for (usize i = common; i < dir.size(); ++i)
+        if (dir[i] == '/') out += "../";
+    return out + std::string(path.substr(common));
+}
+
+// Paths in a tileset from `from_dir`, rewritten to read the same from `to_dir`.
+void move_tileset(json::Value& ts, std::string_view from_dir, std::string_view to_dir) {
+    auto move = [&](json::Value& holder) {
+        if (json::Value* image = holder.find("image"); image && image->is_string())
+            *image = relative_to(to_dir, normalize_path(std::string(from_dir) + std::string(image->as_string())));
+    };
+    move(ts);
+    if (json::Value* tiles = ts.find("tiles"); tiles && tiles->is_array())
+        for (json::Value& t : tiles->make_array()) move(t);
+}
+
+// Layer data as plain arrays of gids, and objects with their templates filled in.
+bool flatten_layers(json::Value& layers, Templates& templates, std::string& error) {
+    if (!layers.is_array()) return true;
+    for (json::Value& l : layers.make_array()) {
+        std::string_view type = l["type"].as_string();
+        if (type == "group") {
+            if (json::Value* children = l.find("layers"))
+                if (!flatten_layers(*children, templates, error)) return false;
+        } else if (type == "objectgroup") {
+            if (json::Value* objects = l.find("objects"); objects && objects->is_array())
+                for (json::Value& o : objects->make_array()) o = templates.expand(o);
+        } else if (type == "tilelayer") {
+            std::string encoding(l["encoding"].as_string("csv")), compression(l["compression"].as_string());
+            auto decode = [&](json::Value& holder, u64 count) {
+                std::vector<u32> cells;
+                if (!decode_cells(holder["data"], encoding, compression, count, cells, error)) return false;
+                json::Array data;
+                data.reserve(cells.size());
+                for (u32 c : cells) data.emplace_back(c);
+                holder.set("data", std::move(data));
+                return true;
+            };
+            if (json::Value* chunks = l.find("chunks"); chunks && chunks->is_array()) {
+                for (json::Value& c : chunks->make_array())
+                    if (!decode(c, u64{static_cast<u32>(c["width"].as_int())} * static_cast<u32>(c["height"].as_int())))
+                        return false;
+            } else if (!decode(l, u64{static_cast<u32>(l["width"].as_int())} * static_cast<u32>(l["height"].as_int()))) {
+                return false;
+            }
+            l.erase("encoding");
+            l.erase("compression");
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
                     const std::function<std::optional<std::string>(const std::string&)>& read_file, Tilemap& out,
                     std::string& error) {
@@ -738,94 +896,85 @@ bool Tilemap::parse(const json::Value& doc, std::string_view base_dir,
     for (const json::Value& ref : doc["tilesets"].array()) {
         Tileset ts;
         if (ref.contains("source")) {
-            std::string source = std::string(ref["source"].as_string());
-            std::string path = normalize_path(std::string(base_dir) + source);
-            auto text = read_file(path);
-            if (!text) {
-                error = std::format("can't read tileset '{}'", path);
-                return false;
-            }
-            json::Value tileset_doc;
-            if (source.ends_with(".tsx")) {
-                auto parsed = xml::parse(*text);
-                if (!parsed || parsed.root.name != "tileset") {
-                    error = parsed ? std::format("tileset '{}' has no <tileset>", path)
-                                   : std::format("tileset '{}' {}:{}: {}", path, parsed.error->line,
-                                                 parsed.error->column, parsed.error->message);
-                    return false;
-                }
-                tileset_doc = xml_tileset(parsed.root);
-            } else {
-                auto parsed = json::parse(*text);
-                if (!parsed) {
-                    error = std::format("tileset '{}' {}:{}: {}", path, parsed.error->line, parsed.error->column,
-                                        parsed.error->message);
-                    return false;
-                }
-                tileset_doc = std::move(parsed.value);
-            }
-            if (!parse_tileset(tileset_doc, dir_of(path), ts, error)) return false;
+            std::string path = normalize_path(std::string(base_dir) + std::string(ref["source"].as_string()));
+            auto tileset_doc = read_tileset(path, read_file, error);
+            if (!tileset_doc || !parse_tileset(*tileset_doc, dir_of(path), ts, error)) return false;
             ts.source = path;
         } else if (!parse_tileset(ref, base_dir, ts, error)) {
             return false;
+        } else {
+            ts.source = std::string(ref["cookedfrom"].as_string()); // put in place by flatten()
         }
         ts.first_gid = static_cast<u32>(ref["firstgid"].as_int(1));
         out.tilesets.push_back(std::move(ts));
     }
     std::sort(out.tilesets.begin(), out.tilesets.end(), [](const Tileset& a, const Tileset& b) { return a.first_gid < b.first_gid; });
 
-    // Object templates (.tj, .tx): an object that names one gets the template's fields, with its own winning.
-    std::unordered_map<std::string, json::Value> templates;
-    auto expand = [&](const json::Value& o) -> json::Value {
-        if (!o.contains("template")) return o;
-        std::string path = normalize_path(std::string(base_dir) + std::string(o["template"].as_string()));
-        auto found = templates.find(path);
-        if (found == templates.end()) {
-            json::Value t;
-            if (auto text = read_file(path)) {
-                if (path.ends_with(".tx")) {
-                    if (auto parsed = xml::parse(*text); parsed && parsed.root.name == "template") t = xml_template(parsed.root);
-                } else if (auto parsed = json::parse(*text)) {
-                    t = std::move(parsed.value);
-                }
-            }
-            if (t.is_null()) warn("tilemap: can't read object template '{}'", path);
-            found = templates.emplace(path, std::move(t)).first;
+    Templates templates(base_dir, read_file, [&](const std::string& source) -> std::optional<u32> {
+        for (const Tileset& ts : out.tilesets)
+            if (ts.source == source) return ts.first_gid;
+        return std::nullopt;
+    });
+    return parse_layers(doc["layers"], {}, base_dir, out, [&](const json::Value& o) { return templates.expand(o); },
+                        error);
+}
+
+std::optional<json::Value> Tilemap::flatten(std::string_view text, std::string_view path,
+                                            const std::function<std::optional<std::string>(const std::string&)>& read_file,
+                                            std::vector<std::string>& files_read, std::string& error) {
+    std::string base_dir = dir_of(path);
+    json::Value doc;
+    if (path.ends_with(".tmx")) {
+        auto parsed = xml::parse(text);
+        if (!parsed) {
+            error = std::format("XML error at {}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message);
+            return std::nullopt;
         }
-        const json::Value& t = found->second;
-        json::Value merged = t["object"];
-        merged.make_object();
-        // A tile template's gid is in its own tileset's numbering: move it onto the map's copy of that tileset.
-        if (merged.contains("gid") && t["tileset"].contains("source")) {
-            std::string source = normalize_path(dir_of(path) + std::string(t["tileset"]["source"].as_string()));
-            u32 gid = static_cast<u32>(merged["gid"].as_int());
-            u32 local = (gid & tile_gid_mask) - static_cast<u32>(t["tileset"]["firstgid"].as_int(1));
-            for (const Tileset& ts : out.tilesets)
-                if (ts.source == source) merged.set("gid", static_cast<f64>((ts.first_gid + local) | (gid & ~tile_gid_mask)));
+        if (parsed.root.name != "map") {
+            error = "not a Tiled map (no <map> element)";
+            return std::nullopt;
         }
-        for (const auto& [key, value] : o.object()) {
-            if (key == "template") continue;
-            if (key != "properties") {
-                merged.set(key, value);
-                continue;
-            }
-            // Properties one by one: the instance's replace the template's of the same name.
-            json::Value props = merged["properties"];
-            props.make_array();
-            for (const json::Value& p : value.array()) {
-                bool replaced = false;
-                for (json::Value& q : props.make_array())
-                    if (q["name"].as_string() == p["name"].as_string()) {
-                        q = p;
-                        replaced = true;
-                    }
-                if (!replaced) props.push(p);
-            }
-            merged.set("properties", std::move(props));
+        doc = xml_map(parsed.root);
+    } else {
+        auto parsed = json::parse(text);
+        if (!parsed) {
+            error = std::format("JSON error at {}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message);
+            return std::nullopt;
         }
-        return merged;
-    };
-    return parse_layers(doc["layers"], {}, base_dir, out, expand, error);
+        doc = std::move(parsed.value);
+    }
+    if (!doc.is_object()) {
+        error = "not a Tiled map";
+        return std::nullopt;
+    }
+
+    std::vector<std::pair<std::string, u32>> first_gids; // external tilesets by path
+    if (json::Value* tilesets = doc.find("tilesets"); tilesets && tilesets->is_array()) {
+        for (json::Value& ref : tilesets->make_array()) {
+            if (!ref.contains("source")) continue;
+            std::string ts_path = normalize_path(base_dir + std::string(ref["source"].as_string()));
+            auto ts = read_tileset(ts_path, read_file, error);
+            if (!ts) return std::nullopt;
+            files_read.push_back(ts_path);
+            move_tileset(*ts, dir_of(ts_path), base_dir);
+            json::Value inlined;
+            if (ref.contains("firstgid")) inlined.set("firstgid", ref["firstgid"]);
+            for (const auto& [key, value] : ts->object())
+                if (key != "firstgid" && key != "source") inlined.set(key, value);
+            inlined.set("cookedfrom", ts_path);
+            first_gids.emplace_back(ts_path, static_cast<u32>(ref["firstgid"].as_int(1)));
+            ref = std::move(inlined);
+        }
+    }
+    Templates templates(base_dir, read_file, [&](const std::string& source) -> std::optional<u32> {
+        for (const auto& [p, first] : first_gids)
+            if (p == source) return first;
+        return std::nullopt;
+    });
+    if (json::Value* layers = doc.find("layers"))
+        if (!flatten_layers(*layers, templates, error)) return std::nullopt;
+    files_read.insert(files_read.end(), templates.files.begin(), templates.files.end());
+    return doc;
 }
 
 bool Tilemap::parse_tmx(std::string_view text, std::string_view base_dir,
@@ -1349,8 +1498,8 @@ void TilemapCache::submit(Renderer& renderer, GpuDevice& device, const Camera2D&
 
 void register_tilemap_loader(AssetManager& assets) {
     assets.register_loader<Tilemap>([](AssetLoadContext& ctx) -> std::unique_ptr<Tilemap> {
-        auto text = ctx.read_text(ctx.path());
-        if (!text) {
+        auto bytes = ctx.read(ctx.path());
+        if (!bytes) {
             log_asset_error(ctx.path(), "Tilemap", "file not found in any mount");
             return nullptr;
         }
@@ -1358,10 +1507,11 @@ void register_tilemap_loader(AssetManager& assets) {
         std::string error;
         auto read = [&](const std::string& path) { return ctx.read_text(path); }; // tracked: edits hot-reload
         bool ok = false;
-        if (ctx.path().ends_with(".tmx")) {
-            ok = Tilemap::parse_tmx(*text, dir_of(ctx.path()), read, *map, error);
-        } else {
-            auto parsed = json::parse(*text);
+        if (!json::is_binary(*bytes) && ctx.path().ends_with(".tmx")) {
+            std::string_view text(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+            ok = Tilemap::parse_tmx(text, dir_of(ctx.path()), read, *map, error);
+        } else { // .tmj, or any map bowl-cook flattened into binary JSON
+            auto parsed = json::parse_any(*bytes);
             if (!parsed) {
                 log_asset_error(ctx.path(), "Tilemap",
                                 std::format("JSON error at {}:{}: {}", parsed.error->line, parsed.error->column, parsed.error->message));

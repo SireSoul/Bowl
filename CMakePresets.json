@@ -46,7 +46,7 @@
     },
     {
       "name": "host-tools",
-      "displayName": "Host tools (bowl-shaderc, bowl-icon, bowl-pack for cross builds, in build/host-tools/bin)",
+      "displayName": "Host tools (bowl-shaderc, bowl-icon, bowl-cook, bowl-pack for cross builds, in build/host-tools/bin)",
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -79,7 +79,7 @@
     { "name": "release", "configurePreset": "release", "configuration": "Release" },
     { "name": "fuzz", "configurePreset": "fuzz", "configuration": "RelWithDebInfo" },
     { "name": "host-tools", "configurePreset": "host-tools", "configuration": "Release",
-      "targets": ["bowl-shaderc", "bowl-icon", "bowl-pack"] },
+      "targets": ["bowl-shaderc", "bowl-icon", "bowl-cook", "bowl-pack"] },
     { "name": "ios-simulator", "configurePreset": "ios", "configuration": "Release",
       "nativeToolOptions": ["-sdk", "iphonesimulator", "-arch", "arm64"] },
     { "name": "ios-device", "configurePreset": "ios", "configuration": "Release",

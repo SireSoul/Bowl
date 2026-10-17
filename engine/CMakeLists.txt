@@ -65,6 +65,7 @@ bowl_module(platform
 bowl_module(gfx
     SOURCES
         gfx/src/bidi.cpp
+        gfx/src/bwtx.cpp
         gfx/src/color_glyphs.cpp
         gfx/src/device.cpp
         gfx/src/gpu_particles.cpp

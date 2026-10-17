@@ -17,6 +17,7 @@ public:
     std::unordered_map<std::string, std::string> strings;
     const std::string* find(std::string_view key) const;
 
+    // `json_text` may also be the binary JSON bowl-cook makes of the file.
     static bool parse(std::string_view json_text, StringTable& out, std::string& error);
 };
 

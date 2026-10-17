@@ -11,6 +11,8 @@
 #include "bowl/core/archive.hpp"
 #include "bowl/core/file.hpp"
 #include "bowl/core/json.hpp"
+#include "bowl/gfx/bwtx.hpp"
+#include "bowl/gfx/renderer.hpp"
 #include "bowl/net/socket.hpp"
 
 #if defined(__clang__) || defined(__GNUC__)
@@ -404,6 +406,29 @@ void png_seeds() {
     seed("png", jpg);
 }
 
+// Cooked pictures (tests/test_cook.cpp): every kind of step the format has, and a real picture. The texture loader
+// reads them too, so they also seed the png fuzzer.
+void bwtx_seeds() {
+    auto both = [](const std::vector<u8>& bytes) {
+        seed("bwtx", bytes);
+        seed("png", bytes);
+    };
+    both(gfx::encode_bwtx(1, 1, std::vector<u8>{255, 0, 0, 255}));
+    std::vector<u8> steps;
+    for (int i = 0; i < 100; ++i) steps.insert(steps.end(), {10, 20, 30, 255}); // a run longer than 62
+    for (int i = 0; i < 64; ++i) // small and medium changes, wrapping past 255
+        steps.insert(steps.end(), {static_cast<u8>(250 + i), static_cast<u8>(i * 3), static_cast<u8>(i * 7), 255});
+    for (int i = 0; i < 16; ++i) { // colours seen before, big jumps, alpha changing
+        steps.insert(steps.end(), {255, 0, 0, 255});
+        steps.insert(steps.end(), {static_cast<u8>(i * 97), static_cast<u8>(i * 31), 200, static_cast<u8>(i * 16)});
+    }
+    both(gfx::encode_bwtx(14, 14, steps));
+    u32 w = 0, h = 0;
+    std::vector<u8> rgba;
+    if (gfx::decode_png(*read_file_bytes(fs::path(BOWL_SAMPLES_DIR) / "icon.png"), w, h, rgba))
+        both(gfx::encode_bwtx(w, h, rgba));
+}
+
 // Network packets (tests/test_net.cpp); see fuzz_host.cpp and fuzz_rendezvous.cpp for the steps
 
 void put16(std::vector<u8>& out, u16 v) { out.push_back(static_cast<u8>(v)), out.push_back(static_cast<u8>(v >> 8)); }
@@ -544,6 +569,7 @@ int main(int argc, char** argv) {
     archive_seeds();
     font_seeds();
     png_seeds();
+    bwtx_seeds();
     net_seeds();
     return 0;
 }
