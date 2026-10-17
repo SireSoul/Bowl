@@ -1,4 +1,4 @@
-![License](https://img.shields.io/badge/License-Apache%202.0-red) ![Language](https://img.shields.io/badge/Language-C%2B%2B20-red)
+![License](https://img.shields.io/badge/License-Apache%202.0-red) ![Language](https://img.shields.io/badge/Language-C%2B%2B20-green)
 
 # Bowl
 
