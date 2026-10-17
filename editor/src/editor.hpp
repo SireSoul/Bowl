@@ -3,12 +3,14 @@
 #include "document.hpp"
 #include "ui.hpp"
 
+#include "bowl/app/dev_link.hpp"
 #include "bowl/app/engine.hpp"
 #include "bowl/core/json_text.hpp"
 #include "bowl/gfx/tilemap.hpp"
 
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -20,9 +22,11 @@ namespace bowl::editor {
 // Bowl Editor: lays out levels (.world files) with the game's own renderer, so what you see is what the game shows.
 //
 //     bowl-editor [level.world] [--assets <folder>] [--game <game code library>] [--select <name>] [--resave]
+//                 [--attach [profiler|systems|entities]]
 //
 // --game loads a game's hot-reload library (lib<game>_code.so / .dylib) so its BOWL_COMPONENT types can be added and
-// edited. Without it, the game's components are kept as raw JSON. --resave rewrites the file and quits.
+// edited. Without it, the game's components are kept as raw JSON. --resave rewrites the file and quits. --attach opens
+// the Game tab (on that pane) attached to the first game running on this computer.
 class Editor final : public Game {
 public:
     AppConfig configure() override;
@@ -34,7 +38,7 @@ public:
 
 private:
     // The editor's three rooms: levels, the game's data files, and painting art.
-    enum class Workspace { Level, Data, Paint };
+    enum class Workspace { Level, Data, Paint, Game };
     enum class Tool { Select, Place, Pan, Brush, Region };
     enum class Drag { None, Move, Box, Pan };
 
@@ -130,6 +134,7 @@ private:
     void scan_data();
     void data_workspace(Engine& engine);
     void data_tree(const json::Value& value, json::TextDocument::Path& path, std::string_view label);
+    bool data_tree_fixed_ = false; // values only: no keys or items added or removed (a game's component)
     void data_open(usize index);
     bool data_save();
     void data_shortcuts(Engine& engine);
@@ -186,6 +191,27 @@ private:
     ecs::Entity brush_target_;          // the sprite the Brush is painting on
     int region_handle_ = -1; // the resize handle being dragged
     Vec2 region_anchor_;
+
+    // game.cpp: the Game workspace, attached to a running game through its dev link
+    void game_workspace(Engine& engine);
+    void game_update(Engine& engine); // every frame, whichever workspace shows
+    void game_profiler();
+    void game_systems();
+    void game_schedule(const char* label, const std::vector<ecs::SystemInfo>& systems);
+    void game_entities();
+    void game_access_note(Engine& engine, ecs::Entity e); // Level tab: which of the game's systems use its components
+    devlink::DevLinkClient link_;
+    std::vector<devlink::GameEntry> link_games_;
+    f64 link_scanned_ = -1e9;
+    std::string link_game_;               // the one attached to (or last attached to)
+    bool attach_first_ = false;           // --attach: to the first running game, as soon as there is one
+    int game_pane_ = 0;                   // 0 profiler, 1 systems, 2 entities
+    char link_filter_[64] = "";
+    u32 link_from_ = 0;
+    std::optional<std::pair<u32, u32>> link_watching_;
+    std::map<std::string, json::TextDocument> link_docs_; // the watched entity's components, as edited
+    std::optional<devlink::Schedules> known_schedules_;   // the last a game sent, kept in the editor's settings
+    std::string known_schedules_when_;
 
     Workspace workspace_ = Workspace::Level;
     std::unique_ptr<Document> doc_;

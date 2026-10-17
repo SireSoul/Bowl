@@ -21,6 +21,7 @@ The editor is built with the engine in dev builds (`build/dev/editor/bowl-editor
 | `--data`, `--paint` | Start in the Data or Paint workspace with its first file open |
 | `--select <name>` | Select the thing with this name at startup |
 | `--resave` | Open the level, save it in the current format and quit |
+| `--attach [profiler\|systems\|entities]` | Start in the Game workspace, attached to the first game running on this computer, on that pane |
 
 The first time it opens, a short welcome explains the basics. Rest the mouse on any button for what it does and its
 key; **F1** lists every key.
@@ -157,6 +158,25 @@ you can change, and as its text.
 - The text can be edited directly as well. While it doesn't parse, the tree shows where the mistake is.
 - **Ctrl+S** saves, **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo, **Revert** goes back to the file on disk. A
   running game reloads the file when it's saved.
+
+## The Game workspace
+
+The **Game** tab (**Ctrl+4**) attaches the editor to a game running on this computer, from a dev build: the game's
+own window keeps playing, and this one looks inside it. Running games are listed on the left; click one to attach,
+click it again to let go. Nothing on a network can attach: the game listens on this computer only, with a key in a file
+only you can read.
+
+- **Profiler:** frame times as a graph, and the profiler's zones averaged over the last second, slowest first. Pause,
+  step one fixed tick, or slow the game down or speed it up.
+- **Systems:** both schedules, each system with its batch, its time and a switch to turn it off in the game. A system
+  in the accent color starts a new batch: rest the mouse on it for why. **Access by component** is the same as a table.
+  The editor keeps the last schedules a game sent, so this pane, and an **In the game** note under a thing's components
+  in the Level tab ("Transform: written by integrate; read by draw"), still say what the game does when it isn't
+  running.
+- **Entities:** every entity, by name or what it's made of, a page at a time, with a filter that matches names and
+  component names. Pick one and its components show as values, changing as the game runs; change one and the game's
+  changes with it. Components that point at other entities are shown but not edited, since their JSON holds those
+  references as nothing.
 
 ## The Paint workspace
 

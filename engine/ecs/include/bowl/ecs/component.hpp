@@ -211,6 +211,11 @@ struct ComponentMask {
         for (usize i = 0; i < words.size(); ++i) m.words[i] = words[i] | o.words[i];
         return m;
     }
+    ComponentMask operator&(const ComponentMask& o) const {
+        ComponentMask m;
+        for (usize i = 0; i < words.size(); ++i) m.words[i] = words[i] & o.words[i];
+        return m;
+    }
     bool operator==(const ComponentMask&) const = default;
     usize hash() const {
         u64 h = 0xcbf29ce484222325ull;

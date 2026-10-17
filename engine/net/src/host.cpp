@@ -143,7 +143,7 @@ bool Host::start(const HostSettings& settings) {
     stop();
     settings_ = settings;
     random_ ^= static_cast<u64>(now_seconds() * 1e6) * 0x2545F4914F6CDD1Dull;
-    return socket_.open(settings.port, settings.ipv6);
+    return socket_.open(settings.port, settings.ipv6, settings.local_only);
 }
 
 void Host::stop() {

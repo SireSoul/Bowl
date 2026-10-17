@@ -328,6 +328,7 @@ bool contains(const ComponentMask& o) const;
 bool intersects(const ComponentMask& o) const;
 bool empty() const;
 ComponentMask operator|(const ComponentMask& o) const;
+ComponentMask operator&(const ComponentMask& o) const;
 bool operator==(const ComponentMask&) const = default;
 usize hash() const;
 template <class F> void for_each(F&& f) const;
@@ -490,6 +491,30 @@ struct SystemContext {
 };
 ```
 
+### SystemInfo
+
+What a schedule's system does and where it runs, for tools (the F1 overlay, Bowl Editor's Game tab).
+
+```cpp
+struct SystemInfo {
+    std::string name;
+    u32 batch = 0;     // systems in one batch run side by side
+    f64 ms = 0;        // its last run
+    bool enabled = true;
+    bool exclusive = false; // declared no access: runs alone
+    std::vector<std::string> reads, writes;                   // component names
+    std::vector<std::string> resource_reads, resource_writes; // resource type names
+    // Why it starts a new batch instead of joining the one before: "barrier", "exclusive", or the system it conflicts
+    // with and on what ("writes Position, which physics reads"). Empty for the first system and those that joined.
+    std::string why_new_batch;
+};
+```
+
+```cpp
+BOWL_REFLECT(SystemInfo, name, batch, ms, enabled, exclusive, reads, writes, resource_reads, resource_writes,
+             why_new_batch)
+```
+
 ### Schedule
 
 An ordered list of systems. Systems that declare non-conflicting access run in parallel; the result is always the
@@ -518,6 +543,8 @@ std::string name;
 std::function<void(SystemContext&)> fn;
 ComponentMask reads, writes;
 std::vector<TypeId> resource_reads, resource_writes;
+std::vector<std::string> resource_read_names, resource_write_names; // owned: a reloaded library's text goes
+std::string why_new_batch; // see SystemInfo
 bool exclusive = true;
 bool barrier_after = false;
 bool enabled = true;
@@ -601,6 +628,19 @@ Batches of system indices that run concurrently (for tools).
 
 ```cpp
 const std::vector<std::vector<usize>>& batches();
+```
+
+Every system in order, with its access and batch (for tools).
+
+```cpp
+std::vector<SystemInfo> describe();
+```
+
+Why a and b can't run side by side, as a sentence ("" when they can): "physics is exclusive", "ai writes Brain,
+which steering reads".
+
+```cpp
+std::string conflict_reason(const System& a, const System& b) const;
 ```
 
 ## bowl/ecs/world.hpp

@@ -142,12 +142,13 @@ endif()
 bowl_module(app
     SOURCES
         app/src/app.cpp
+        app/src/dev_link.cpp
         app/src/dev_tools.cpp
         app/src/icon.cpp
         app/src/hot_reload.cpp
         app/src/inspector.cpp
         app/src/scene.cpp
-    PUBLIC_DEPS bowl_core bowl_ecs bowl_platform bowl_gfx bowl_audio bowl_physics bowl_ui)
+    PUBLIC_DEPS bowl_core bowl_ecs bowl_platform bowl_gfx bowl_audio bowl_physics bowl_ui bowl_net)
 target_compile_definitions(bowl_app PRIVATE BOWL_ENGINE_ASSET_SOURCE_DIR="${BOWL_ENGINE_ASSET_SOURCE_DIR}")
 if(BOWL_DEV_TOOLS)
     target_link_libraries(bowl_app PRIVATE bowl_imgui)

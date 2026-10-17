@@ -16,6 +16,7 @@ add_executable(bowl_tests
     test_json.cpp
     test_math.cpp
     test_net.cpp
+    test_dev_link.cpp
     test_particles.cpp
     test_reflect.cpp
     test_replication.cpp

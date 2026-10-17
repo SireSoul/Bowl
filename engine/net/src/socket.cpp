@@ -183,7 +183,7 @@ Socket& Socket::operator=(Socket&& o) noexcept {
 
 bool Socket::is_open() const { return handle_ != -1; }
 
-bool Socket::open(u16 port, bool ipv6) {
+bool Socket::open(u16 port, bool ipv6, bool loopback) {
     start_sockets();
     close();
     Handle h = ::socket(ipv6 ? AF_INET6 : AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -195,7 +195,7 @@ bool Socket::open(u16 port, bool ipv6) {
         int off = 0;
         setsockopt(h, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&off), sizeof off);
     }
-    Address local = Address::any(port, ipv6);
+    Address local = loopback ? Address::loopback(port, ipv6) : Address::any(port, ipv6);
     if (::bind(h, static_cast<const sockaddr*>(local.data()), static_cast<socklen>(local.size())) != 0) {
         error("net: can't use port {} (in use?)", port);
         close_handle(h);

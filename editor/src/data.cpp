@@ -102,7 +102,7 @@ void Editor::data_tree(const json::Value& value, json::TextDocument::Path& path,
     ImGui::PushID(static_cast<int>(path.size()));
     std::string id = std::string(label);
     ImGui::PushID(id.c_str());
-    bool removable = !path.empty();
+    bool removable = !path.empty() && !data_tree_fixed_;
     auto remove_button = [&] {
         if (!removable) return;
         ImGui::SameLine(ImGui::GetContentRegionAvail().x + ImGui::GetCursorPosX() - 22);
@@ -125,17 +125,20 @@ void Editor::data_tree(const json::Value& value, json::TextDocument::Path& path,
                 // object's box shows its own typing.
                 char new_key[64] = "";
                 ImGui::SetNextItemWidth(160);
-                if (ImGui::InputTextWithHint("##newkey", "+ new key", new_key, sizeof new_key, ImGuiInputTextFlags_EnterReturnsTrue) &&
-                    new_key[0])
-                    data_edits_.push_back({DataEdit::Insert, path, json::Value(), new_key});
-                ui::tip("Adds a key to this object (its value starts empty: set it here or in the text)");
+                if (!data_tree_fixed_) {
+                    if (ImGui::InputTextWithHint("##newkey", "+ new key", new_key, sizeof new_key,
+                                                 ImGuiInputTextFlags_EnterReturnsTrue) &&
+                        new_key[0])
+                        data_edits_.push_back({DataEdit::Insert, path, json::Value(), new_key});
+                    ui::tip("Adds a key to this object (its value starts empty: set it here or in the text)");
+                }
             } else {
                 for (usize i = 0; i < value.size(); ++i) {
                     path.emplace_back(i);
                     data_tree(value[i], path, std::format("[{}]", i));
                     path.pop_back();
                 }
-                if (ui::tool_button("add", ui::Icon::Plus, false, "Add an item (a copy of the last one)", 22))
+                if (!data_tree_fixed_ && ui::tool_button("add", ui::Icon::Plus, false, "Add an item (a copy of the last one)", 22))
                     data_edits_.push_back({DataEdit::Insert, path, new_item_for(value), {}});
             }
             ImGui::TreePop();

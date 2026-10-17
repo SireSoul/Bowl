@@ -121,6 +121,7 @@ AppConfig Editor::configure() {
     config.window.height = 940;
     config.application = "Bowl Editor";
     config.dev_ui_always = true;
+    config.dev_link = false; // the editor attaches to games; nothing attaches to it
     return config;
 }
 
@@ -144,6 +145,14 @@ void Editor::init(Engine& engine) {
         else if (a == "--game" && has_value) game = args[++i];
         else if (a == "--select" && has_value) select_name_ = args[++i];
         else if (a == "--resave") resave_ = true;
+        else if (a == "--attach") {
+            attach_first_ = true;
+            workspace_ = Workspace::Game;
+            if (has_value && !args[i + 1].starts_with("--")) {
+                const std::string& pane = args[++i];
+                game_pane_ = pane == "systems" ? 1 : pane == "entities" ? 2 : 0;
+            }
+        }
         else if ((a == "--frames" || a == "--screenshot" || a == "--inspect" || a == "--driver" || a == "--lang") && has_value)
             ++i; // the engine's own flags
         else if (!a.starts_with("--")) file = a;
@@ -243,13 +252,14 @@ void Editor::update(Engine& engine, f32) {
             select_name_.clear();
         }
     }
-    // Ctrl+1/2/3 switch workspaces from anywhere.
+    // Ctrl+1/2/3/4 switch workspaces from anywhere.
     {
         Input& in = engine.input();
         bool cmd = in.down(Key::LeftCtrl) || in.down(Key::RightCtrl) || in.down(Key::LeftSuper) || in.down(Key::RightSuper);
         if (cmd && in.pressed(Key::Num1)) workspace_ = Workspace::Level;
         if (cmd && in.pressed(Key::Num2)) workspace_ = Workspace::Data;
         if (cmd && in.pressed(Key::Num3)) workspace_ = Workspace::Paint;
+        if (cmd && in.pressed(Key::Num4)) workspace_ = Workspace::Game;
     }
     if (workspace_ == Workspace::Level) {
         scene_mouse(engine);
@@ -573,7 +583,7 @@ void Editor::render(Engine& engine) {
         paint_render(engine);
         return;
     }
-    if (workspace_ == Workspace::Data) return;
+    if (workspace_ == Workspace::Data || workspace_ == Workspace::Game) return;
     ecs::World& world = engine.world();
     const gfx::Camera2D& cam = engine.camera();
     f32 px = 1.0f / cam.zoom;

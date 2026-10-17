@@ -6,6 +6,16 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Bowl Editor's **Game** tab (Ctrl+4, or `--attach`): attaches to a game running on this computer from a dev build and
+  shows its profiler (frame times, zones, pause, step and speed), its schedules (each system's batch, time and reads
+  and writes, why each batch starts, and a switch to turn it off) and its entities, whose components can be changed
+  while it runs. The game listens on the loopback address only, with a random key in a file only its user can read
+  (`devlink::DevLink`, `devlink::DevLinkClient` in `bowl/app/dev_link.hpp`; `AppConfig::dev_link` turns it off). The
+  editor keeps the last schedules a game sent, and the Level tab says which systems read and write a thing's components.
+- `Schedule::describe()` (an `ecs::SystemInfo` per system: batch, time, component and resource reads and writes, and
+  why it starts a new batch) and `Schedule::conflict_reason(a, b)`. The F1 overlay's Systems panel shows why each batch
+  starts and a table of which system reads and writes which component.
+- `HostSettings::local_only` (and `Socket::open`'s `loopback`): a host only this computer can reach.
 - Tiled layers with the bool property `above` draw over everything y-sorted, for what characters walk under (roofs,
   the tops of arches and gates), like Stardew Valley's Front layer. `TilemapCache` leaves them to `draw_tilemap` with
   `Layers::Sorted`.
