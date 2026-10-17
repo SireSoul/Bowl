@@ -94,6 +94,10 @@ struct ComponentInfo {
     json::Value (*save)(const void* ptr, serial::Context& ctx) = nullptr;
     bool (*load)(const json::Value& j, void* ptr, serial::Context& ctx) = nullptr;
     void (*visit)(void* ptr, reflect::FieldVisitor& v) = nullptr; // live editing (reflected only)
+    // Who registered it: the type's anchor and its module's (type_id.hpp). Two types can share a name (ones in
+    // anonymous namespaces or functions); these tell them apart.
+    const void* type_key = nullptr;
+    const void* module_key = nullptr;
     // Its code was in a game library that hot reload unloaded; the next registration of the name refreshes it.
     bool dormant = false;
     bool savable() const { return save != nullptr && !dormant; }
@@ -109,6 +113,8 @@ ComponentId register_component(const ComponentInfo& info);
 template <Component T> ComponentInfo make_component_info() {
     ComponentInfo info;
     info.name = type_name<T>();
+    info.type_key = &::bowl::detail::type_anchor<T>;
+    info.module_key = &::bowl::detail::module_anchor;
     if constexpr (!std::is_empty_v<T>) {
         info.size = sizeof(T);
         info.align = alignof(T);
@@ -143,6 +149,8 @@ template <Component T> ComponentInfo make_component_info() {
 const ComponentInfo& component_info(ComponentId id);
 usize component_type_count();
 // Looks a component type up by its type_name (e.g. "game::Health"). Only types used (or registered) so far exist.
+// Types that share a name (in anonymous namespaces in different files, say) are told apart by a number: the first
+// one registered has the plain name, the next "Name #2", and so on.
 std::optional<ComponentId> find_component(std::string_view name);
 
 namespace detail {

@@ -323,6 +323,7 @@ void HotReloadHost::check(Engine& engine) {
 
 namespace {
 bool code_in_library(const ecs::ComponentInfo& info, void* base) {
+    if (info.module_key && module_of(info.module_key) == base) return true; // registered by it (tags may have no code)
     const void* fns[] = {reinterpret_cast<const void*>(info.move_construct), reinterpret_cast<const void*>(info.destroy),
                          reinterpret_cast<const void*>(info.construct_default), reinterpret_cast<const void*>(info.save),
                          reinterpret_cast<const void*>(info.load), reinterpret_cast<const void*>(info.visit)};

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstring>
+#include <format>
 #include <mutex>
 #include <string>
 
@@ -15,6 +16,8 @@ namespace {
 struct Registry {
     std::array<ComponentInfo, max_components> infos;
     std::array<std::string, max_components> names; // owned: a registering module may be unloaded later
+    // The type_name each was registered under; `names` may add " #2" or " (before reload)" to it.
+    std::array<std::string, max_components> type_names;
     std::atomic<usize> count{0};
     std::mutex mutex;
 };
@@ -22,6 +25,12 @@ struct Registry {
 Registry& registry() {
     static Registry r;
     return r;
+}
+
+// Whether two registrations under one name can be the same type seen from two modules: any difference rules it out.
+bool same_shape(const ComponentInfo& a, const ComponentInfo& b) {
+    return a.size == b.size && a.align == b.align && a.trivially_relocatable == b.trivially_relocatable &&
+           !a.construct_default == !b.construct_default && !a.save == !b.save && !a.visit == !b.visit;
 }
 
 void relocate(const ComponentInfo& info, void* dst, void* src) {
@@ -41,26 +50,50 @@ ComponentId detail::register_component(const ComponentInfo& info) {
     usize count = r.count.load(std::memory_order_relaxed);
     // One id per type name, whichever module asks: the host and a hot-reloaded game library share ids. The first
     // registration's code is kept; a dormant one (its library was unloaded) is refreshed by the next registration.
-    for (usize i = 0; i < count; ++i)
-        if (r.names[i] == info.name) {
-            if (r.infos[i].dormant) {
-                const ComponentInfo& old = r.infos[i];
-                bool may_hold_data = old.size > 0 && old.trivially_relocatable; // kept in place across a reload
-                if (may_hold_data && (old.size != info.size || old.align != info.align || !info.trivially_relocatable)) {
-                    // The type changed shape while entities still hold the old one: that data stays under a renamed
-                    // type nothing asks for, and the name gets a fresh id.
-                    r.names[i] += " (before reload)";
-                    r.infos[i].name = r.names[i];
-                    continue;
-                }
-                r.infos[i] = info;
-                r.infos[i].name = r.names[i];
-                r.infos[i].dormant = false;
-            }
-            return static_cast<ComponentId>(i);
+    // Some names don't identify one type, though: every file's anonymous namespace prints the same, and Clang leaves
+    // the function out of a local type's name. So a registration under a known name is another type when it comes
+    // from the same module with a different anchor (a type has one per module), has a local name, or has a different
+    // shape; it gets an id of its own.
+    bool local = bowl::detail::name_is_local(info.name);
+    constexpr usize none = ~usize{0};
+    usize revive = none, misfit = none;
+    for (usize i = 0; i < count; ++i) {
+        if (r.type_names[i] != info.name) continue;
+        const ComponentInfo& old = r.infos[i];
+        if (old.dormant) {
+            // Plain data stays in place across a reload, so it has to keep fitting.
+            bool may_hold_data = old.size > 0 && old.trivially_relocatable;
+            bool fits =
+                !may_hold_data || (old.size == info.size && old.align == info.align && info.trivially_relocatable);
+            if (fits && revive == none) revive = i;
+            if (!fits && misfit == none) misfit = i;
+            continue;
         }
+        if (old.type_key == info.type_key) return static_cast<ComponentId>(i);
+        if (!local && old.module_key != info.module_key && same_shape(old, info)) return static_cast<ComponentId>(i);
+    }
+    if (revive != none) {
+        r.infos[revive] = info;
+        r.infos[revive].name = r.names[revive];
+        return static_cast<ComponentId>(revive);
+    }
+    if (misfit != none) {
+        // The type changed shape while entities still hold the old one: that data stays under a renamed type nothing
+        // asks for, and the name gets a fresh id.
+        r.names[misfit] += " (before reload)";
+        r.type_names[misfit] = r.names[misfit];
+        r.infos[misfit].name = r.names[misfit];
+    }
     BOWL_ASSERT(count < max_components, "too many component types: raise BOWL_ECS_MAX_COMPONENTS");
-    r.names[count] = std::string(info.name);
+    auto taken = [&](std::string_view name) {
+        for (usize i = 0; i < count; ++i)
+            if (r.names[i] == name) return true;
+        return false;
+    };
+    std::string name(info.name);
+    for (int n = 2; taken(name); ++n) name = std::format("{} #{}", info.name, n);
+    r.names[count] = std::move(name);
+    r.type_names[count] = std::string(info.name);
     r.infos[count] = info;
     r.infos[count].name = r.names[count];
     r.count.store(count + 1, std::memory_order_release);

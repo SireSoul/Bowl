@@ -11,6 +11,8 @@ add_executable(bowl_tests
     test_input.cpp
     test_jobs.cpp
     test_localization.cpp
+    test_local_types.cpp
+    local_types_other.cpp
     test_json.cpp
     test_math.cpp
     test_net.cpp

@@ -246,6 +246,14 @@ bool (*load)(const json::Value& j, void* ptr, serial::Context& ctx) = nullptr;
 void (*visit)(void* ptr, reflect::FieldVisitor& v) = nullptr; // live editing (reflected only)
 ```
 
+Who registered it: the type's anchor and its module's (type_id.hpp). Two types can share a name (ones in
+anonymous namespaces or functions); these tell them apart.
+
+```cpp
+const void* type_key = nullptr;
+const void* module_key = nullptr;
+```
+
 Its code was in a game library that hot reload unloaded; the next registration of the name refreshes it.
 
 ```cpp
@@ -265,6 +273,8 @@ usize component_type_count();
 ```
 
 Looks a component type up by its type_name (e.g. "game::Health"). Only types used (or registered) so far exist.
+Types that share a name (in anonymous namespaces in different files, say) are told apart by a number: the first
+one registered has the plain name, the next "Name #2", and so on.
 
 ```cpp
 std::optional<ComponentId> find_component(std::string_view name);

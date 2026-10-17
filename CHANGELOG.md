@@ -50,6 +50,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- ECS and type ids: types with the same name in two files' anonymous namespaces were taken for one type, since
+  their names print the same: two such components of different layouts shared a component id (corrupting memory),
+  and two such resource or asset types shared a `type_id`. Each now gets its own id, and the later component is
+  listed as "Name #2". Components declared in functions (which Clang names without the function) are told apart too.
+  Named types keep one id in every module, as hot reload needs.
 - `Lockstep` and `Rollback` kept any input a peer sent, for any tick: a peer sending far-off ticks filled memory. Inputs
   further ahead than a machine in step could be are now dropped.
 - A `CommandBuffer` cleared or destroyed without being applied kept the entity slots its `create()` had reserved for
