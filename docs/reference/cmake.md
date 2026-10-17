@@ -166,7 +166,6 @@ add_executable(my_game src/main.cpp)
 bowl_add_game(my_game ASSETS assets)
 ```
 
-While the repository is private, FetchContent needs Git credentials that can read it.
 
 In both cases, the engine's tests and samples are off (they default on only when the engine is the top-level
 project), and `BOWL_*` options can be set before `add_subdirectory` / `FetchContent_MakeAvailable` or on the command
