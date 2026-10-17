@@ -62,6 +62,9 @@ void Context::begin(gfx::SpriteBatch& batch, Input& input, Vec2 screen_size, f32
     auto move = [&](int step) {
         if (last_focus_order_.empty()) return;
         auto it = std::find(last_focus_order_.begin(), last_focus_order_.end(), focused_);
+        bool from_mouse = !key_focus_;
+        key_focus_ = true;
+        if (from_mouse && it != last_focus_order_.end()) return; // the first key takes what the mouse highlighted
         if (it == last_focus_order_.end()) {
             focused_ = step > 0 ? last_focus_order_.front() : last_focus_order_.back();
             return;
@@ -89,7 +92,7 @@ u64 Context::make_id(std::string_view label) const {
 }
 
 Rect Context::next_rect(f32 height) {
-    if (panels_.empty()) panels_.push_back({0, {0, 0, screen_.x, screen_.y}, style.padding}); // implicit root
+    if (panels_.empty()) panels_.push_back({0, {0, 0, screen_.x, screen_.y}, style.padding, false}); // implicit root
     Panel& p = panels_.back();
     Rect r{p.rect.x + style.padding, p.cursor_y, p.rect.w - 2 * style.padding, height};
     p.cursor_y += height + style.spacing;
@@ -97,20 +100,22 @@ Rect Context::next_rect(f32 height) {
 }
 
 Context::WidgetState Context::interact(u64 id, Rect r) {
-    focus_order_.push_back(id);
+    bool keys = !panels_.empty() && panels_.back().keys;
+    if (keys) focus_order_.push_back(id);
     WidgetState s{};
     s.hovered = r.contains(input_->mouse_position());
     if (s.hovered) {
         pointer_over_ui_ = true;
-        if (mouse_moved_) focused_ = id;
-        if (input_->pressed(MouseButton::Left)) {
-            active_ = id;
+        if (mouse_moved_ || input_->pressed(MouseButton::Left)) {
             focused_ = id;
+            key_focus_ = false; // shown as focused, but confirm isn't for it until keys move to it
         }
+        if (input_->pressed(MouseButton::Left)) active_ = id;
     }
     s.focused = focused_ == id;
     s.pressed = active_ == id && input_->down(MouseButton::Left);
-    s.activated = (active_ == id && s.hovered && input_->released(MouseButton::Left)) || (s.focused && confirm_);
+    s.key_focused = s.focused && key_focus_ && keys;
+    s.activated = (active_ == id && s.hovered && input_->released(MouseButton::Left)) || (s.key_focused && confirm_);
     return s;
 }
 
@@ -135,7 +140,7 @@ void Context::text(std::string_view s, Vec2 at, Color color, f32 size, gfx::Text
     gfx::draw_text(*batch_, *style.font, s, at, ts);
 }
 
-bool Context::begin_panel(std::string_view id, Rect rect) {
+bool Context::begin_panel(std::string_view id, Rect rect, bool keys) {
     u64 pid = fnv1a(id);
     if (rect.h <= 0) {
         auto it = panel_heights_.find(pid);
@@ -143,7 +148,7 @@ bool Context::begin_panel(std::string_view id, Rect rect) {
     }
     if (rect.h > 0) frame(rect, style.panel, style.border);
     if (rect.contains(input_->mouse_position())) pointer_over_ui_ = true;
-    panels_.push_back({pid, rect, rect.y + style.padding});
+    panels_.push_back({pid, rect, rect.y + style.padding, keys});
     return true;
 }
 
@@ -202,7 +207,7 @@ bool Context::slider(std::string_view label, f32& value, f32 min, f32 max) {
     f32 before = value;
     Rect track{r.x + r.w * 0.45f, r.y + r.h * 0.5f - 3, r.w * 0.55f - 10, 6};
     if (s.pressed) value = lerp(min, max, saturate((input_->mouse_position().x - track.x) / track.w));
-    if (s.focused) {
+    if (s.key_focused) {
         f32 step = (max - min) * 0.05f;
         if (left_) value -= step;
         if (right_) value += step;

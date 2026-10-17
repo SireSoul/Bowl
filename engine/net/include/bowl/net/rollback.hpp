@@ -89,7 +89,13 @@ public:
     bool receive(std::span<const u8> bytes) {
         auto m = InputMessage<Input>::decode(bytes);
         if (!m || m->player >= s_.players || m->player == s_.local) return false;
-        for (usize i = 0; i < m->inputs.size(); ++i) confirm(m->first_tick + static_cast<u32>(i), m->player, m->inputs[i]);
+        for (usize i = 0; i < m->inputs.size(); ++i) {
+            // No machine runs more than max_rollback past the inputs it has of this one, so nothing it sends is for
+            // further ahead than this. Beyond it, the inputs would only fill memory; a real one comes again anyway.
+            u64 t = u64{m->first_tick} + i;
+            if (t > u64{tick_} + redundancy_) break;
+            confirm(static_cast<u32>(t), m->player, m->inputs[i]);
+        }
         return true;
     }
 

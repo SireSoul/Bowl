@@ -14,6 +14,9 @@ namespace bowl::ui {
 // end; they return what happened. Works with the mouse, and with keyboard/gamepad focus (up/down to move, confirm to
 // press, left/right on sliders) through the input actions ui_up, ui_down, ui_left, ui_right, ui_confirm, ui_back
 // (bound to arrows/WASD, Enter/Space, Escape and the gamepad's d-pad, South and East unless the game binds them).
+// Those keys only reach widgets in panels that take them, and confirm only presses a widget they focused: the mouse
+// passing over a button doesn't leave it waiting for the Space the player jumps with. Widgets outside any panel, and
+// in panels begun with keys = false (a HUD, while the game's own keys are in use), are for the mouse only.
 //
 // Widgets draw into a batch you begin yourself with a screen camera, so your own HUD can share it:
 //
@@ -71,8 +74,9 @@ public:
     void begin(gfx::SpriteBatch& batch, Input& input, Vec2 screen_size, f32 dt, f32 pixel_density = 1);
     void end();
 
-    // A panel lays its widgets out top to bottom. rect.h = 0 grows to fit its contents (as of last frame).
-    bool begin_panel(std::string_view id, Rect rect);
+    // A panel lays its widgets out top to bottom. rect.h = 0 grows to fit its contents (as of last frame). keys: whether
+    // its widgets take keyboard and gamepad focus (menus); false for a HUD the game's own keys pass by.
+    bool begin_panel(std::string_view id, Rect rect, bool keys = true);
     void end_panel();
 
     void label(std::string_view text, Color color = {0, 0, 0, 0}, f32 size = 0);
@@ -95,9 +99,11 @@ private:
         u64 id;
         Rect rect;
         f32 cursor_y;
+        bool keys = false; // its widgets take keyboard and gamepad focus
     };
     struct WidgetState {
         bool hovered, focused, pressed, activated;
+        bool key_focused; // focused by keys or a gamepad in a panel that takes them: confirm and left/right are for it
     };
     WidgetState interact(u64 id, Rect r);
     Rect next_rect(f32 height);
@@ -115,6 +121,7 @@ private:
     std::unordered_map<u64, f32> panel_heights_;
     u64 focused_ = 0, active_ = 0;
     bool confirm_ = false, back_ = false, left_ = false, right_ = false;
+    bool key_focus_ = false; // focused_ was reached with keys or a gamepad, not the mouse: confirm presses it
     bool pointer_over_ui_ = false, mouse_moved_ = false;
     Vec2 last_mouse_;
     f32 blink_time_ = 0;

@@ -19,6 +19,11 @@ struct RendezvousSettings {
     u32 max_sessions = 10000;                // introductions remembered (each can be relayed)
     f32 room_timeout = 5;                    // a room goes when its host hasn't said it's still there for this long
     f32 session_timeout = 60;                // an introduction goes when nothing has been relayed for this long
+    // Introductions nothing has been relayed through yet: these go sooner, at most this many wait at once for one
+    // address (players behind one router share it), and when every slot is taken the oldest of them makes way. So
+    // join requests from forged addresses can't keep real players out for long.
+    f32 join_timeout = 10;
+    u32 max_joining_per_address = 32;
     u32 relay_bytes_per_second = 256 * 1024; // per introduction, each way; more is dropped
 };
 

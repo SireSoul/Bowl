@@ -173,6 +173,7 @@ private:
     // Entity id reservation, thread-safe while the world is locked (see CommandBuffer::create).
     Entity reserve_entity();
     void materialize_reserved();
+    void release_reserved(std::span<const Entity> reserved); // ids reserved but never spawned: free again
     void spawn_reserved(Entity e);
 
     Archetype& archetype_for(const ComponentMask& mask);
@@ -208,6 +209,7 @@ private:
     std::unordered_map<ComponentMask, Archetype*, ComponentMaskHash> by_mask_;
     Archetype* empty_ = nullptr;
     u64 layout_epoch_ = 0;
+    u32 resets_ = 0; // reset() calls: ids reserved before one mean nothing after it
     u32 next_archetype_id_ = 0;
 
     std::vector<std::unique_ptr<Hooks>> hooks_;

@@ -29,6 +29,14 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   [CONTRIBUTING](CONTRIBUTING.md#fuzzing).
 
 ### Changed
+- UI: confirm (Enter, Space, the gamepad's South) presses only a widget that keys or the gamepad moved focus to, in a
+  panel that takes keys. A button the mouse passed over is still highlighted but no longer waits for the Space the
+  player jumps with, and widgets outside any panel are for the mouse only. `begin_panel(id, rect, keys)` takes
+  `keys = false` for a HUD, so the game's WASD and Space don't move focus into it. The first key press after the mouse
+  highlighted a widget takes that widget.
+- `bowl-rendezvous`: introductions nothing has been relayed through go after `join_timeout` (10 s) instead of the
+  60 s session timeout; at most `max_joining_per_address` (32) wait at once for one address; and when every slot is
+  taken, the oldest of them makes way for a new player instead of the player being turned away.
 - **Breaking** for old clients of a new `bowl-rendezvous`: the server answers `ListRooms` with no more bytes than the
   request had, and `Host::list_rooms` pads its request to a full answer's size. A client from before this lists no
   rooms (it still gets the count).
@@ -42,6 +50,12 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- `Lockstep` and `Rollback` kept any input a peer sent, for any tick: a peer sending far-off ticks filled memory. Inputs
+  further ahead than a machine in step could be are now dropped.
+- A `CommandBuffer` cleared or destroyed without being applied kept the entity slots its `create()` had reserved for
+  good; it now hands them back (the handles it gave out stay dead).
+- `Localization::tr()` returned a view into the language's table, which a hot reload (or anything else that freed the
+  table) left dangling; the strings it returns now last as long as the `Localization`.
 - Physics: `collide` and `overlaps` on `Shape`s measured how far a shape inside another (on some axis) must move by
   the length they share, so a thin shape across a wide one wasn't pushed all the way out, and `contains` said no for
   every point inside a `Rect` or `Polygon` passed as a `Shape`.

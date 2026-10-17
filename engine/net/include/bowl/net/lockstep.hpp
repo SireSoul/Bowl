@@ -79,9 +79,13 @@ public:
         // Not one claiming to be this machine's player: it would take the place of the input local() sends.
         if (!m || m->player >= players_ || m->player == local_) return false;
         for (usize i = 0; i < m->inputs.size(); ++i) {
-            u32 t = m->first_tick + static_cast<u32>(i);
+            u64 t = u64{m->first_tick} + i;
             if (t < tick_) continue;
-            Row& r = row(t);
+            // Another machine is at most `delay` ticks past this one (it needs this one's inputs), so its inputs are
+            // for at most 2 * delay ticks ahead. Ones far beyond that aren't from a game in step with this one: kept,
+            // they'd fill memory for as long as it sent them.
+            if (t > u64{tick_} + max_ahead()) break;
+            Row& r = row(static_cast<u32>(t));
             if (!r.have[m->player]) set(r, m->player, m->inputs[i]);
         }
         return true;
@@ -108,6 +112,7 @@ public:
     }
 
 private:
+    u64 max_ahead() const { return 4 * u64{delay_} + 64; } // with room to spare: a reliable message comes only once
     struct Row {
         std::vector<Input> values;
         std::vector<bool> have;

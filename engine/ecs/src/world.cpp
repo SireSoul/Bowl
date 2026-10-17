@@ -41,6 +41,19 @@ void World::materialize_reserved() {
     free_cursor_.store(static_cast<i64>(free_.size()), std::memory_order_relaxed);
 }
 
+void World::release_reserved(std::span<const Entity> reserved) {
+    materialize_reserved();
+    for (Entity e : reserved) {
+        if (e.index >= records_.size()) continue;
+        Record& r = records_[e.index];
+        if (r.alive || r.generation != e.generation) continue; // spawned after all, or handed back already
+        u32 next = r.generation + 1; // the reserved handle stays dead
+        r.generation = next == 0 || next == Entity::placeholder_generation ? 1 : next;
+        free_.push_back(e.index);
+    }
+    free_cursor_.store(static_cast<i64>(free_.size()), std::memory_order_relaxed);
+}
+
 void World::spawn_reserved(Entity e) {
     Record& r = records_[e.index];
     BOWL_ASSERT(!r.alive && r.generation == e.generation, "spawning an entity id that wasn't reserved");
@@ -215,6 +228,7 @@ void World::reset() {
     free_.clear();
     free_cursor_.store(0, std::memory_order_relaxed);
     entity_count_ = 0;
+    ++resets_;
     empty_ = &archetype_for(ComponentMask{});
 }
 
@@ -278,7 +292,9 @@ reflect::FieldVisitor& World::placeholder_fixer() {
 
 CommandBuffer::CommandBuffer(CommandBuffer&& o) noexcept
     : world_(o.world_), commands_(std::move(o.commands_)), blocks_(std::move(o.blocks_)), block_used_(o.block_used_),
-      placeholder_tag_(o.placeholder_tag_), next_placeholder_(o.next_placeholder_), has_placeholders_(o.has_placeholders_) {
+      placeholder_tag_(o.placeholder_tag_), next_placeholder_(o.next_placeholder_), has_placeholders_(o.has_placeholders_),
+      reserved_(std::move(o.reserved_)), reserved_in_(o.reserved_in_) {
+    o.reserved_.clear();
     o.commands_.clear();
     o.blocks_.clear();
     o.block_used_ = 0;
@@ -296,6 +312,9 @@ CommandBuffer& CommandBuffer::operator=(CommandBuffer&& o) noexcept {
         placeholder_tag_ = o.placeholder_tag_;
         next_placeholder_ = o.next_placeholder_;
         has_placeholders_ = o.has_placeholders_;
+        reserved_ = std::move(o.reserved_);
+        reserved_in_ = o.reserved_in_;
+        o.reserved_.clear();
         o.commands_.clear();
         o.blocks_.clear();
         o.block_used_ = 0;
@@ -333,6 +352,8 @@ Entity CommandBuffer::create() {
         return e;
     }
     Entity e = world_->reserve_entity();
+    if (reserved_.empty()) reserved_in_ = world_->resets_;
+    reserved_.push_back(e);
     push<SpawnCommand>(e);
     return e;
 }
@@ -351,6 +372,7 @@ void CommandBuffer::apply() {
     // Detach storage first: applying may record new commands into this same buffer.
     std::vector<Command> commands = std::move(commands_);
     std::vector<Block> blocks = std::move(blocks_);
+    reserved_.clear(); // spawned below (any reserved while applying are new ones, for later)
     commands_.clear();
     blocks_.clear();
     block_used_ = 0;
@@ -377,7 +399,14 @@ void CommandBuffer::apply() {
     }
 }
 
+void CommandBuffer::release_reserved() {
+    if (reserved_.empty()) return;
+    if (reserved_in_ == world_->resets_) world_->release_reserved(reserved_);
+    reserved_.clear();
+}
+
 void CommandBuffer::clear() {
+    release_reserved();
     for (Command& c : commands_) c.destroy(c.payload);
     commands_.clear();
     if (blocks_.size() > 1) blocks_.erase(blocks_.begin(), blocks_.end() - 1);
@@ -392,6 +421,11 @@ void CommandBuffer::append(CommandBuffer&& other) {
     other.has_placeholders_ = false;
     other.next_placeholder_ = 0;
     commands_.insert(commands_.end(), other.commands_.begin(), other.commands_.end());
+    if (!other.reserved_.empty()) {
+        if (reserved_.empty()) reserved_in_ = other.reserved_in_;
+        reserved_.insert(reserved_.end(), other.reserved_.begin(), other.reserved_.end());
+        other.reserved_.clear();
+    }
     if (blocks_.empty()) {
         blocks_ = std::move(other.blocks_);
         block_used_ = other.block_used_;

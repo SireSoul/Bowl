@@ -729,6 +729,9 @@ void set_fallback(std::string_view code);
 const std::string& language() const;
 ```
 
+The string stays valid as long as this Localization does, even after the table reloads or the language changes
+(only `key` itself, given back when nothing has it, lives as long as the caller's).
+
 ```cpp
 std::string_view tr(std::string_view key) const;
 std::string format(std::string_view key, std::initializer_list<std::pair<std::string_view, std::string_view>> args) const;

@@ -131,6 +131,13 @@ the meantime are skipped.
 
 ```cpp
 void apply();
+```
+
+Drops the commands unapplied. Entity ids create() reserved go back to the world (their handles stay dead), so a
+buffer thrown away doesn't use up slots for good. (The destructor does the same: a buffer mustn't outlive its
+world.)
+
+```cpp
 void clear();
 bool empty() const;
 usize size() const;

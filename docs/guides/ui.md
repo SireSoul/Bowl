@@ -41,7 +41,7 @@ post-processing don't touch it.
 
 | Call | Returns |
 | --- | --- |
-| `begin_panel(id, rect)` / `end_panel()` | A panel; widgets inside are laid out top to bottom. `rect.h = 0` sizes it to its contents |
+| `begin_panel(id, rect, keys)` / `end_panel()` | A panel; widgets inside are laid out top to bottom. `rect.h = 0` sizes it to its contents. `keys = false` keeps keyboard and gamepad focus out (a HUD) |
 | `label(text, color, size)` | Text. Pass a zero color or size for the style's defaults |
 | `button(text)` | `true` the update it's pressed |
 | `checkbox(text, value)` | `true` when toggled; updates `value` |
@@ -68,6 +68,18 @@ binds these the first time it runs:
 | `ui_up` / `ui_down` / `ui_left` / `ui_right` | arrows, WASD | d-pad, left stick |
 | `ui_confirm` | Enter, Space | South (A / Cross) |
 | `ui_back` | Escape | East (B / Circle) |
+
+Only widgets in panels take that focus, and confirm presses only a widget the keys or the gamepad moved to: a button
+the mouse passed over is highlighted, but Space doesn't press it. Widgets outside any panel are for the mouse only. A
+HUD drawn while the game is played wants the same, since WASD and Space are the game's keys too: begin its panel with
+`keys = false`.
+
+```cpp
+if (ui.begin_panel("hud", {screen.x - 160, 20, 140, 0}, /*keys=*/false)) {
+    if (ui.button("Map")) map_open = true; // clicked, never pressed by the Space that jumps
+    ui.end_panel();
+}
+```
 
 `ui.back_pressed()` is `true` when back was pressed this frame: the natural place to close a menu.
 

@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -287,4 +288,23 @@ TEST_CASE("ecs: components copied from another entity, while the archetype they 
     Entity e = v.create();
     v.add<Label>(e, v.get<Label>(labelled[3]));
     CHECK(v.get<Label>(e).text == long_name(3));
+}
+
+TEST_CASE("ecs: a command buffer thrown away hands back the ids it reserved") {
+    World w;
+    std::vector<Entity> reserved;
+    {
+        CommandBuffer cmd(w);
+        for (int i = 0; i < 100; ++i) reserved.push_back(cmd.create(Position{}));
+    } // never applied
+    u32 highest = 0;
+    for (int i = 0; i < 100; ++i) highest = std::max(highest, w.create().index);
+    CHECK(highest < 100); // the same slots again: without them back, these would be 100 to 199
+    for (Entity e : reserved) CHECK_FALSE(w.alive(e)); // and the old handles stay dead
+
+    CommandBuffer late(w);
+    late.create();
+    w.reset(); // the ids it holds mean nothing in the world after this
+    late.clear();
+    CHECK(w.create().index == 0);
 }

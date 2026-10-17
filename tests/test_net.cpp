@@ -659,3 +659,80 @@ TEST_CASE("lockstep: a message claiming to be this machine's player is turned aw
     CHECK_FALSE(me.receive(InputMessage<Pad>{0, 2, {pad_for(1, 2)}}.encode()));
     CHECK(me.local(pad_for(0, 2)).has_value()); // ours still goes out
 }
+
+TEST_CASE("lockstep and rollback: inputs far ahead of the game are dropped, not kept") {
+    // A message for a tick no machine in step could have reached yet is turned away rather than stored (a peer that
+    // kept sending such ticks would otherwise fill memory). Seen from outside: the real input, when it comes, is used.
+    Pad bogus{2, 2}, real{-1, 1};
+    Lockstep<Pad> lockstep(2, 0, 2);
+    CHECK(lockstep.receive(InputMessage<Pad>{1, 400, {bogus}}.encode()));
+    for (u32 t = 0; t < 400; ++t) {
+        lockstep.local(Pad{});
+        if (t + 2 < 400) lockstep.receive(InputMessage<Pad>{1, t + 2, {Pad{}}}.encode());
+        REQUIRE(lockstep.ready());
+        lockstep.advance();
+    }
+    lockstep.receive(InputMessage<Pad>{1, 400, {real}}.encode());
+    lockstep.local(Pad{});
+    REQUIRE(lockstep.ready());
+    CHECK(lockstep.inputs()[1] == real);
+
+    std::vector<Pad> used;
+    i32 state = 0;
+    Rollback<Pad, i32> rollback({.players = 2, .local = 0, .delay = 1, .max_rollback = 8},
+                                {.step = [&](u32 tick, std::span<const Pad> pads) {
+                                     if (used.size() <= tick) used.resize(tick + 1);
+                                     used[tick] = pads[1];
+                                     ++state;
+                                 },
+                                 .save = [&] { return state; },
+                                 .load = [&](const i32& s) { state = s; }});
+    CHECK(rollback.receive(InputMessage<Pad>{1, 300, {bogus}}.encode()));
+    for (u32 t = 0; t < 300; ++t) {
+        rollback.receive(InputMessage<Pad>{1, t, {t == 299 ? real : Pad{}}}.encode());
+        rollback.advance(Pad{});
+    }
+    rollback.receive(InputMessage<Pad>{1, 300, {real}}.encode());
+    rollback.advance(Pad{});
+    REQUIRE(used.size() > 300);
+    CHECK(used[300] == real);
+}
+
+namespace bowl::net {
+struct FuzzAccess { // as tests/fuzz does: packets straight to the server, from any address
+    static void handle(Rendezvous& server, const Address& from, std::span<const u8> packet, f64 now) {
+        server.handle(from, packet, now);
+    }
+};
+} // namespace bowl::net
+
+TEST_CASE("net: rendezvous: forged join requests can't keep real players out") {
+    Rendezvous server;
+    REQUIRE(server.start({.port = 0, .max_sessions = 3, .max_joining_per_address = 2}));
+    auto packet = [](u8 kind, std::string_view room, u64 nonce) {
+        std::vector<u8> p{0x4E, 0x56, 0x44, 0x52, kind, 0x4C, 0x57, 0x4F, 0x42}; // magic, kind, the default protocol
+        p.push_back(static_cast<u8>(room.size()));
+        p.insert(p.end(), room.begin(), room.end());
+        if (kind == 2) { // JoinRoom: nonce, route
+            for (int i = 0; i < 8; ++i) p.push_back(static_cast<u8>(nonce >> (8 * i)));
+            p.push_back(0);
+        }
+        return p;
+    };
+    auto at = [](const char* ip, u16 port) { return *Address::resolve(ip, port); };
+    f64 now = 100;
+    FuzzAccess::handle(server, at("127.0.0.1", 40000), packet(1, "room", 0), now); // HostRoom
+    // Two requests from one address are all it may have waiting; a third is turned away.
+    FuzzAccess::handle(server, at("127.0.0.2", 1), packet(2, "room", 1), now);
+    FuzzAccess::handle(server, at("127.0.0.2", 2), packet(2, "room", 2), now);
+    FuzzAccess::handle(server, at("127.0.0.2", 3), packet(2, "room", 3), now);
+    CHECK(server.stats().introductions == 2);
+    // Every slot taken by requests nothing has come through: a new player still gets in, in the oldest one's place.
+    FuzzAccess::handle(server, at("127.0.0.3", 1), packet(2, "room", 4), now);
+    FuzzAccess::handle(server, at("127.0.0.4", 1), packet(2, "room", 5), now);
+    CHECK(server.stats().introductions == 4);
+    CHECK(server.stats().sessions == 3);
+    // And requests that went nowhere don't wait out the whole session timeout.
+    FuzzAccess::handle(server, at("127.0.0.1", 40000), packet(1, "room", 0), now + 11);
+    CHECK(server.stats().sessions == 0);
+}
