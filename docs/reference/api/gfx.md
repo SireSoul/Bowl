@@ -729,10 +729,10 @@ rectangle with no size.
 Vec2 sprite_size(const Sprite& sprite);
 ```
 
-Draws every visible Sprite that has a GlobalTransform2D.
+Draws every visible Sprite that has a GlobalTransform2D. `skip` leaves entities out (Bowl Editor's hidden ones).
 
 ```cpp
-void draw_sprites(ecs::World& world, SpriteBatch& batch);
+void draw_sprites(ecs::World& world, SpriteBatch& batch, const std::function<bool(ecs::Entity)>& skip = {});
 ```
 
 The axis-aligned world rectangle a sprite covers (enclosing it when rotated), for picking and culling. Empty if the
@@ -1677,5 +1677,32 @@ void register_tilemap_loader(AssetManager& assets);
 
 ```cpp
 std::string normalize_path(std::string_view path);
+```
+
+### Map
+
+A Tiled map placed in the world, at its entity's position (GlobalTransform2D; maps don't turn or scale). It's what
+Bowl Editor puts in a level for a .tmj or .tmx file, and draw_maps draws every one.
+
+```cpp
+struct Map {
+    Asset<Tilemap> map;
+    f32 depth = 0;      // added to every tile's draw depth
+    bool y_sort = true; // tall layers sort with sprites by their bottom edge (TilemapDrawOptions::y_sort); off: all of
+    // it draws underneath sprites
+    bool visible = true;
+};
+```
+
+```cpp
+BOWL_COMPONENT(Map, map, depth, y_sort, visible)
+```
+
+Draws every visible Map that has a GlobalTransform2D, into the same batch as the sprites so they sort together.
+`time` animates tiles; `skip` leaves entities out (Bowl Editor's hidden ones).
+
+```cpp
+void draw_maps(ecs::World& world, SpriteBatch& batch, f32 time = 0,
+               const std::function<bool(ecs::Entity)>& skip = {});
 ```
 

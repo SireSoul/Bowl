@@ -213,6 +213,13 @@ void draw_icon(ImDrawList* l, Icon icon, ImVec2 c, float size, ImU32 col) {
         line(0.75f, -0.75f, -0.1f, 0.1f);
         l->AddQuadFilled(P(-0.1f, 0.1f), P(0.1f, 0.3f), P(-0.4f, 0.8f), P(-0.6f, 0.6f), col);
         break;
+    case Icon::Lock: // a padlock: the shackle over a body
+        l->PathArcTo(P(0, -0.2f), h * 0.42f, 3.1416f, 6.2832f, 12);
+        l->PathStroke(col, 0, t);
+        line(-0.42f, -0.2f, -0.42f, 0.05f);
+        line(0.42f, -0.2f, 0.42f, 0.05f);
+        l->AddRectFilled(P(-0.62f, 0.05f), P(0.62f, 0.8f), col, 2);
+        break;
     case Icon::Region: // a dashed area
         for (float s = -0.75f; s < 0.7f; s += 0.5f) {
             line(s, -0.75f, s + 0.25f, -0.75f);

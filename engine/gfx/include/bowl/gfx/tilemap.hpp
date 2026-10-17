@@ -2,6 +2,7 @@
 
 #include "bowl/core/assets.hpp"
 #include "bowl/core/json.hpp"
+#include "bowl/ecs/hierarchy.hpp"
 #include "bowl/gfx/renderer.hpp"
 #include "bowl/gfx/sprites.hpp"
 
@@ -239,5 +240,21 @@ void register_tilemap_loader(AssetManager& assets);
 
 // "maps/../tiles/a.png" -> "tiles/a.png"
 std::string normalize_path(std::string_view path);
+
+// A Tiled map placed in the world, at its entity's position (GlobalTransform2D; maps don't turn or scale). It's what
+// Bowl Editor puts in a level for a .tmj or .tmx file, and draw_maps draws every one.
+struct Map {
+    Asset<Tilemap> map;
+    f32 depth = 0;      // added to every tile's draw depth
+    bool y_sort = true; // tall layers sort with sprites by their bottom edge (TilemapDrawOptions::y_sort); off: all of
+                        // it draws underneath sprites
+    bool visible = true;
+};
+BOWL_COMPONENT(Map, map, depth, y_sort, visible)
+
+// Draws every visible Map that has a GlobalTransform2D, into the same batch as the sprites so they sort together.
+// `time` animates tiles; `skip` leaves entities out (Bowl Editor's hidden ones).
+void draw_maps(ecs::World& world, SpriteBatch& batch, f32 time = 0,
+               const std::function<bool(ecs::Entity)>& skip = {});
 
 } // namespace bowl::gfx

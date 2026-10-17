@@ -4,6 +4,7 @@
 #include "bowl/ecs/hierarchy.hpp"
 #include "bowl/gfx/sprites.hpp"
 
+#include <functional>
 #include <optional>
 
 namespace bowl::gfx {
@@ -29,8 +30,8 @@ BOWL_COMPONENT(Sprite, texture, region, size, origin, color, depth, y_sort, visi
 // rectangle with no size.
 Vec2 sprite_size(const Sprite& sprite);
 
-// Draws every visible Sprite that has a GlobalTransform2D.
-void draw_sprites(ecs::World& world, SpriteBatch& batch);
+// Draws every visible Sprite that has a GlobalTransform2D. `skip` leaves entities out (Bowl Editor's hidden ones).
+void draw_sprites(ecs::World& world, SpriteBatch& batch, const std::function<bool(ecs::Entity)>& skip = {});
 
 // The axis-aligned world rectangle a sprite covers (enclosing it when rotated), for picking and culling. Empty if the
 // entity has no Sprite or no GlobalTransform2D.

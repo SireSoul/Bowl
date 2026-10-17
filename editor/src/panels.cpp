@@ -209,14 +209,23 @@ bool Editor::thumbnail(Art& art, float size, bool chosen) {
     if (hovered) {
         std::string what = art.texture ? std::format("{}\n{} x {} px", art.path, art.texture->width(), art.texture->height())
                                        : art.path;
-        ui::tip(what, "Click, then click the level. Or drag it in.");
+        const char* how = art.kind == Art::Kind::Map ? "A Tiled map. Click, then click the level where its corner goes."
+                          : art.kind == Art::Kind::Prefab ? "A prefab: click, then click the level to place a copy."
+                                                          : "Click, then click the level. Or drag it in.";
+        ui::tip(what, how);
     }
     ImDrawList* l = ImGui::GetWindowDrawList();
     ImU32 bg = chosen ? ui::color::on : hovered ? ui::color::hover : ui::color::field;
     l->AddRectFilled(pos, {pos.x + size, pos.y + size}, bg, 6);
     if (chosen) l->AddRect(pos, {pos.x + size, pos.y + size}, ui::color::accent, 6, 0, 1.5f);
-    if (ImGui::IsItemVisible() && !art.texture) art.texture = assets_->load<gfx::Texture>(art.path);
-    if (art.texture) {
+    if (art.kind != Art::Kind::Picture) { // no picture to show: say what it is
+        const char* kind = art.kind == Art::Kind::Map ? "MAP" : "PREFAB";
+        ImVec2 ts = ImGui::CalcTextSize(kind);
+        l->AddText({pos.x + (size - ts.x) * 0.5f, pos.y + (size - ts.y) * 0.5f}, ui::color::accent, kind);
+    } else if (ImGui::IsItemVisible() && !art.texture) {
+        art.texture = assets_->load<gfx::Texture>(art.path);
+    }
+    if (art.kind == Art::Kind::Picture && art.texture) {
         // Fit inside the square with a margin, keeping its shape.
         Vec2 s = art.texture->size();
         float fit = (size - 10) / std::max(s.x, s.y);
@@ -326,7 +335,8 @@ void Editor::outline_node(Engine& engine, ecs::Entity e) {
     ImVec2 row = ImGui::GetCursorScreenPos();
     bool open = ImGui::TreeNodeEx("##node", flags, "      %s", display_name(world, e).c_str());
     float indent = ImGui::GetTreeNodeToLabelSpacing();
-    ui::draw_icon(ImGui::GetWindowDrawList(), world.has<gfx::Sprite>(e) ? ui::Icon::Image : ui::Icon::Entity,
+    ui::draw_icon(ImGui::GetWindowDrawList(),
+                  world.has<gfx::Sprite>(e) || world.has<gfx::Map>(e) ? ui::Icon::Image : ui::Icon::Entity,
                   {row.x + indent + 8, row.y + ImGui::GetFrameHeight() * 0.5f}, 13, ui::color::muted);
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         if (ImGui::GetIO().KeyShift || ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeySuper) toggle_selected(e);
@@ -354,16 +364,40 @@ void Editor::outline_node(Engine& engine, ecs::Entity e) {
         if (!children.empty() && ImGui::MenuItem("Ungroup", "Ctrl+Shift+G")) ungroup_selection(engine);
         if (ImGui::MenuItem("Show in view", "F")) frame(engine, true);
         ImGui::Separator();
+        const EditorFlags* f = world.try_get<const EditorFlags>(e);
+        bool is_hidden = f && f->hidden, is_locked = f && f->locked;
+        if (ImGui::MenuItem(is_hidden ? "Show in the editor" : "Hide in the editor")) set_hidden(engine, !is_hidden);
+        if (ImGui::MenuItem(is_locked ? "Unlock" : "Lock")) set_locked(engine, !is_locked);
+        ImGui::Separator();
         if (ImGui::MenuItem("Delete", "Del")) remove_selection(engine);
         ImGui::EndPopup();
     }
-    // Hide and show art without deleting it.
-    if (gfx::Sprite* s = world.try_get<gfx::Sprite>(e)) {
-        ImGui::SameLine(ImGui::GetWindowWidth() - 36);
-        if (ui::tool_button("vis", ui::Icon::Eye, false, s->visible ? "Hide" : "Show", 20)) s->visible = !s->visible;
-        if (!s->visible) {
+    // Hide (in the editor only: the game still shows it) and lock (can't be clicked in the scene).
+    {
+        EditorFlags state;
+        if (const EditorFlags* f = world.try_get<const EditorFlags>(e)) state = *f;
+        auto toggle = [&](bool EditorFlags::*field, bool on) {
+            EditorFlags* f = world.try_get<EditorFlags>(e);
+            if (!f) f = &world.add<EditorFlags>(e);
+            f->*field = on;
+            if (field == &EditorFlags::hidden && on) std::erase(selection_, e);
+        };
+        ImDrawList* l = ImGui::GetWindowDrawList();
+        ImGui::SameLine(ImGui::GetWindowWidth() - 60);
+        if (ui::tool_button("lock", ui::Icon::Lock, state.locked,
+                            state.locked ? "Locked: clicks in the scene go past it. Click to unlock"
+                                         : "Lock, so clicks in the scene go past it",
+                            20))
+            toggle(&EditorFlags::locked, !state.locked);
+        ImGui::SameLine(0, 4);
+        if (ui::tool_button("vis", ui::Icon::Eye, false,
+                            state.hidden ? "Hidden in the editor (the game still shows it). Click to show"
+                                         : "Hide in the editor (the game still shows it)",
+                            20))
+            toggle(&EditorFlags::hidden, !state.hidden);
+        if (state.hidden) {
             ImVec2 p = ImGui::GetItemRectMin(), q = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddLine({p.x + 3, q.y - 3}, {q.x - 3, p.y + 3}, ui::color::danger, 1.5f);
+            l->AddLine({p.x + 3, q.y - 3}, {q.x - 3, p.y + 3}, ui::color::danger, 1.5f);
         }
     }
     if (open) {

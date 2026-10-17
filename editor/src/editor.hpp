@@ -5,6 +5,7 @@
 
 #include "bowl/app/engine.hpp"
 #include "bowl/core/json_text.hpp"
+#include "bowl/gfx/tilemap.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -37,8 +38,9 @@ private:
     enum class Tool { Select, Place, Pan, Brush, Region };
     enum class Drag { None, Move, Box, Pan };
 
-    // A picture in the assets folder, shown on the art shelf.
+    // A picture, a Tiled map or a prefab in the assets folder, shown on the art shelf.
     struct Art {
+        enum class Kind : u8 { Picture, Map, Prefab } kind = Kind::Picture;
         std::string path;   // virtual path, as Sprite.texture stores it
         std::string folder; // its folder, for grouping ("" at the top)
         std::string name;   // file name without extension
@@ -57,6 +59,13 @@ private:
     void toggle_selected(ecs::Entity e);
     std::vector<ecs::Entity> top_level_selection(Engine& engine) const; // without entities whose parent is selected
     std::optional<Rect> bounds_of(Engine& engine, ecs::Entity e);
+    // Hidden or locked, itself or a group it's in (EditorFlags).
+    bool hidden(const ecs::World& world, ecs::Entity e) const;
+    bool locked(const ecs::World& world, ecs::Entity e) const;
+    void set_hidden(Engine& engine, bool on); // the selection
+    void set_locked(Engine& engine, bool on);
+    // The map things snap to: the first visible map in the level, and where it is. Null when there's none.
+    const gfx::Tilemap* snap_map(Vec2& origin) const;
 
     ecs::Entity create(Engine& engine, Vec2 at, const std::string& art = {});
     void duplicate(Engine& engine);
@@ -197,6 +206,8 @@ private:
 
     // View
     bool show_grid_ = true, snap_ = true;
+    bool snap_to_map_ = true; // with a map in the level, snap to the middle of its cells instead of the square grid
+    Engine* engine_ = nullptr;
     f32 grid_ = 16;
     Rect free_area_;
     bool frame_pending_ = true;

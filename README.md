@@ -74,8 +74,9 @@ load their worlds without a pile of boilerplate.
   and remove components, edit lists), assets with reload buttons, log, pause, single-step, slow motion
 - Game-code hot reload on Windows, macOS and Linux: save a source file, it rebuilds, and the new code takes over with
   the world kept
-- Bowl Editor, in three workspaces: Level lays out levels with the game's own renderer (art shelf, groups, a brush,
-  trigger regions and collision shapes, undo, the game's own components); Data edits every JSON file as a tree or as
+- Bowl Editor, in three workspaces: Level lays out levels with the game's own renderer, on Tiled maps (isometric
+  too, snapping to their cells), with an art and prefab shelf, groups, hiding and locking, a brush, trigger regions and
+  collision shapes, undo and the game's own components; Data edits every JSON file as a tree or as
   text, keeping its comments; Paint is a pixel-art canvas
 - Tracy support for timeline profiling
 - Packaging: release builds with static SDL, precompiled shaders and packed assets, `.app` bundles on macOS and

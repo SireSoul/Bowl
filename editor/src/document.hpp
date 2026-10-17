@@ -15,6 +15,13 @@ struct RawComponents {
     json::Object components;
 };
 
+// What only the editor cares about: a hidden thing isn't drawn in the editor (the game still shows it), and a locked
+// one can't be picked or moved in the scene (choose it in the Outline instead). Either applies to everything inside
+// a group. Kept in the file under "editor", which games ignore.
+struct EditorFlags {
+    bool hidden = false, locked = false;
+};
+
 using Selection = std::vector<ecs::Entity>;
 
 // The level being edited and the file it belongs to: open, save, undo, redo and autosave. The engine's world holds

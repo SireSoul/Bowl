@@ -32,8 +32,9 @@ the game's data files, **Paint** (Ctrl+3) paints its art. The rest of this secti
 
 - **Top bar:** new, open and save; the tools (Select, Place, Move the view, Brush, Region); undo and redo; the grid,
   snapping and the grid size; showing collision shapes; help.
-- **Left: Art and Outline.** Art shows every picture in the assets folder as a thumbnail, grouped by folder, with a
-  search box. Outline lists everything in the level, with what's inside what.
+- **Left: Art and Outline.** Art shows every picture, Tiled map (`.tmj`, `.tmx`) and prefab (`.prefab`) in the assets
+  folder, grouped by folder, with a search box. Outline lists everything in the level, with what's inside what, and
+  an eye and a padlock on each row (see [Hiding and locking](#hiding-and-locking)).
 - **Right: the inspector.** What's selected: its name, where it is, its art, and any other components.
 - **Bottom: the status line.** What a click would do right now, short messages ("Saved town.world"), the zoom and
   the mouse's position in the world.
@@ -46,6 +47,18 @@ mouse. **Esc** goes back to selecting. You can also drag a picture from the shel
 - Things snap to the grid. Hold **Alt** to place one exactly where the mouse is.
 - Pictures stand on their **feet**: the middle of their bottom edge. Change that in the Art card ("Stands on").
 - **+ Empty thing** places a marker with nothing drawn: spawn points, triggers, the anchor of a group.
+- A **prefab** places a copy of its entities, its first one where you click. The copy is the level's own from then on:
+  changing the prefab file later doesn't change copies already placed.
+
+### Maps
+
+A Tiled map from the shelf goes in the level as a thing with a `gfx::Map` component, its corner where you click (the
+top-left of its bounding box, as in Tiled). It starts **locked**, so clicks go to what you put on it rather than
+selecting the map; unlock it in the Outline to move it.
+
+With a map in the level, snapping follows the map's cells instead of the square grid: things land in the middle of a
+cell (a diamond on isometric maps), and the cell under the mouse is outlined. Tall layers sort with the art you place
+by their bottom edge, so a character in front of a pillar draws in front of it, the same as in the game.
 
 ## Selecting and arranging
 
@@ -68,6 +81,18 @@ left, center, right, top, middle or bottom edges.
 **Groups.** A group is a thing with others inside it; moving, turning or scaling it carries them along. In the
 Outline, drag one thing onto another to put it inside, or onto the empty space below to take it out. Either way it
 stays where it is in the world.
+
+## Hiding and locking
+
+Each row in the Outline has an eye and a padlock, and the right-click menu has the same:
+
+- **Hide** takes a thing out of the editor's view, to work on what's behind it. Only the editor hides it: the game
+  still shows it. (Whether the *game* shows a picture is the Art card's **Shown**.)
+- **Lock** makes clicks in the scene go past a thing (and box selections leave it out), so a backdrop doesn't get
+  picked or dragged by accident. Select it in the Outline to change it.
+
+Both apply to everything inside a group, are saved with the level under `"editor"` (games ignore it), and can be
+undone.
 
 ## Looking around
 
@@ -169,7 +194,8 @@ serial::Context ctx{&engine.assets()};
 ecs::load_entities(engine.world(), town->document, ctx);
 ```
 
-Draw what the level placed with `gfx::draw_sprites(world, batch)` after the transform systems have run
+Draw what the level placed with `gfx::draw_maps(world, batch, time)` and `gfx::draw_sprites(world, batch)`, into
+the same batch so they sort together, after the transform systems have run
 (`ecs::add_transform_systems(engine.frame_schedule())`), or draw entities your own way. See
 [saving.md](saving.md#world-files) for the file format.
 

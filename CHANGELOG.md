@@ -6,6 +6,12 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- `gfx::Map`, a Tiled map placed in the world at an entity's position, and `gfx::draw_maps` to draw every one, sorted
+  with the sprites; `draw_sprites` and `draw_maps` take an optional `skip` filter.
+- Bowl Editor: Tiled maps (`.tmj`, `.tmx`) and prefabs on the shelf. A map goes in the level as a `gfx::Map`, locked,
+  and snapping follows its cells (diamonds on isometric maps) with the cell under the mouse outlined; a prefab places a
+  copy of its entities. Hiding and locking things in the editor (an eye and a padlock in the Outline, saved under
+  `"editor"`, which games ignore).
 - Replication for host-run games (`net::Replicator` on the host, `net::Replica` on players, `net::Replicated`,
   `net::Sync`): entities and their registered components reach each player, `OnChange` ones reliably when they change,
   `Continuous` ones unreliably with the newest winning; entity references are remapped, and `relevant()` picks what each
@@ -20,6 +26,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   [CONTRIBUTING](CONTRIBUTING.md#fuzzing).
 
 ### Changed
+- Bowl Editor: the Outline's eye hides a thing in the editor only; it used to switch the picture's `Shown`, which the
+  game sees. The Art card's **Shown** still does that.
 - Fonts are checked before stb_truetype reads them (it checks nothing itself): a font whose tables run past the end of
   the file, or whose metrics can't be right, fails to load, and a glyph whose outline would make stb read outside the
   font, recurse forever or work for seconds draws as nothing. Character lookup and kerning are read with bounds checks.

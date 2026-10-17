@@ -49,6 +49,19 @@ json::Value Document::to_json() const {
         any = true;
     }
     if (any) doc.set("entities", std::move(entries));
+    // Hidden and locked things, by their place in the file.
+    json::Array hidden, locked;
+    for (usize i = 0; i < list.size(); ++i)
+        if (const EditorFlags* f = engine_.world().try_get<const EditorFlags>(list[i])) {
+            if (f->hidden) hidden.emplace_back(static_cast<f64>(i));
+            if (f->locked) locked.emplace_back(static_cast<f64>(i));
+        }
+    if (!hidden.empty() || !locked.empty()) {
+        json::Object editor;
+        if (!hidden.empty()) editor.emplace_back("hidden", std::move(hidden));
+        if (!locked.empty()) editor.emplace_back("locked", std::move(locked));
+        doc.set("editor", std::move(editor));
+    }
     return doc;
 }
 
@@ -64,6 +77,18 @@ void Document::from_json(const json::Value& doc) {
         }
         if (!raw.components.empty()) engine_.world().add<RawComponents>(spawned[i], std::move(raw));
     }
+    auto flag = [&](std::string_view key, bool EditorFlags::*field) {
+        for (const json::Value& index : doc["editor"][key].array()) {
+            i64 i = index.as_int(-1);
+            if (i < 0 || static_cast<usize>(i) >= spawned.size()) continue;
+            ecs::Entity e = spawned[static_cast<usize>(i)];
+            EditorFlags* f = engine_.world().try_get<EditorFlags>(e);
+            if (!f) f = &engine_.world().add<EditorFlags>(e);
+            f->*field = true;
+        }
+    };
+    flag("hidden", &EditorFlags::hidden);
+    flag("locked", &EditorFlags::locked);
     order_ = std::move(spawned);
     ecs::propagate_transforms(engine_.world());
 }

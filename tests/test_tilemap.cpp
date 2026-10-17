@@ -1,4 +1,5 @@
 #include "bowl/gfx/tilemap.hpp"
+#include "bowl/ecs/world_io.hpp"
 
 #include <doctest/doctest.h>
 
@@ -500,4 +501,24 @@ TEST_CASE("tilemap: points far off the map give far-off cells") {
     Tilemap diamonds = load(R"({"orientation": "staggered", "staggeraxis": "x", "staggerindex": "even",
         "width": 4, "height": 4, "tilewidth": 32, "tileheight": 28, "tilesets": [], "layers": []})");
     diamonds.cell_at({3e38f, -3e38f});
+}
+
+TEST_CASE("tilemap: a Map in a level loads in a game, which ignores what Bowl Editor keeps for itself") {
+    REQUIRE(ecs::find_component("bowl::gfx::Map")); // registered under the name level files use
+    auto doc = json::parse(R"({ "format": "Bowl.world", "version": 1, "entities": [
+        { "id": 0, "components": { "bowl::ecs::Transform2D": { "position": [32, 16] },
+                                   "bowl::gfx::Map": { "depth": 5, "y_sort": false } } },
+        { "id": 1, "components": { "bowl::ecs::Name": { "value": "lamp" } } } ],
+      "editor": { "hidden": [1], "locked": [0] } })");
+    REQUIRE(doc);
+    ecs::World world;
+    serial::Context ctx;
+    std::vector<ecs::Entity> made = ecs::load_entities(world, doc.value, ctx);
+    REQUIRE(made.size() == 2);
+    CHECK(ctx.warnings.empty());
+    const gfx::Map& m = world.get<gfx::Map>(made[0]);
+    CHECK(m.depth == 5);
+    CHECK_FALSE(m.y_sort);
+    CHECK(m.visible);
+    CHECK(world.get<ecs::Name>(made[1]).value == "lamp");
 }

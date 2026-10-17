@@ -1221,6 +1221,18 @@ struct MapDraw {
 
 } // namespace
 
+void draw_maps(ecs::World& world, SpriteBatch& batch, f32 time, const std::function<bool(ecs::Entity)>& skip) {
+    world.each<const Map, const ecs::GlobalTransform2D>([&](ecs::Entity e, const Map& m, const ecs::GlobalTransform2D& g) {
+        if (!m.visible || !m.map || (skip && skip(e))) return;
+        TilemapDrawOptions options;
+        options.position = g.position;
+        options.time = time;
+        options.y_sort = m.y_sort;
+        options.depth = m.depth + (m.y_sort ? 0.0f : -1e7f); // not sorted: all of it under the sprites, like ground
+        draw_tilemap(batch, *m.map, options);
+    });
+}
+
 void draw_tilemap(SpriteBatch& batch, const Tilemap& map, const TilemapDrawOptions& o) {
     MapDraw draw(map, o);
     Rect view = batch.camera().visible_bounds();

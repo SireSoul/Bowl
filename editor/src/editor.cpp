@@ -2,8 +2,10 @@
 
 #include "bowl/app/inspector.hpp"
 #include "bowl/core/time.hpp"
+#include "bowl/ecs/world_io.hpp"
 #include "bowl/gfx/particles.hpp"
 #include "bowl/gfx/sprite.hpp"
+#include "bowl/gfx/tilemap.hpp"
 
 #include <SDL3/SDL_clipboard.h>
 #include <SDL3/SDL_dialog.h>
@@ -28,10 +30,44 @@ namespace {
 
 const SDL_DialogFileFilter world_filter{"Bowl level", "world"};
 
-bool is_image(const fs::path& p) {
+std::string extension(const fs::path& p) {
     std::string ext = p.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return ext;
+}
+
+bool is_image(const fs::path& p) {
+    std::string ext = extension(p);
     return ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga" || ext == ".bmp";
+}
+bool is_map(const fs::path& p) { return extension(p) == ".tmj" || extension(p) == ".tmx"; }
+bool is_prefab(const fs::path& p) { return extension(p) == ".prefab"; }
+
+// The middle of a map cell, in map pixels.
+Vec2 cell_center(const gfx::Tilemap& map, i32 x, i32 y) {
+    if (map.orientation == gfx::Tilemap::Orientation::Isometric)
+        return map.cell_to_world(static_cast<f32>(x) + 0.5f, static_cast<f32>(y) + 0.5f);
+    return map.cell_to_world(static_cast<f32>(x), static_cast<f32>(y)) +
+           Vec2{static_cast<f32>(map.tile_width), static_cast<f32>(map.tile_height)} * 0.5f;
+}
+
+// The corners of a map cell's outline, in map pixels: a diamond on isometric maps, a rectangle on the others.
+std::array<Vec2, 4> cell_corners(const gfx::Tilemap& map, i32 x, i32 y) {
+    f32 fx = static_cast<f32>(x), fy = static_cast<f32>(y);
+    if (map.orientation == gfx::Tilemap::Orientation::Isometric)
+        return {map.cell_to_world(fx, fy), map.cell_to_world(fx + 1, fy), map.cell_to_world(fx + 1, fy + 1),
+                map.cell_to_world(fx, fy + 1)};
+    Vec2 a = map.cell_to_world(fx, fy), size{static_cast<f32>(map.tile_width), static_cast<f32>(map.tile_height)};
+    return {a, a + Vec2{size.x, 0}, a + size, a + Vec2{0, size.y}};
+}
+
+void line(gfx::SpriteBatch& batch, Vec2 a, Vec2 b, f32 thickness, Color color) {
+    gfx::SpriteInstance s;
+    s.position = (a + b) * 0.5f;
+    s.size = {(b - a).length(), thickness};
+    s.rotation = std::atan2(b.y - a.y, b.x - a.x);
+    s.color = color;
+    batch.draw(nullptr, s);
 }
 
 // The entity and everything below it, parents first.
@@ -91,11 +127,12 @@ AppConfig Editor::configure() {
 void Editor::init(Engine& engine) {
     doc_ = std::make_unique<Document>(engine);
     assets_ = &engine.assets();
+    engine_ = &engine;
     ImGui::GetIO().ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard; // the keys belong to the editor's shortcuts
     ui::apply_theme();
     // Engine components, so they can be added from the inspector before anything uses them.
     ecs::register_components<ecs::Name, ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children,
-                             gfx::Sprite, gfx::ParticleEmitter>();
+                             gfx::Sprite, gfx::ParticleEmitter, gfx::Map>();
 
     fs::path file;
     std::string game;
@@ -236,7 +273,64 @@ Vec2 Editor::mouse_world(Engine& engine) const {
 
 Vec2 Editor::snapped(Vec2 p, bool force_free) const {
     if (!snap_ || force_free) return p;
+    Vec2 origin;
+    if (const gfx::Tilemap* map = snap_map(origin)) {
+        auto [x, y] = map->cell_at(p - origin);
+        return origin + cell_center(*map, x, y);
+    }
     return {std::round(p.x / grid_) * grid_, std::round(p.y / grid_) * grid_};
+}
+
+const gfx::Tilemap* Editor::snap_map(Vec2& origin) const {
+    if (!snap_to_map_ || !engine_) return nullptr;
+    const ecs::World& world = engine_->world();
+    const gfx::Tilemap* found = nullptr;
+    for (ecs::Entity e : doc_->entities()) {
+        const gfx::Map* m = world.try_get<const gfx::Map>(e);
+        const ecs::GlobalTransform2D* g = world.try_get<const ecs::GlobalTransform2D>(e);
+        if (!m || !g || !m->map || hidden(world, e)) continue;
+        found = &*m->map;
+        origin = g->position;
+        break;
+    }
+    return found;
+}
+
+bool Editor::hidden(const ecs::World& world, ecs::Entity e) const {
+    for (int depth = 0; e && depth < 64; ++depth) {
+        if (const EditorFlags* f = world.try_get<const EditorFlags>(e); f && f->hidden) return true;
+        const ecs::Parent* p = world.try_get<const ecs::Parent>(e);
+        e = p ? p->entity : ecs::null_entity;
+    }
+    return false;
+}
+
+bool Editor::locked(const ecs::World& world, ecs::Entity e) const {
+    for (int depth = 0; e && depth < 64; ++depth) {
+        if (const EditorFlags* f = world.try_get<const EditorFlags>(e); f && f->locked) return true;
+        const ecs::Parent* p = world.try_get<const ecs::Parent>(e);
+        e = p ? p->entity : ecs::null_entity;
+    }
+    return false;
+}
+
+void Editor::set_hidden(Engine& engine, bool on) {
+    ecs::World& world = engine.world();
+    for (ecs::Entity e : selection_) {
+        EditorFlags* f = world.try_get<EditorFlags>(e);
+        if (!f) f = &world.add<EditorFlags>(e);
+        f->hidden = on;
+    }
+    if (on) selection_.clear(); // what can't be seen isn't left selected
+}
+
+void Editor::set_locked(Engine& engine, bool on) {
+    ecs::World& world = engine.world();
+    for (ecs::Entity e : selection_) {
+        EditorFlags* f = world.try_get<EditorFlags>(e);
+        if (!f) f = &world.add<EditorFlags>(e);
+        f->locked = on;
+    }
 }
 
 bool Editor::selected(ecs::Entity e) const { return std::find(selection_.begin(), selection_.end(), e) != selection_.end(); }
@@ -265,6 +359,17 @@ std::vector<ecs::Entity> Editor::top_level_selection(Engine& engine) const {
 std::optional<Rect> Editor::bounds_of(Engine& engine, ecs::Entity e) {
     ecs::World& world = engine.world();
     if (auto b = gfx::sprite_bounds(world, e)) return b;
+    const gfx::Map* m = world.try_get<const gfx::Map>(e);
+    const ecs::GlobalTransform2D* at = world.try_get<const ecs::GlobalTransform2D>(e);
+    if (m && at && m->map && !m->map->infinite && m->map->width > 0) { // around its corners
+        const gfx::Tilemap& map = *m->map;
+        Vec2 lo{1e30f, 1e30f}, hi{-1e30f, -1e30f};
+        auto take = [&](Vec2 c) { lo = {std::min(lo.x, c.x), std::min(lo.y, c.y)}, hi = {std::max(hi.x, c.x), std::max(hi.y, c.y)}; };
+        for (auto [cx, cy] : {std::pair{0u, 0u}, {map.width, 0u}, {map.width, map.height}, {0u, map.height}})
+            take(map.cell_to_world(static_cast<f32>(cx), static_cast<f32>(cy)));
+        if (map.orientation != gfx::Tilemap::Orientation::Isometric) take(map.pixel_size());
+        return Rect{at->position.x + lo.x, at->position.y + lo.y, hi.x - lo.x, hi.y - lo.y};
+    }
     if (const auto* g = world.try_get<const ecs::GlobalTransform2D>(e)) return Rect{g->position.x, g->position.y, 0, 0};
     return std::nullopt;
 }
@@ -276,7 +381,7 @@ ecs::Entity Editor::pick(Engine& engine, Vec2 p) {
     world.each<const gfx::Sprite, const ecs::GlobalTransform2D>(
         [&](ecs::Entity e, const gfx::Sprite& s, const ecs::GlobalTransform2D& g) {
             auto bounds = gfx::sprite_bounds(world, e);
-            if (!s.visible || !bounds || !bounds->contains(p)) return;
+            if (!s.visible || !bounds || !bounds->contains(p) || hidden(world, e) || locked(world, e)) return;
             f32 depth = (s.y_sort ? g.position.y : 0.0f) + s.depth;
             if (!best || depth >= best_depth) {
                 best = e;
@@ -287,14 +392,22 @@ ecs::Entity Editor::pick(Engine& engine, Vec2 p) {
     // Entities that draw nothing are picked by their marker.
     f32 reach = 9.0f / engine.camera().zoom;
     world.each<const ecs::GlobalTransform2D>([&](ecs::Entity e, const ecs::GlobalTransform2D& g) {
-        if (!world.has<gfx::Sprite>(e) && (g.position - p).length() <= reach) best = e;
+        if (!world.has<gfx::Sprite>(e) && !world.has<gfx::Map>(e) && (g.position - p).length() <= reach &&
+            !hidden(world, e) && !locked(world, e))
+            best = e;
     });
+    if (best) return best;
+    // Last, a map under the mouse (most start locked, so they stay out of the way).
+    for (ecs::Entity e : doc_->entities())
+        if (world.has<gfx::Map>(e) && !hidden(world, e) && !locked(world, e))
+            if (auto b = bounds_of(engine, e); b && b->contains(p)) best = e;
     return best;
 }
 
 std::vector<ecs::Entity> Editor::pick_box(Engine& engine, Rect area) {
     std::vector<ecs::Entity> out;
     for (ecs::Entity e : doc_->entities()) {
+        if (hidden(engine.world(), e) || locked(engine.world(), e)) continue;
         auto b = bounds_of(engine, e);
         if (!b) continue;
         bool point = b->w == 0 && b->h == 0;
@@ -465,7 +578,10 @@ void Editor::render(Engine& engine) {
     const gfx::Camera2D& cam = engine.camera();
     f32 px = 1.0f / cam.zoom;
     scene_.begin(cam);
-    if (show_grid_) {
+    bool alt_down = engine.input().down(Key::LeftAlt) || engine.input().down(Key::RightAlt);
+    Vec2 map_origin;
+    const gfx::Tilemap* cells = snap_ ? snap_map(map_origin) : nullptr;
+    if (show_grid_ && !cells) {
         // Lines stay at least 10 pixels apart: zoomed out, every fourth line is kept, and so on. Every eighth is
         // brighter, and the axes through the origin are colored.
         f32 step = grid_;
@@ -480,7 +596,9 @@ void Editor::render(Engine& engine) {
         for (f32 y = std::floor(view.y / step) * step; y <= view.bottom(); y += step)
             scene_.draw_rect({view.x, y - px * 0.5f, view.w, px}, shade(y, Color::hex(0xe05a5a, 0.45f)), -1e9f);
     }
-    gfx::draw_sprites(world, scene_);
+    auto skip = [&](ecs::Entity e) { return hidden(world, e); };
+    gfx::draw_maps(world, scene_, static_cast<f32>(engine.time()), skip);
+    gfx::draw_sprites(world, scene_, skip);
 
     // What the Place tool (or art being dragged from the shelf) would put down, see-through.
     const ImGuiPayload* drag = ImGui::GetDragDropPayload();
@@ -490,7 +608,7 @@ void Editor::render(Engine& engine) {
         std::string art = dragging_art ? std::string(static_cast<const char*>(drag->Data), static_cast<usize>(drag->DataSize))
                                        : place_art_;
         Vec2 at = snapped(mouse_world(engine), alt);
-        if (!art.empty()) {
+        if (!art.empty() && is_image(art)) {
             if (auto tex = engine.assets().load<gfx::Texture>(art)) {
                 gfx::SpriteInstance s;
                 s.position = at;
@@ -506,8 +624,23 @@ void Editor::render(Engine& engine) {
 
     gizmos_.begin(cam, gfx::SpriteSort::None);
     Color accent = Color::hex(0xf2c45c), muted = Color::hex(0xa0a6b4);
+    // With a map to snap to, the cell under the mouse instead of the square grid.
+    if (cells && show_grid_ && !alt_down && !ImGui::GetIO().WantCaptureMouse) {
+        auto [cx, cy] = cells->cell_at(mouse_world(engine) - map_origin);
+        auto c = cell_corners(*cells, cx, cy);
+        for (int i = 0; i < 4; ++i)
+            line(gizmos_, map_origin + c[static_cast<usize>(i)], map_origin + c[static_cast<usize>((i + 1) % 4)], 1.5f * px,
+                 accent.with_alpha(0.7f));
+    }
     world.each<const ecs::GlobalTransform2D>([&](ecs::Entity e, const ecs::GlobalTransform2D& g) {
         bool chosen = selected(e), hover = e == hovered_ && !chosen;
+        if (hidden(world, e)) return;
+        if (world.has<gfx::Map>(e)) {
+            if (chosen || hover)
+                if (auto b = bounds_of(engine, e))
+                    gizmos_.draw_outline(b->expanded(px), chosen ? accent : muted.with_alpha(0.8f), (chosen ? 2 : 1) * px);
+            return;
+        }
         if (world.has<gfx::Sprite>(e)) {
             if (!chosen && !hover) return;
             if (auto b = gfx::sprite_bounds(world, e))
@@ -519,7 +652,7 @@ void Editor::render(Engine& engine) {
         }
         if (chosen) gizmos_.draw_rect(Rect::from_center(g.position, Vec2{5 * px}), accent); // the pivot
     });
-    if (tool_ == Tool::Place && place_art_.empty() && !ImGui::GetIO().WantCaptureMouse)
+    if (tool_ == Tool::Place && !is_image(place_art_) && !ImGui::GetIO().WantCaptureMouse)
         gizmos_.draw_outline(Rect::from_center(snapped(mouse_world(engine), alt), Vec2{14 * px}), accent.with_alpha(0.6f), 2 * px);
     draw_colliders(engine, px);
     if (drag_ == Drag::Box) {
@@ -536,7 +669,34 @@ void Editor::render(Engine& engine) {
 ecs::Entity Editor::create(Engine& engine, Vec2 at, const std::string& art) {
     ecs::World& world = engine.world();
     std::string name = art.empty() ? "Thing" : fs::path(art).stem().string();
+    if (is_prefab(art)) { // copies of the prefab's entities, its root where the mouse is
+        Asset<ecs::Prefab> prefab = engine.assets().load<ecs::Prefab>(art);
+        if (!prefab) {
+            say(std::format("Couldn't read {}", art));
+            return ecs::null_entity;
+        }
+        serial::Context ctx{&engine.assets()};
+        std::vector<ecs::Entity> made = ecs::instantiate(world, *prefab, ctx);
+        if (made.empty()) return ecs::null_entity;
+        if (!world.has<ecs::Transform2D>(made[0])) world.add<ecs::Transform2D>(made[0]);
+        world.get<ecs::Transform2D>(made[0]).position = at;
+        if (!world.has<ecs::Name>(made[0])) world.add<ecs::Name>(made[0], ecs::Name{name});
+        for (ecs::Entity e : made) doc_->add(e);
+        select_only(made[0]);
+        ecs::propagate_transforms(world);
+        return made[0];
+    }
     ecs::Entity e = world.create(ecs::Name{name}, ecs::Transform2D{at});
+    if (is_map(art)) { // a backdrop to place things on: locked, so clicks go to what's on it
+        world.add<gfx::Map>(e, gfx::Map{.map = engine.assets().load<gfx::Tilemap>(art)});
+        world.add<EditorFlags>(e, EditorFlags{.locked = true});
+        doc_->add(e);
+        select_only(e);
+        tool_ = Tool::Select;
+        ecs::propagate_transforms(world);
+        say(std::format("Placed {}, locked so you can place things on it (unlock it in the Outline)", name));
+        return e;
+    }
     if (!art.empty()) {
         gfx::Sprite s;
         s.texture = engine.assets().load<gfx::Texture>(art);
@@ -844,9 +1004,10 @@ void Editor::scan_art() {
             if (it->is_directory(ec)) it.disable_recursion_pending();
             continue;
         }
-        if (!it->is_regular_file(ec) || !is_image(it->path())) continue;
+        if (!it->is_regular_file(ec) || !(is_image(it->path()) || is_map(it->path()) || is_prefab(it->path()))) continue;
         fs::path rel = fs::relative(it->path(), assets_dir_, ec);
         Art art;
+        art.kind = is_map(it->path()) ? Art::Kind::Map : is_prefab(it->path()) ? Art::Kind::Prefab : Art::Kind::Picture;
         art.path = rel.generic_string();
         art.folder = rel.parent_path().generic_string();
         art.name = rel.stem().string();
