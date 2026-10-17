@@ -111,7 +111,10 @@ struct Rendezvous::Impl {
             u8 count = 0;
             for (usize i = from_index; i < open.size() && count < 255; ++i) {
                 const auto& [key, room] = *open[i];
-                if (w.out.size() + 2 + key.second.size() + room.label.size() + 2 > 1100) break; // one packet's worth
+                // One packet's worth, and never more than was asked with: a list sent to a forged address would make
+                // this server a way to flood it (list_rooms pads its request to a full answer's size).
+                usize limit = std::min(wire::list_answer_size, packet.size());
+                if (w.out.size() + 2 + key.second.size() + room.label.size() + 2 > limit) break;
                 w.text(key.second);
                 w.text(room.label);
                 w.u8_(room.players);

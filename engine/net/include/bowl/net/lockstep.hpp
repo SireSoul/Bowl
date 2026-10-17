@@ -76,7 +76,8 @@ public:
     // Another player's message. False if it isn't one.
     bool receive(std::span<const u8> bytes) {
         auto m = InputMessage<Input>::decode(bytes);
-        if (!m || m->player >= players_) return false;
+        // Not one claiming to be this machine's player: it would take the place of the input local() sends.
+        if (!m || m->player >= players_ || m->player == local_) return false;
         for (usize i = 0; i < m->inputs.size(); ++i) {
             u32 t = m->first_tick + static_cast<u32>(i);
             if (t < tick_) continue;

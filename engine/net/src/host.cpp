@@ -191,6 +191,7 @@ void Host::list_rooms(const Address& rendezvous, u16 from) {
     w.u32_(settings_.protocol);
     w.u64_(list_nonce_);
     w.u16_(from);
+    w.out.resize(wire::list_answer_size); // the server answers with no more than it's sent
     socket_.send(rendezvous, w.out);
 }
 

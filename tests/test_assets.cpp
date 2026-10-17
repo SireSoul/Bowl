@@ -238,3 +238,19 @@ TEST_CASE("assets: archives hold a folder and mount like one") {
     CHECK(assets.read("data/a.txt") == std::optional<std::vector<u8>>(std::vector<u8>{'a', 'l', 'p', 'h', 'a'}));
     CHECK_FALSE(assets.exists("data/nothing.txt"));
 }
+
+TEST_CASE("assets: paths can't leave their folder") {
+    // Maps, prefabs and sheets name the files they use, and anyone can write those: "../" or an absolute path must not
+    // reach the rest of the disk.
+    fs::path root = temp_dir("escape");
+    fs::create_directories(root / "game" / "maps");
+    write(root / "outside.txt", "secret");
+    write(root / "game" / "maps" / "a.txt", "a");
+    AssetManager assets;
+    assets.mount("", root / "game");
+    CHECK_FALSE(assets.exists("../outside.txt"));
+    CHECK_FALSE(assets.exists("maps/../../outside.txt"));
+    CHECK_FALSE(assets.exists((root / "outside.txt").string()));
+    CHECK(assets.exists("maps/a.txt"));
+    CHECK(assets.exists("maps/../maps/./a.txt")); // climbing within the folder is fine
+}

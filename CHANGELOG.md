@@ -29,6 +29,9 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   [CONTRIBUTING](CONTRIBUTING.md#fuzzing).
 
 ### Changed
+- **Breaking** for old clients of a new `bowl-rendezvous`: the server answers `ListRooms` with no more bytes than the
+  request had, and `Host::list_rooms` pads its request to a full answer's size. A client from before this lists no
+  rooms (it still gets the count).
 - Bowl Editor: the Outline's eye hides a thing in the editor only; it used to switch the picture's `Shown`, which the
   game sees. The Art card's **Shown** still does that.
 - Fonts are checked before stb_truetype reads them (it checks nothing itself): a font whose tables run past the end of
@@ -39,6 +42,16 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- Physics: `collide` and `overlaps` on `Shape`s measured how far a shape inside another (on some axis) must move by
+  the length they share, so a thin shape across a wide one wasn't pushed all the way out, and `contains` said no for
+  every point inside a `Rect` or `Polygon` passed as a `Shape`.
+- Text: right-to-left text ending in a newline read past the end of its levels (a heap overflow).
+- Assets: a path with `..` or an absolute path (from a map, prefab or sheet anyone can write) reached files outside
+  the mounted folder.
+- Rendezvous: a forged `ListRooms` made the server send a stranger up to 58 times as many bytes as it was sent, so a
+  public server could be used to flood someone.
+- `Lockstep` turned away messages naming its own player only for ticks it had its input for; one for a later tick
+  (two machines set to the same index) took the place of the local input, which was then never sent.
 - `World::create(...)`, `insert` and `add` read the values given after moving the entity, so components copied from
   another entity of the same archetype (`w.create(w.get<A>(other))`, and Bowl Editor's Duplicate) read freed memory
   when the archetype grew.

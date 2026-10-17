@@ -620,3 +620,42 @@ TEST_CASE("net: connect() long after the host's last update doesn't time out at 
     CHECK(connected);
     CHECK_FALSE(dropped);
 }
+
+TEST_CASE("net: lobbies: the server never answers with more than it's sent") {
+    // Otherwise a small request with someone else's address on it makes the server flood them with room lists.
+    Rendezvous rendezvous;
+    REQUIRE(rendezvous.start({.port = 0}));
+    Address server = Address::loopback(rendezvous.port());
+    Host host;
+    REQUIRE(host.start());
+    host.host_room(server, "room-listed", {.listed = true, .label = std::string(60, 'x')});
+    f64 now = 0;
+    wait(now, 0.1, [&](f64 t) { rendezvous.update(t), host.update(t); });
+
+    Socket asker;
+    REQUIRE(asker.open());
+    auto ask = [&](usize size) {
+        std::vector<u8> request{0x4E, 0x56, 0x44, 0x52, 6}; // rendezvous magic, ListRooms
+        for (u8 b : {0x4C, 0x57, 0x4F, 0x42}) request.push_back(b); // the default game protocol
+        for (int i = 0; i < 8; ++i) request.push_back(static_cast<u8>(i + 1)); // nonce
+        request.push_back(0), request.push_back(0);                           // from
+        request.resize(std::max(size, request.size()));
+        asker.send(server, request);
+        std::array<u8, 2048> buffer;
+        Address from;
+        std::optional<usize> got;
+        run(now, 1, [&](f64 t) { rendezvous.update(t), host.update(t); }, [&] { return (got = asker.receive(from, buffer)).has_value(); });
+        return got ? *got : 0;
+    };
+    usize small = ask(19);
+    CHECK(small > 0);
+    CHECK(small <= 19); // the count of rooms, but none of them
+    CHECK(ask(1100) > 60); // a padded request (as list_rooms sends) gets the list
+}
+
+TEST_CASE("lockstep: a message claiming to be this machine's player is turned away") {
+    Lockstep<Pad> me(2, 0, 2);
+    // Two machines set up with the same index: the other's input for tick 2 must not take the place of ours.
+    CHECK_FALSE(me.receive(InputMessage<Pad>{0, 2, {pad_for(1, 2)}}.encode()));
+    CHECK(me.local(pad_for(0, 2)).has_value()); // ours still goes out
+}
