@@ -1,6 +1,6 @@
 # Bowl
 
-<img width="120" height="20" alt="image" src="https://github.com/user-attachments/assets/d11b4832-821f-4097-9b60-015f15836d61" /> <img width="112" height="20" alt="image" src="https://github.com/user-attachments/assets/da44c53e-9a44-46de-b962-885a7e08992f" />
+![Static Badge](https://img.shields.io/badge/License%20-%20Apashe%202.0%20-%20red) ![Static Badge](https://img.shields.io/badge/Language%20-%20C%2B%2B20%20-%20Red)
 
 
 A code-first 2D game engine in C++20, built on SDL3. One renderer for Vulkan, Metal and Direct3D 12, a parallel
