@@ -1107,6 +1107,7 @@ struct MapDraw {
     f32 tw, th, pivot_x, overhang = 0;
     bool any_ysort_property;
     static constexpr f32 underneath = -1e7f; // flat layers under everything y-sorted
+    static constexpr f32 overhead = 1e7f;    // "above" layers over it
 
     MapDraw(const Tilemap& m, const TilemapDrawOptions& options) : map(m), o(options) {
         iso = map.orientation == Tilemap::Orientation::Isometric;
@@ -1122,19 +1123,25 @@ struct MapDraw {
                                          [](const MapLayer& l) { return l.properties["ysort"].is_bool(); });
     }
 
+    // A layer with the bool property "above" draws over everything y-sorted (roofs, treetops, arches); it never sorts.
+    bool above(usize li) const { return o.y_sort && map.layers[li].properties["above"].as_bool(); }
     bool sorts(usize li) const {
+        if (above(li)) return false;
         return o.y_sort && (any_ysort_property ? map.layers[li].properties["ysort"].as_bool() : li > 0);
     }
+    // Drawn with the sprites every frame (y-sorted or above them), rather than cached under them.
+    bool with_sprites(usize li) const { return sorts(li) || above(li); }
     bool wanted(usize li) const {
         const MapLayer& layer = map.layers[li];
         if (!layer.visible || layer.opacity <= 0) return false;
         if (!o.only_layer.empty() && layer.name != o.only_layer) return false;
-        if (o.layers == TilemapDrawOptions::Layers::Flat && sorts(li)) return false;
-        if (o.layers == TilemapDrawOptions::Layers::Sorted && !sorts(li)) return false;
+        if (o.layers == TilemapDrawOptions::Layers::Flat && with_sprites(li)) return false;
+        if (o.layers == TilemapDrawOptions::Layers::Sorted && !with_sprites(li)) return false;
         return true;
     }
     f32 layer_depth(usize li) const {
-        return o.depth + static_cast<f32>(li) * o.layer_depth_step + (o.y_sort && !sorts(li) ? underneath : 0.0f);
+        f32 band = !o.y_sort || sorts(li) ? 0.0f : above(li) ? overhead : underneath;
+        return o.depth + static_cast<f32>(li) * o.layer_depth_step + band;
     }
     Color color(usize li) const {
         const MapLayer& l = map.layers[li];

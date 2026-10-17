@@ -1627,11 +1627,12 @@ struct TilemapDrawOptions {
     // Depth = the middle of the tile's cell (Tilemap::sort_y, + base), so sprites at depth = their feet's y go behind
     // tall tiles from the far sides and in front from the near ones (isometric).
     // Which layers sort: those with a Tiled bool property "ysort"; if no layer has it, every layer but the first.
-    // Layers that don't sort draw underneath everything sorted (ground).
+    // Layers that don't sort draw underneath everything sorted (ground), except those with the bool property "above",
+    // which draw over it (roofs, treetops, arches: what characters walk under).
     bool y_sort = false;
     std::string_view only_layer; // draw just this layer
-    // Which layers to draw: all, only the flat ones (ground) or only the y-sorted ones. TilemapCache draws the flat
-    // ones; pass Sorted to draw the rest each frame.
+    // Which layers to draw: all, only the flat ones (ground) or only those drawn with the sprites (y-sorted, and
+    // "above"). TilemapCache draws the flat ones; pass Sorted to draw the rest each frame.
     enum class Layers : u8 { All, Flat, Sorted };
     Layers layers = Layers::All;
 };
@@ -1657,7 +1658,7 @@ usize fill_from_corners(MapLayer& layer, const Tileset& tileset, const WangSet& 
 
 Draws large maps cheaply: the flat layers are cut into chunks of chunk_cells x chunk_cells tiles, each built once into
 StaticSprites in GPU memory, so a frame only submits the chunks on screen. Animated tiles are still drawn every
-frame. Y-sorted layers aren't cached: draw them with draw_tilemap and `.layers = Layers::Sorted`.
+frame. Y-sorted and "above" layers aren't cached: draw them with draw_tilemap and `.layers = Layers::Sorted`.
 
 Chunks rebuild by themselves when the map asset or its textures reload; call invalidate() after changing cells.
 

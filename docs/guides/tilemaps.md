@@ -55,7 +55,7 @@ images.
 | `layer_depth_step` | 1 | Depth added per layer, so later layers draw on top |
 | `y_sort` | `false` | Give tiles depth by the middle of their cell (see below) |
 | `only_layer` | empty | Draw just the layer with this name |
-| `layers` | `All` | `Flat` or `Sorted` to draw only the layers that don't, or do, y-sort |
+| `layers` | `All` | `Flat` for only the layers under the sprites, `Sorted` for only those y-sorted with them or drawn above them |
 
 ## Layers
 
@@ -113,7 +113,9 @@ With `y_sort`, a tile in a sorted layer gets the depth of the middle of its cell
 the feet of a character standing in that cell would be. A character beside it is then behind it on the two far sides
 and in front of it on the two near ones, whichever way it walks up. Which layers sort: any layer with a Tiled
 bool property `ysort` set to true; if no layer has that property, every layer except the first. Layers that don't
-sort (the ground) draw below everything that does.
+sort (the ground) draw below everything that does, except a layer with the bool property `above` set to true, which
+draws over everything: put what characters walk under there (roofs, the tops of arches and gates), as Stardew Valley
+does with its Front layer.
 
 The isometric sample shows the whole setup, including movement in screen directions and collision in cell space.
 `--behind-pillar` starts the player behind a pillar to show the sorting.
@@ -148,10 +150,10 @@ gfx::draw_tilemap(batch, *map, tiles);                                         /
 engine.renderer().submit(batch);
 ```
 
-The cache draws the layers that don't y-sort (all of them when `y_sort` is off) in order, before anything submitted
-after it. Animated tiles, image layers and tile objects in those layers are drawn every frame in between. Chunks
-rebuild by themselves when the map or its textures reload, or when the draw options change; after changing cells in
-code, call `invalidate()`.
+The cache draws the layers that don't y-sort and aren't `above` (all of them when `y_sort` is off) in order, before
+anything submitted after it. Animated tiles, image layers and tile objects in those layers are drawn every frame in
+between. Chunks rebuild by themselves when the map or its textures reload, or when the draw options change; after
+changing cells in code, call `invalidate()`.
 
 `StaticSprites` works for anything else that doesn't change: fill a `SpriteBatch`, `build` from it once, and
 `engine.renderer().submit(sprites, camera)` every frame.

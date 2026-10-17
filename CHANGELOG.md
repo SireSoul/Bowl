@@ -6,6 +6,9 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Tiled layers with the bool property `above` draw over everything y-sorted, for what characters walk under (roofs,
+  the tops of arches and gates), like Stardew Valley's Front layer. `TilemapCache` leaves them to `draw_tilemap` with
+  `Layers::Sorted`.
 - `gfx::Map`, a Tiled map placed in the world at an entity's position, and `gfx::draw_maps` to draw every one, sorted
   with the sprites; `draw_sprites` and `draw_maps` take an optional `skip` filter.
 - Bowl Editor: Tiled maps (`.tmj`, `.tmx`) and prefabs on the shelf. A map goes in the level as a `gfx::Map`, locked,
