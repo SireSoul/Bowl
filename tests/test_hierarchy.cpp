@@ -78,3 +78,32 @@ TEST_CASE("hierarchy: saves and loads with references intact") {
     propagate_transforms(other);
     CHECK(other.get<GlobalTransform2D>(c2).position == Vec2{11, 11});
 }
+
+TEST_CASE("hierarchy: a child whose parent was destroyed on its own becomes a root") {
+    World w;
+    Entity parent = w.create(Transform2D{{100, 0}});
+    Entity child = w.create(Transform2D{{5, 0}});
+    REQUIRE(set_parent(w, child, parent));
+    propagate_transforms(w);
+    CHECK(w.get<GlobalTransform2D>(child).position == Vec2{105, 0});
+    w.destroy(parent); // not destroy_recursive: the child keeps a Parent that's gone
+    w.get<Transform2D>(child).position.x = 7;
+    propagate_transforms(w);
+    CHECK(w.get<GlobalTransform2D>(child).position == Vec2{7, 0}); // still followed, from the origin
+}
+
+TEST_CASE("hierarchy: a cycle in loaded data doesn't hang anything") {
+    World w;
+    Entity a = w.create(Transform2D{}), b = w.create(Transform2D{}), c = w.create(Transform2D{});
+    // As a hand-edited save might have it: a and b are each other's parent.
+    w.add<Parent>(a, b);
+    w.add<Parent>(b, a);
+    w.add<Children>(a, std::vector<Entity>{b});
+    w.add<Children>(b, std::vector<Entity>{a});
+    propagate_transforms(w);
+    CHECK_FALSE(set_parent(w, c, a)); // refused: walking up from a never ends
+    destroy_recursive(w, a);
+    CHECK_FALSE(w.alive(a));
+    CHECK_FALSE(w.alive(b));
+    CHECK(w.alive(c));
+}

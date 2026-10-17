@@ -600,3 +600,23 @@ TEST_CASE("rollback: machines guess, correct themselves, and agree on every conf
     CHECK(machines[0].rollbacks() > 0); // it guessed wrong and went back
     CHECK(machines[0].resimulated() > 0);
 }
+
+TEST_CASE("net: connect() long after the host's last update doesn't time out at once") {
+    Host server, client;
+    REQUIRE(server.start());
+    REQUIRE(client.start());
+    // A game that sat in its menu for a while before joining: the first update is long after start().
+    PeerId id = client.connect(Address::loopback(server.port()));
+    f64 now = 100;
+    bool connected = false, dropped = false;
+    run(now, 3, [&](f64 t) { server.update(t), client.update(t); }, [&] {
+        while (auto e = client.receive()) {
+            connected = connected || (e->type == Event::Type::Connected && e->peer == id);
+            dropped = dropped || (e->type == Event::Type::Disconnected && e->peer == id);
+        }
+        while (server.receive()) {}
+        return connected || dropped;
+    });
+    CHECK(connected);
+    CHECK_FALSE(dropped);
+}

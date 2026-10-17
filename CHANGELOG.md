@@ -39,6 +39,21 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- `World::create(...)`, `insert` and `add` read the values given after moving the entity, so components copied from
+  another entity of the same archetype (`w.create(w.get<A>(other))`, and Bowl Editor's Duplicate) read freed memory
+  when the archetype grew.
+- Replication: a batch of changes bigger than a reliable message (64 KB) was refused by `Host::send` and never sent
+  again, so players never saw those entities; batches are now cut to fit, and a single component too big for any
+  message is reported instead. A component pointing at an entity a player is shown later is sent again once it
+  arrives, instead of pointing at nothing for good. An unreliable value that arrives after its component was removed
+  no longer adds it back.
+- `Host::connect` and `join_room` on a host that hadn't updated in more than `timeout` seconds (a game that waited in
+  its menu) dropped the new peer at the next update. A peer sending pieces of a reliable message past 64 KB is
+  disconnected instead of growing it without end.
+- Hierarchy: `set_parent` and `destroy_recursive` no longer hang on a parent cycle in loaded data, and entities whose
+  parent was destroyed without `destroy_recursive` keep having their global transform updated, as roots.
+- Tilemaps: an infinite map's chunk with a corner past 64 bits overflowed the check meant to refuse it, then was
+  written outside the layer (found by fuzzing).
 - Y-sorted tiles sort by the middle of their cell (`Tilemap::sort_y`) instead of the bottom of the picture, so a
   character walking up to a tall tile on an isometric map's near sides (down-left, down-right) is drawn in front of it,
   not behind.

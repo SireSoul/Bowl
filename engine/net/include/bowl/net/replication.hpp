@@ -90,6 +90,29 @@ BOWL_COMPONENT(Replicated, id)
 enum class Sync : u8 { OnChange, Continuous };
 
 namespace detail {
+// Collects the entities a component's fields point at.
+class EntityRefs final : public reflect::FieldVisitor {
+public:
+    explicit EntityRefs(std::vector<u64>& out) : out_(out) {}
+    void boolean(std::string_view, bool&) override {}
+    void integer(std::string_view, i64&, i64, i64) override {}
+    void real(std::string_view, f64&) override {}
+    void text(std::string_view, std::string&) override {}
+    void vector(std::string_view, f32*, int) override {}
+    void color(std::string_view, Color&) override {}
+    void entity(std::string_view, u64 bits) override {
+        if (bits) out_.push_back(bits);
+    }
+    bool begin_group(std::string_view) override { return true; }
+    void end_group() override {}
+    bool begin_list(std::string_view, usize&, bool) override { return true; }
+    bool asset(std::string_view, std::string&, std::string_view) override { return false; }
+    void unsupported(std::string_view, std::string_view) override {}
+
+private:
+    std::vector<u64>& out_;
+};
+
 struct ComponentKind {
     u32 key = 0;
     Sync sync = Sync::OnChange;
@@ -97,6 +120,7 @@ struct ComponentKind {
     std::function<json::Value(const ecs::World&, ecs::Entity, serial::Context&)> save;
     std::function<void(ecs::World&, ecs::Entity, const json::Value&, serial::Context&)> load; // adds it if missing
     std::function<void(ecs::World&, ecs::Entity)> remove;
+    std::function<void(const ecs::World&, ecs::Entity, std::vector<u64>&)> refs; // the entities it points at
 };
 template <reflect::Reflected C> ComponentKind component_kind(Sync sync) {
     ComponentKind k;
@@ -111,6 +135,10 @@ template <reflect::Reflected C> ComponentKind component_kind(Sync sync) {
     };
     k.remove = [](ecs::World& w, ecs::Entity e) {
         if (w.has<C>(e)) w.remove<C>(e);
+    };
+    k.refs = [](const ecs::World& w, ecs::Entity e, std::vector<u64>& out) {
+        EntityRefs visitor(out);
+        reflect::visit(visitor, "", const_cast<C&>(w.get<C>(e))); // only reads
     };
     return k;
 }

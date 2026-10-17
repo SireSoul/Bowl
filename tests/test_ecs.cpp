@@ -264,3 +264,27 @@ TEST_CASE("compact frees unused archetypes; queries and moves keep working") {
     w.compact();
     CHECK(positions.count() == 0);
 }
+
+namespace {
+struct Label {
+    std::string text;
+};
+std::string long_name(int i) { return "entity number " + std::to_string(i) + ", with a name too long to fit inline"; }
+} // namespace
+
+TEST_CASE("ecs: components copied from another entity, while the archetype they land in grows") {
+    // 16 rows fill an archetype's first allocation, so the 17th moves every row: what's given must be read first.
+    World w;
+    std::vector<Entity> made;
+    for (int i = 0; i < 16; ++i) made.push_back(w.create(Label{long_name(i)}, Position{static_cast<f32>(i), 1}));
+    Entity copy = w.create(w.get<Label>(made[0]), w.get<Position>(made[0]));
+    CHECK(w.get<Label>(copy).text == long_name(0));
+    CHECK(w.get<Position>(copy).y == 1);
+
+    World v;
+    std::vector<Entity> labelled;
+    for (int i = 0; i < 16; ++i) labelled.push_back(v.create(Label{long_name(i)}));
+    Entity e = v.create();
+    v.add<Label>(e, v.get<Label>(labelled[3]));
+    CHECK(v.get<Label>(e).text == long_name(3));
+}

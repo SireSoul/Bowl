@@ -293,7 +293,7 @@ bool parse_layers(const json::Value& list, const LayerContext& parent, std::stri
                 for (const json::Value& c : l["chunks"].array()) {
                     i64 cx = c["x"].as_int(), cy = c["y"].as_int(), cw = c["width"].as_int(), ch = c["height"].as_int();
                     if (cx < INT32_MIN || cy < INT32_MIN || cw < 0 || ch < 0 || cw > INT32_MAX || ch > INT32_MAX ||
-                        cx + cw > INT32_MAX || cy + ch > INT32_MAX) {
+                        cx > INT32_MAX - cw || cy > INT32_MAX - ch) { // (cx + cw could overflow even 64 bits)
                         error = std::format("layer '{}' has a chunk out of range", layer.name);
                         return false;
                     }

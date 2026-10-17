@@ -32,6 +32,11 @@ struct Gift {
 };
 BOWL_REFLECT(Gift, item, to)
 
+struct Note {
+    std::string text;
+};
+BOWL_COMPONENT(Note, text)
+
 struct Wave {
     i32 times = 0;
 };
@@ -52,9 +57,11 @@ struct Game {
         replicator.replicate<Position>(Sync::Continuous);
         replicator.replicate<Health>();
         replicator.replicate<Follow>();
+        replicator.replicate<Note>();
         replica.replicate<Position>(Sync::Continuous);
         replica.replicate<Health>();
         replica.replicate<Follow>();
+        replica.replicate<Note>();
         to_host = player.connect(Address::loopback(host.port()));
         REQUIRE(step(5, [&] { return to_player != 0 && player.peers().size() == 1; }));
     }
@@ -208,4 +215,82 @@ TEST_CASE("net: replication gets there through a bad network") {
         }
         return true;
     }));
+}
+
+TEST_CASE("net: replication splits what doesn't fit in one reliable message") {
+    Game game;
+    // 30 components of 12 KB: no single message (64 KB at most) holds all of them, and none may come out too big.
+    for (int i = 0; i < 30; ++i) game.host_world.create(Replicated{}, Note{std::string(12000, static_cast<char>('a' + i % 26))});
+    CHECK(game.step(10, [&] {
+        usize arrived = 0;
+        game.player_world.each<Note>([&](ecs::Entity, Note& n) { arrived += n.text.size() == 12000; });
+        return arrived == 30;
+    }));
+    CHECK(game.replica.size() == 30);
+}
+
+TEST_CASE("net: a reference to an entity a player is shown later points at it once it arrives") {
+    Game game;
+    ecs::World& w = game.host_world;
+    ecs::Entity farmer = w.create(Replicated{}, Position{{500, 0}});
+    ecs::Entity dog = w.create(Replicated{}, Position{{0, 0}}, Follow{farmer});
+    bool farmer_shown = false;
+    game.replicator.relevant([&](PeerId, ecs::Entity e) { return e == dog || farmer_shown; });
+    REQUIRE(game.step(2, [&] { return game.replica.size() == 1; }));
+    CHECK_FALSE(game.player_world.get<Follow>(game.on_player(dog)).target); // nothing to point at yet
+    farmer_shown = true;
+    CHECK(game.step(2, [&] {
+        ecs::Entity dog_p = game.on_player(dog), farmer_p = game.on_player(farmer);
+        return farmer_p && game.player_world.get<Follow>(dog_p).target == farmer_p;
+    }));
+}
+
+namespace replication_test {
+std::vector<u8> le32(u32 v) { return {u8(v), u8(v >> 8), u8(v >> 16), u8(v >> 24)}; }
+void put(std::vector<u8>& out, const std::vector<u8>& more) { out.insert(out.end(), more.begin(), more.end()); }
+Event message(std::vector<u8> data) { return {Event::Type::Message, 1, Delivery::Reliable, std::move(data)}; }
+std::vector<u8> position_bytes(f32 x) {
+    serial::Context ctx;
+    return net::detail::encode(serial::to_json(Position{{x, 0}}, ctx));
+}
+std::vector<u8> reliable(u32 tick, std::vector<std::vector<u8>> ops) {
+    std::vector<u8> m{Replica::reliable_tag};
+    put(m, le32(tick));
+    m.push_back(u8(ops.size())), m.push_back(0);
+    for (auto& op : ops) put(m, op);
+    return m;
+}
+std::vector<u8> continuous(u32 tick, u32 id, f32 x) {
+    std::vector<u8> m{Replica::continuous_tag};
+    put(m, le32(tick));
+    put(m, le32(id));
+    put(m, le32(net::detail::type_key<Position>()));
+    auto bytes = position_bytes(x);
+    m.push_back(u8(bytes.size())), m.push_back(u8(bytes.size() >> 8));
+    put(m, bytes);
+    return m;
+}
+} // namespace replication_test
+
+TEST_CASE("net: an unreliable value that arrives after its component was removed doesn't bring it back") {
+    // The host's messages, by hand, in the order a bad network might deliver them.
+    ecs::World w;
+    Replica replica{w};
+    replica.replicate<Position>(Sync::Continuous);
+    u32 key = net::detail::type_key<Position>();
+    std::vector<u8> spawn{1}, set{3}, remove{4};
+    put(spawn, le32(7));
+    put(set, le32(7)), put(set, le32(key));
+    auto bytes = position_bytes(1);
+    put(set, le32(static_cast<u32>(bytes.size()))), put(set, bytes);
+    put(remove, le32(7)), put(remove, le32(key));
+
+    replica.handle(message(reliable(1, {spawn, set})));
+    ecs::Entity e = replica.entity(7);
+    replica.handle(message(continuous(5, 7, 5)));
+    CHECK(w.get<Position>(e).value.x == 5);
+    replica.handle(message(reliable(7, {remove})));
+    CHECK_FALSE(w.has<Position>(e));
+    replica.handle(message(continuous(6, 7, 6))); // sent before the removal, held up on the way
+    CHECK_FALSE(w.has<Position>(e));
 }

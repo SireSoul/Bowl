@@ -167,7 +167,7 @@ PeerId Host::connect(const Address& to) {
     p->address = to;
     p->outgoing = true;
     p->client_salt = nonzero_random();
-    p->started = p->last_received = now_;
+    p->started = p->last_received = -1; // the next update's time: now_ is as old as the last update, maybe long ago
     PeerId id = p->id;
     peers_[id] = std::move(p);
     return id;
@@ -674,6 +674,10 @@ void Host::handle_sealed(Peer& peer, u8 kind, std::span<const u8> packet, usize 
         p->early.erase(it);
         ++p->next_expected;
         p->partial.insert(p->partial.end(), bytes.begin(), bytes.end());
+        if (p->partial.size() > max_reliable) { // no Host sends one this big: a peer that does is misbehaving
+            drop(p->id, true);
+            return;
+        }
         if (!(flags & flag_more)) {
             events_.push_back({Event::Type::Message, p->id, Delivery::Reliable, std::move(p->partial)});
             p->partial.clear();
@@ -724,6 +728,7 @@ void Host::update(f64 now) {
 void Host::send_or_time_out(f64 now) {
     std::vector<PeerId> gone;
     for (auto& [id, p] : peers_) {
+        if (p->last_received < 0) p->started = p->last_received = now; // connect()ed since the last update
         if (now - p->last_received > settings_.timeout) gone.push_back(id);
         else send_packet(*p, now, false);
     }

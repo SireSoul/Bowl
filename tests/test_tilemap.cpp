@@ -502,6 +502,14 @@ TEST_CASE("tilemap: layers bigger than their data or than memory fail to load, w
             { "x": 2147483647, "y": 0, "width": 2, "height": 1, "data": [1, 2] },
             { "x": 0, "y": 0, "width": 1, "height": 1, "data": [3] } ] } ] })", &error);
     CHECK(error.find("out of range") != std::string::npos);
+    // Found by fuzzing: a corner past 64 bits reads as the largest i64, and adding the size to it overflowed in the
+    // very check meant to catch it.
+    error.clear();
+    load(R"({ "orientation": "orthogonal", "width": 0, "height": 0, "tilewidth": 8, "tileheight": 8, "infinite": true,
+        "layers": [ { "type": "tilelayer", "name": "g", "chunks": [
+            { "x": 0, "y": 0, "width": 2, "height": 2, "data": [1, 0, 0, 2] },
+            { "x": 0, "y": 44444444444444444444444444, "width": 2, "height": 2, "data": [3, 0, 0, 4] } ] } ] })", &error);
+    CHECK(error.find("out of range") != std::string::npos);
     load(R"({ "orientation": "orthogonal", "width": 0, "height": 0, "tilewidth": 8, "tileheight": 8, "infinite": true,
         "layers": [ { "type": "tilelayer", "name": "g", "chunks": [
             { "x": 0, "y": 0, "width": 1, "height": 1, "data": [1] },

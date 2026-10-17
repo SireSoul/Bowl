@@ -2,7 +2,10 @@
 
 #include "wire.hpp"
 
+#include "bowl/core/log.hpp"
+
 #include <algorithm>
+#include <unordered_set>
 
 namespace bowl::net {
 
@@ -18,7 +21,8 @@ using wire::Writer;
 namespace {
 
 enum Op : u8 { Spawn = 1, Despawn = 2, Set = 3, Remove = 4 };
-constexpr usize max_reliable_batch = 60 * 1024;
+constexpr usize reliable_header = 1 + 4 + 2;
+constexpr usize set_header = 1 + 4 + 4 + 4; // op, net id, component key, length
 constexpr usize continuous_header = 1 + 4;
 
 u64 hash_bytes(std::span<const u8> bytes) {
@@ -63,6 +67,7 @@ struct Replicator::Impl {
     u32 next_id = 1, tick = 1;
     std::unordered_map<u32, ecs::Entity> by_id;
     std::unordered_map<u64, u64> net_ids; // entity bits to net id: the entity map component saving uses
+    std::unordered_set<u64> too_big;      // (net id, kind) already warned about: bigger than a reliable message
 
     struct Sent {
         bool present = false; // the player has the component
@@ -71,6 +76,7 @@ struct Replicator::Impl {
     };
     struct Shown {
         std::vector<Sent> components; // by kind
+        u32 spawned = 0;              // the update the player was sent it in (again, after it stopped being relevant)
     };
     struct PeerState {
         std::unordered_map<u32, Shown> shown; // the entities this player has, by net id
@@ -94,9 +100,10 @@ struct Replicator::Impl {
             w.u16_(0);
             count = 0;
         }
-        void op(u8 kind, u32 id) {
+        // `extra`: the bytes that follow the op's own 5, so no message grows past what a Host sends.
+        void op(u8 kind, u32 id, usize extra = 0) {
             if (w.out.empty()) begin();
-            if (w.out.size() > max_reliable_batch || count == 0xFFFF) {
+            if (count > 0 && (w.out.size() + 5 + extra > Host::max_reliable || count == 0xFFFF)) {
                 finish();
                 begin();
             }
@@ -165,6 +172,7 @@ void Replicator::update(Host& host) {
     struct Encoded {
         std::vector<u8> bytes;
         u64 hash = 0;
+        std::vector<u32> refs; // net ids of the replicated entities it points at
     };
     std::unordered_map<u64, std::optional<Encoded>> encoded;
     auto encode = [&](u32 id, ecs::Entity e, usize k) -> const std::optional<Encoded>& {
@@ -173,6 +181,10 @@ void Replicator::update(Host& host) {
             Encoded enc;
             enc.bytes = detail::encode(m.kinds[k].save(m.world, e, ctx));
             enc.hash = hash_bytes(enc.bytes);
+            std::vector<u64> refs;
+            m.kinds[k].refs(m.world, e, refs);
+            for (u64 bits : refs)
+                if (auto ref = m.net_ids.find(bits); ref != m.net_ids.end()) enc.refs.push_back(static_cast<u32>(ref->second));
             it->second = std::move(enc);
         }
         return it->second;
@@ -196,6 +208,7 @@ void Replicator::update(Host& host) {
             auto [it, fresh] = state.shown.try_emplace(id);
             if (fresh) {
                 it->second.components.resize(m.kinds.size());
+                it->second.spawned = m.tick;
                 batch.op(Spawn, id);
             }
             shown.emplace_back(id, e);
@@ -214,7 +227,7 @@ void Replicator::update(Host& host) {
                 const auto& enc = encode(id, e, k);
                 if (!enc) {
                     if (sent.present) {
-                        batch.op(Remove, id);
+                        batch.op(Remove, id, 4);
                         batch.w.u32_(m.kinds[k].key);
                         sent = {};
                     }
@@ -222,14 +235,26 @@ void Replicator::update(Host& host) {
                 }
                 bool reliable = m.kinds[k].sync == Sync::OnChange || !sent.present ||
                                 continuous_header + 10 + enc->bytes.size() > Host::max_unreliable;
+                // An entity it points at reached the player after it did: on their side, the reference was nothing.
+                bool target_new = std::any_of(enc->refs.begin(), enc->refs.end(), [&](u32 ref) {
+                    auto target = state.shown.find(ref);
+                    return target != state.shown.end() && target->second.spawned > sent.at;
+                });
                 if (reliable) {
-                    if (sent.present && sent.hash == enc->hash) continue;
-                    batch.op(Set, id);
+                    if (sent.present && sent.hash == enc->hash && !target_new) continue;
+                    if (reliable_header + set_header + enc->bytes.size() > Host::max_reliable) {
+                        if (!m.too_big.contains(slot(id, static_cast<u32>(k))))
+                            warn("replication: entity {}'s component (key {:08x}) is {} bytes, more than a message holds; "
+                                 "it isn't sent", id, m.kinds[k].key, enc->bytes.size());
+                        m.too_big.insert(slot(id, static_cast<u32>(k)));
+                        continue;
+                    }
+                    batch.op(Set, id, 8 + enc->bytes.size());
                     batch.w.u32_(m.kinds[k].key);
                     batch.w.u32_(static_cast<u32>(enc->bytes.size()));
                     batch.w.bytes(enc->bytes);
                     sent = {true, enc->hash, m.tick};
-                } else if (sent.hash != enc->hash || m.tick - sent.at >= m.settings.resend_every) {
+                } else if (sent.hash != enc->hash || target_new || m.tick - sent.at >= m.settings.resend_every) {
                     continuous.push_back({id, k});
                 }
             }
@@ -351,7 +376,8 @@ bool Replica::handle(const Event& event) {
                 auto e = m.by_id.find(id);
                 if (!r.ok || kind == m.by_key.end() || e == m.by_id.end()) continue;
                 m.kinds[kind->second].remove(m.world, e->second);
-                m.newest.erase(slot(id, key));
+                u32& newest_tick = m.newest[slot(id, key)]; // so an older unreliable value can't bring it back
+                newest_tick = std::max(newest_tick, tick);
             } else {
                 break; // something this version doesn't know: stop rather than misread the rest
             }
