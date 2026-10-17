@@ -4,6 +4,7 @@ Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: chan
 `cmake --build <build folder> --target bowl_api_docs`.
 
 - [bowl/gfx/bidi.hpp](#bowlgfxbidihpp)
+- [bowl/gfx/bwtx.hpp](#bowlgfxbwtxhpp)
 - [bowl/gfx/device.hpp](#bowlgfxdevicehpp)
 - [bowl/gfx/gpu_particles.hpp](#bowlgfxgpu_particleshpp)
 - [bowl/gfx/particles.hpp](#bowlgfxparticleshpp)
@@ -55,6 +56,37 @@ returned as they are.
 
 ```cpp
 u32 mirror(u32 codepoint);
+```
+
+## bowl/gfx/bwtx.hpp
+
+`#include "bowl/gfx/bwtx.hpp"` · namespace `bowl::gfx`
+
+BWTX: the picture format bowl-cook turns PNG and JPEG files into. RGBA8 pixels, losslessly packed so they decode
+several times faster than a PNG while staying about its size. The texture loader (and decode_png) tells it apart by
+its first four bytes, "BWTX", so a cooked picture keeps its .png name.
+
+The layout: "BWTX", a version byte (1), the channel count (4), two zero bytes, the width and height as little-endian
+u32s, then the pixels as a QOI stream (the "Quite OK Image" format, qoiformat.org) ending in seven 0 bytes and a 1.
+
+```cpp
+inline constexpr u32 bwtx_max_side = 16384; // as for every texture
+```
+
+```cpp
+bool is_bwtx(std::span<const u8> bytes);
+```
+
+`rgba` holds width * height * 4 bytes, row by row from the top.
+
+```cpp
+std::vector<u8> encode_bwtx(u32 width, u32 height, std::span<const u8> rgba);
+```
+
+False for anything that isn't a whole BWTX picture of at most bwtx_max_side a side.
+
+```cpp
+bool decode_bwtx(std::span<const u8> bytes, u32& width, u32& height, std::vector<u8>& rgba);
 ```
 
 ## bowl/gfx/device.hpp
@@ -685,7 +717,8 @@ Encodes RGBA8 pixels as a PNG file.
 bool write_png(const std::filesystem::path& path, u32 width, u32 height, std::span<const u8> rgba);
 ```
 
-Decodes a PNG (or JPEG, BMP, TGA) in memory to RGBA8 pixels. False if it isn't a picture.
+Decodes a PNG (or JPEG, BMP, TGA, or a BWTX picture bowl-cook made) in memory to RGBA8 pixels. False if it isn't a
+picture.
 
 ```cpp
 bool decode_png(std::span<const u8> bytes, u32& width, u32& height, std::vector<u8>& rgba);
@@ -1563,6 +1596,17 @@ Reads a .tmx document (XML). External tilesets may be .tsx or .tsj.
 static bool parse_tmx(std::string_view text, std::string_view base_dir,
                       const std::function<std::optional<std::string>(const std::string& path)>& read_file,
                       Tilemap& out, std::string& error);
+```
+
+The map at `path` (a .tmj or .tmx, by its extension) as one .tmj document that needs no other file, for shipping:
+external tilesets and object templates put in place (their image paths moved to read from the map's folder), and
+layer data as plain arrays of gids. bowl-cook stores it as binary JSON, which parse() and the loader read. The
+tileset and template files it read are added to `files_read`.
+
+```cpp
+static std::optional<json::Value> flatten(std::string_view text, std::string_view path,
+                                          const std::function<std::optional<std::string>(const std::string& path)>& read_file,
+                                          std::vector<std::string>& files_read, std::string& error);
 ```
 
 ```cpp
