@@ -4,6 +4,7 @@ Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: chan
 `cmake --build <build folder> --target bowl_api_docs`.
 
 - [bowl/audio/audio.hpp](#bowlaudioaudiohpp)
+- [bowl/audio/sound_event.hpp](#bowlaudiosound_eventhpp)
 
 ## bowl/audio/audio.hpp
 
@@ -179,6 +180,46 @@ u32 generation = 0;
 explicit operator bool() const;
 ```
 
+### EventParams
+
+How a sound event plays this time.
+
+```cpp
+struct EventParams
+```
+
+```cpp
+std::optional<Vec2> position; // set: in the world, like play_at, with the event's attenuation
+std::vector<std::pair<std::string, std::string>> switches; // {"surface", "grass"}: picks the clip list per value
+f32 gain = 1;
+std::string_view switch_value(std::string_view name) const;
+```
+
+### EventInstance
+
+Handle to a playing sound event: all of its voices, including ones still waiting out a delay. Stale handles are
+ignored safely.
+
+```cpp
+struct EventInstance
+```
+
+```cpp
+u32 id = 0;
+explicit operator bool() const;
+```
+
+### EventPick
+
+What an event picked for one of its layers the last time it played (the F1 overlay shows it).
+
+```cpp
+struct EventPick {
+    std::string clip;
+    f32 gain = 1, pitch = 1, delay = 0;
+};
+```
+
 ### AudioEngine
 
 Software mixer on SDL's audio device. Every method is thread-safe; mixing happens on SDL's audio thread.
@@ -269,15 +310,162 @@ f32 duck_level(Bus bus) const;
 u32 active_voices() const;
 ```
 
+Plays a sound event (see SoundEvent): picks its clips, gain and pitch, and keeps to its instance limit and
+cooldown. Empty if it can't play now (cooldown, at its limit with steal "none", no clips).
+
+```cpp
+EventInstance play_event(const SoundEvent& event, const EventParams& params = {});
+EventInstance play_event(const Asset<SoundEvent>& event, const EventParams& params = {});
+void stop(EventInstance instance);
+bool playing(EventInstance instance) const;
+```
+
+Moves an event played at a position, with all its voices.
+
+```cpp
+void set_position(EventInstance instance, Vec2 position);
+```
+
+The voices it has started so far (delayed layers start later).
+
+```cpp
+std::vector<Voice> voices(EventInstance instance) const;
+```
+
+What it picked the last time it played, one per layer that played.
+
+```cpp
+std::vector<EventPick> last_picks(const SoundEvent& event) const;
+```
+
+Event choices come from this engine's own random numbers: the same seed makes the same choices.
+
+```cpp
+void seed_random(u64 seed);
+```
+
+Moves the clock event delays and cooldowns count on, and starts delayed voices that are due. The App calls it
+every frame with the real (unscaled) frame time.
+
+```cpp
+void update(f32 dt);
+```
+
 Renders `frames` stereo frames into out (used by the device callback; public for offline rendering/tests).
 
 ```cpp
 void mix(f32* out, u32 frames);
 ```
 
-Registers the Sound (WAV, OGG, Opus) and Music (OGG, Opus; streamed) loaders with the asset manager.
+Registers the Sound (WAV, OGG, Opus), Music (OGG, Opus; streamed) and SoundEvent (.sound) loaders with the asset
+manager.
 
 ```cpp
 void register_asset_loaders(AssetManager& assets);
+```
+
+## bowl/audio/sound_event.hpp
+
+`#include "bowl/audio/sound_event.hpp"` · namespace `bowl::audio`
+
+### SoundEvent
+
+A sound the game asks for by what happened ("footstep", "door slam") rather than by file: which clip plays, how loud
+and at what pitch is picked each time, within limits the event's .sound file sets. Loaded as an asset from .sound
+JSON files, which hot-reload; play one with AudioEngine::play_event. See docs/guides/audio.md, "Sound events".
+
+```cpp
+class SoundEvent
+```
+
+#### Range
+
+Picked anywhere between min and max, evenly.
+
+```cpp
+struct Range {
+    f32 min = 1, max = 1;
+};
+```
+
+#### Clip
+
+```cpp
+struct Clip {
+    std::string path; // as the file names it
+    Asset<Sound> sound;
+    f32 weight = 1; // how often it's picked compared with the others in its list
+};
+```
+
+```cpp
+using ClipList = std::vector<Clip>;
+```
+
+#### Layer
+
+Clips that play together with the other layers' (a footstep and the rustle of clothes). One clip of the layer's
+list plays each time; with a switch, the list is the one for the switch's value in EventParams.
+
+```cpp
+struct Layer {
+    ClipList clips;          // without a switch, or when its value isn't listed
+    std::string switch_name; // e.g. "surface"; empty: no switch
+    std::vector<std::pair<std::string, ClipList>> switch_values; // {"grass", [...]}, in file order
+    Range gain{1, 1};
+    Range pitch{1, 1};
+    Range delay{0, 0};
+};
+```
+
+```cpp
+std::string path; // the asset path it was loaded from; empty for an event made in code
+```
+
+Tells AudioEngine's instance limits which event this is when path is empty. Copies share it.
+
+```cpp
+u64 id = next_id();
+std::vector<Layer> layers;
+Range gain{1, 1};
+Range pitch{1, 1};
+Range delay{0, 0}; // seconds before it starts
+bool no_repeat = true; // never the same clip twice in a row, when a list has more than one
+Bus bus = Bus::Effects;
+bool loop = false;
+f32 low_pass = 0, high_pass = 0; // Hz; 0 = off
+Attenuation attenuation;         // for events played at a position
+```
+
+```cpp
+enum class Steal : u8 {
+    Oldest,   // the one playing longest stops for the new one
+    Quietest, // the quietest stops for the new one (counting distance, for events in the world)
+    None,     // the new one doesn't play
+};
+u32 max_instances = 0; // how many may play at once; 0 = any number
+Steal steal = Steal::Oldest;
+f32 cooldown = 0; // seconds after it plays before it can play again
+```
+
+The list a layer picks from, given the switches: the switch value's list, else the layer's own clips, else the
+first value's list. Null if there is nothing to pick from.
+
+```cpp
+const ClipList* clips_for(const Layer& layer, const EventParams& params) const;
+```
+
+Reads an event from its JSON. `load` turns each clip's path into a Sound (AssetManager::load&lt;Sound>, say).
+False, with `error` saying what's wrong, if the document isn't a valid event.
+
+```cpp
+static bool parse(const json::Value& doc, FunctionRef<Asset<Sound>(std::string_view)> load, SoundEvent& out,
+                  std::string& error);
+```
+
+Registers the SoundEvent loader (.sound files) with the asset manager; register_asset_loaders calls it.
+
+```cpp
+void register_sound_event_loader(AssetManager& assets);
 ```
 

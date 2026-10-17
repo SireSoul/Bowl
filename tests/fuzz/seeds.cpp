@@ -531,6 +531,18 @@ void net_seeds() {
 
 } // namespace
 
+// Sound events (tests/test_audio.cpp, samples/tutorial)
+void sound_event_seeds() {
+    if (auto footsteps = read_file_text(fs::path(BOWL_SAMPLES_DIR) / "tutorial/assets/footsteps.sound"))
+        seed("sound_event", *footsteps);
+    seed("sound_event", R"({ "switch": { "surface": { "grass": ["grass.wav"], "stone": [{"sound": "stone.wav", "weight": 2}] } },
+        "layers": [ { "clips": ["/ui/click.wav"], "delay": [0.05, 0.1], "gain": 0.5 } ],
+        "gain": [0.5, 0.75], "pitch": 1.1, "bus": "ui", "max_instances": 3, "steal": "quietest",
+        "cooldown": 0.02, "attenuation": { "near": 32, "far": 400, "pan_distance": 100 } })");
+    seed("sound_event", R"({ "clips": ["a.wav", "b.wav", "c.wav"], "no_repeat": false, "loop": true, "low_pass": 800,
+        "high_pass": 100, "max_instances": 2, "steal": "none" })");
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::fprintf(stderr, "usage: bowl_fuzz_seeds <folder>\n");
@@ -540,6 +552,7 @@ int main(int argc, char** argv) {
     json_seeds();
     tilemap_seeds();
     sprite_sheet_seeds();
+    sound_event_seeds();
     world_seeds();
     archive_seeds();
     font_seeds();
