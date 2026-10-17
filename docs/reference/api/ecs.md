@@ -303,6 +303,8 @@ void restore_components(const std::vector<std::pair<ComponentId, ComponentInfo>>
 
 BOWL_COMPONENT(Type, fields...): BOWL_REFLECT plus registration when the program (or game library) loads, so saved
 worlds can name the type before any code touches it. Use it for components; BOWL_REFLECT for other structs.
+The registration is a static in every file that includes the definition, not an inline variable: compilers may skip
+initializing an inline variable nothing uses, and GCC does, which left types unknown by name on Linux.
 
 ```cpp
 #define BOWL_COMPONENT(Type, ...)

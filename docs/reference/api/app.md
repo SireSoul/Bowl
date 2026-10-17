@@ -344,6 +344,14 @@ struct AppConfig {
 };
 ```
 
+Registers the engine's own components (transforms, names, sprites, maps, colliders...), so saved levels that hold
+them load by name. The engine does it at startup, before a hot-reloadable game library loads, so their code never
+belongs to a library that gets unloaded; tools and tests that load levels without an Engine call it themselves.
+
+```cpp
+void register_engine_components();
+```
+
 ### Game
 
 Implement this, then put BOWL_MAIN(YourGame) in one .cpp file (see bowl/app/main.hpp).
