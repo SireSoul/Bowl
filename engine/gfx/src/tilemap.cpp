@@ -990,6 +990,10 @@ Vec2 Tilemap::cell_to_world(f32 x, f32 y) const {
     return {x * tw, y * th};
 }
 
+f32 Tilemap::sort_y(i32 x, i32 y) const {
+    return cell_to_world(static_cast<f32>(x), static_cast<f32>(y)).y + static_cast<f32>(tile_height) * 0.5f;
+}
+
 Vec2 Tilemap::world_to_cell(Vec2 w) const {
     f32 tw = static_cast<f32>(tile_width), th = static_cast<f32>(tile_height);
     if (orientation == Orientation::Isometric) {
@@ -1151,7 +1155,8 @@ struct MapDraw {
         if (!img.texture) return;
         // Bottom of the cell: the diamond's bottom corner (isometric) or the bottom-left of the cell's box.
         Vec2 anchor = map.cell_to_world(static_cast<f32>(x), static_cast<f32>(y)) + Vec2{0, th} + base(li) + ts->tile_offset;
-        f32 depth = sorts(li) ? o.depth + anchor.y : layer_depth(li);
+        // Sorted by the middle of the cell, not the bottom of the picture (see Tilemap::sort_y).
+        f32 depth = sorts(li) ? o.depth + map.sort_y(x, y) + base(li).y + ts->tile_offset.y : layer_depth(li);
         draw_tile_image(batch, img, gid, anchor, pivot_x, img.source.size(), color(li), depth);
     }
 

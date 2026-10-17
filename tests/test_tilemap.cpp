@@ -179,6 +179,29 @@ TEST_CASE("tilemap: isometric coordinates round-trip") {
     }
 }
 
+TEST_CASE("tilemap: a sprite next to a tile sorts behind it from the far sides and in front from the near ones") {
+    Tilemap map = load(R"({
+      "orientation": "isometric", "width": 10, "height": 10, "tilewidth": 32, "tileheight": 16,
+      "tilesets": [], "layers": []
+    })");
+    // A tile in cell (5, 5), and a character with a 0.4-cell footprint walking along each of its sides, its feet in
+    // the middle of the footprint. Feet below the tile's sort_y draw in front.
+    constexpr f32 r = 0.2f, step = 0.05f;
+    f32 tile = map.sort_y(5, 5);
+    auto feet = [&](f32 x, f32 y) { return map.cell_to_world(x, y).y; };
+    for (f32 along = 5 - r + step; along < 6 + r; along += step) {
+        CHECK(feet(5 - r, along) < tile);  // up-left side (-x): behind
+        CHECK(feet(along, 5 - r) < tile);  // up-right side (-y): behind
+        CHECK(feet(6 + r, along) > tile);  // down-right side (+x): in front
+        CHECK(feet(along, 6 + r) > tile);  // down-left side (+y): in front
+    }
+    // The middle of the cell, in every orientation.
+    CHECK(tile == map.cell_to_world(5.5f, 5.5f).y);
+    Tilemap flat = load(R"({ "orientation": "orthogonal", "width": 4, "height": 4, "tilewidth": 16, "tileheight": 16,
+                             "tilesets": [], "layers": [] })");
+    CHECK(flat.sort_y(1, 2) == 40);
+}
+
 TEST_CASE("tilemap: helpful errors") {
     std::string error;
     load(R"({"orientation": "octagonal", "tilewidth": 8, "tileheight": 8})", &error);

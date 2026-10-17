@@ -167,23 +167,58 @@ void DevTools::draw_post() {
 }
 
 void DevTools::draw_profiler() {
+    // Gather this frame's zones; zones that didn't run count as zero for it.
+    for (const auto& z : profiler::last_frame()) {
+        auto it = std::find_if(zone_totals_.begin(), zone_totals_.end(),
+                               [&](const ZoneRow& r) { return r.name == z.name; });
+        if (it == zone_totals_.end()) it = zone_totals_.insert(zone_totals_.end(), ZoneRow{std::string(z.name)});
+        it->ms += z.milliseconds;
+        it->calls += z.calls;
+    }
+    ++zone_frames_;
+    // Twice a second, the averages become the rows, slowest first; the order holds until the next time.
+    u64 now = SDL_GetTicksNS();
+    if (zone_rows_.empty() || now - zone_window_start_ns_ >= 500'000'000) {
+        // A zone stays listed once it has run (at 0 when it didn't run lately), so rarely run ones don't blink.
+        for (const ZoneRow& shown : zone_rows_)
+            if (std::none_of(zone_totals_.begin(), zone_totals_.end(),
+                             [&](const ZoneRow& r) { return r.name == shown.name; }))
+                zone_totals_.push_back(ZoneRow{shown.name});
+        zone_rows_ = std::move(zone_totals_);
+        zone_totals_.clear();
+        for (ZoneRow& r : zone_rows_) {
+            r.ms /= zone_frames_;
+            r.calls /= zone_frames_;
+        }
+        std::stable_sort(zone_rows_.begin(), zone_rows_.end(),
+                         [](const ZoneRow& a, const ZoneRow& b) { return a.ms > b.ms; });
+        zone_frames_ = 0;
+        zone_window_start_ns_ = now;
+    }
+
     if (ImGui::BeginTable("zones", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("zone");
-        ImGui::TableSetupColumn("ms");
-        ImGui::TableSetupColumn("calls");
+        ImGui::TableSetupColumn("ms / frame");
+        ImGui::TableSetupColumn("calls / frame");
         ImGui::TableHeadersRow();
-        for (const auto& z : profiler::last_frame()) {
+        for (const ZoneRow& r : zone_rows_) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(z.name.data(), z.name.data() + z.name.size());
+            ImGui::TextUnformatted(r.name.c_str());
             ImGui::TableNextColumn();
-            ImGui::Text("%.3f", z.milliseconds);
+            ImGui::Text("%.3f", r.ms);
             ImGui::TableNextColumn();
-            ImGui::Text("%u", z.calls);
+            // Whole numbers when a zone runs the same number of times every frame; otherwise the average (0.5 for a
+            // fixed tick at 60 Hz on a 120 Hz screen).
+            if (r.calls == static_cast<f64>(static_cast<u64>(r.calls)))
+                ImGui::Text("%llu", static_cast<unsigned long long>(r.calls));
+            else
+                ImGui::Text("%.2f", r.calls);
         }
         ImGui::EndTable();
     }
 }
+
 
 void DevTools::draw_systems(const char* label, ecs::Schedule& schedule) {
     ImGui::PushID(label);

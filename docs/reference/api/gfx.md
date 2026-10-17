@@ -1596,6 +1596,14 @@ return the whole cell under the point.
 Vec2 world_to_cell(Vec2 world) const;
 ```
 
+The y a tile in cell (x, y) sorts by when y-sorted: the middle of the cell, where the feet of a sprite standing
+in the middle of it would be. Sprites sort by their feet, so they go behind a tile from the far sides and in
+front from the near ones.
+
+```cpp
+f32 sort_y(i32 x, i32 y) const;
+```
+
 The cell under a map point.
 
 ```cpp
@@ -1616,7 +1624,8 @@ struct TilemapDrawOptions {
     f32 time = 0;         // seconds, for animated tiles
     f32 depth = 0;        // base depth; each layer adds layer_depth_step
     f32 layer_depth_step = 1;
-    // Depth = tile bottom y (+ base), so sprites at depth = their feet's y walk behind tall tiles (isometric).
+    // Depth = the middle of the tile's cell (Tilemap::sort_y, + base), so sprites at depth = their feet's y go behind
+    // tall tiles from the far sides and in front from the near ones (isometric).
     // Which layers sort: those with a Tiled bool property "ysort"; if no layer has it, every layer but the first.
     // Layers that don't sort draw underneath everything sorted (ground).
     bool y_sort = false;
@@ -1688,8 +1697,8 @@ Bowl Editor puts in a level for a .tmj or .tmx file, and draw_maps draws every o
 struct Map {
     Asset<Tilemap> map;
     f32 depth = 0;      // added to every tile's draw depth
-    bool y_sort = true; // tall layers sort with sprites by their bottom edge (TilemapDrawOptions::y_sort); off: all of
-    // it draws underneath sprites
+    bool y_sort = true; // tall layers sort with sprites by the middles of their cells (TilemapDrawOptions::y_sort);
+    // off: all of it draws underneath sprites
     bool visible = true;
 };
 ```

@@ -2,6 +2,9 @@
 
 #include "bowl/app/engine.hpp"
 
+#include <string>
+#include <vector>
+
 union SDL_Event;
 
 namespace bowl {
@@ -39,6 +42,15 @@ private:
     bool frame_open_ = false;
     ecs::Entity selected_;
     char filter_[128] = ""; // entity list filter
+    // The profiler table: totals gathered for half a second, then shown as averages per frame in a fixed order, so rows
+    // don't jump about as zones trade places or skip frames (a fixed tick doesn't run every frame).
+    struct ZoneRow {
+        std::string name;
+        f64 ms = 0, calls = 0; // per frame: averages shown (rows), or totals so far (gathering)
+    };
+    std::vector<ZoneRow> zone_rows_, zone_totals_;
+    u32 zone_frames_ = 0;
+    u64 zone_window_start_ns_ = 0;
 #endif
     [[maybe_unused]] Engine& engine_;
     bool visible_ = false;

@@ -53,7 +53,7 @@ images.
 | `time` | 0 | Seconds, for animated tiles; pass `engine.time()` |
 | `depth` | 0 | Base depth for the map's sprites |
 | `layer_depth_step` | 1 | Depth added per layer, so later layers draw on top |
-| `y_sort` | `false` | Give tiles depth by their bottom edge (see below) |
+| `y_sort` | `false` | Give tiles depth by the middle of their cell (see below) |
 | `only_layer` | empty | Draw just the layer with this name |
 | `layers` | `All` | `Flat` or `Sorted` to draw only the layers that don't, or do, y-sort |
 
@@ -109,7 +109,9 @@ s.depth = feet.y;
 batch.draw(*player_texture, s);
 ```
 
-With `y_sort`, tiles in sorted layers get a depth from their bottom edge. Which layers sort: any layer with a Tiled
+With `y_sort`, a tile in a sorted layer gets the depth of the middle of its cell (`Tilemap::sort_y`), which is where
+the feet of a character standing in that cell would be. A character beside it is then behind it on the two far sides
+and in front of it on the two near ones, whichever way it walks up. Which layers sort: any layer with a Tiled
 bool property `ysort` set to true; if no layer has that property, every layer except the first. Layers that don't
 sort (the ground) draw below everything that does.
 

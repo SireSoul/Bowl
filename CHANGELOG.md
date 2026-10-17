@@ -36,6 +36,12 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- Y-sorted tiles sort by the middle of their cell (`Tilemap::sort_y`) instead of the bottom of the picture, so a
+  character walking up to a tall tile on an isometric map's near sides (down-left, down-right) is drawn in front of it,
+  not behind.
+- The dev overlay's profiler table no longer flickers: it shows each zone's average per frame over half a second, in
+  an order that holds between updates, and keeps zones that don't run every frame (the fixed tick, asset polling)
+  instead of dropping them on frames they skip.
 - The log's window line shows the size the window got (full screen on a phone, for example), not the size asked
   for.
 - Infinite Tiled maps with chunks at positions near the edge of 32-bit range wrote outside the layer's memory.
