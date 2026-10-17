@@ -186,6 +186,7 @@ struct AppRunner {
 
         e.input_.end_events();
         e.assets_.finish_loads(); // background loads that are ready
+        e.audio_.update(static_cast<f32>(real_dt)); // delayed sound event voices, cooldowns
         if (e.assets_.hot_reload() && now_seconds() - last_asset_poll > 0.25) {
             BOWL_PROFILE_SCOPE("assets.poll");
             last_asset_poll = now_seconds();

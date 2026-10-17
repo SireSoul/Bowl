@@ -6,6 +6,12 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Sound events (`audio::SoundEvent`, loaded from `.sound` JSON files that hot-reload): weighted clips that never repeat
+  the last one, gain, pitch and delay ranges, a bus, looping, filters and attenuation, `switch` lists per value (a
+  surface under footsteps), `layers` that play together, and `max_instances` with `steal` and `cooldown`. Play one
+  with `AudioEngine::play_event`, which returns an `EventInstance` to stop or check; choices come from the engine's
+  own random numbers (`seed_random`). The F1 overlay lists them with play and stop and what each last picked. The
+  tutorial's footsteps use one.
 - Tiled layers with the bool property `above` draw over everything y-sorted, for what characters walk under (roofs,
   the tops of arches and gates), like Stardew Valley's Front layer. `TilemapCache` leaves them to `draw_tilemap` with
   `Layers::Sorted`.

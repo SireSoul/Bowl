@@ -1,0 +1,15 @@
+// The player's footsteps: a set of clips per surface, never the same clip twice running, and a little variation in
+// loudness and pitch so walking doesn't sound like a loop. The clips are made in code (make_step in main.cpp); a
+// leading / names them from the top of the assets instead of next to this file.
+{
+    "switch": {
+        "surface": {
+            "grass": ["/generated/step_grass_1", "/generated/step_grass_2", "/generated/step_grass_3"],
+            "stone": ["/generated/step_stone_1", "/generated/step_stone_2", "/generated/step_stone_3"]
+        }
+    },
+    "gain": [0.35, 0.5],
+    "pitch": [0.9, 1.1],
+    "max_instances": 3,
+    "cooldown": 0.1
+}

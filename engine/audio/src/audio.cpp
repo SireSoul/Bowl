@@ -1,4 +1,5 @@
 #include "bowl/audio/audio.hpp"
+#include "bowl/audio/sound_event.hpp"
 
 #include "decoders.hpp"
 
@@ -702,6 +703,8 @@ void register_asset_loaders(AssetManager& assets) {
                                                       : "Opus needs the engine built with -DBOWL_OPUS=ON"));
         return music;
     });
+
+    register_sound_event_loader(assets);
 }
 
 } // namespace bowl::audio
