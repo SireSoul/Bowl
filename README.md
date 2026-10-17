@@ -1,4 +1,5 @@
-![License](https://img.shields.io/badge/License-Apache%202.0-red) ![Language](https://img.shields.io/badge/Language-C%2B%2B20-green)
+![License](https://img.shields.io/badge/License-Apache%202.0-red) ![Language](https://img.shields.io/badge/Language-C%2B%2B20-green) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/SireSoul/Bowl/total)
+
 
 # Bowl
 
