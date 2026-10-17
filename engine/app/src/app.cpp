@@ -9,6 +9,7 @@
 #include "bowl/gfx/particles.hpp"
 #include "bowl/gfx/sprite.hpp"
 #include "bowl/gfx/sprite_sheet.hpp"
+#include "bowl/gfx/tilemap.hpp"
 #include "bowl/physics/colliders.hpp"
 #if BOWL_BOX2D
 #include "bowl/physics/rigid_bodies.hpp"
@@ -21,6 +22,14 @@
 #include <string_view>
 
 namespace bowl {
+
+void register_engine_components() {
+    ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
+                             gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, gfx::Map, physics::Collider>();
+#if BOWL_BOX2D
+    ecs::register_components<physics::RigidBody, physics::Joint>();
+#endif
+}
 
 Engine::Engine() = default;
 Engine::~Engine() = default;
@@ -71,13 +80,7 @@ struct AppRunner {
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
         profiler::set_thread_name("main");
-        // The engine's own components are registered by engine code before any game library loads (a hot-reloadable
-        // game is loaded by configure()), so their code never belongs to a library that gets unloaded.
-        ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
-                                 gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, physics::Collider>();
-#if BOWL_BOX2D
-        ecs::register_components<physics::RigidBody, physics::Joint>();
-#endif
+        register_engine_components();
         e.config_ = game->configure();
         for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);
         for (int i = 1; i < argc; ++i) {

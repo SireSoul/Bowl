@@ -1,3 +1,4 @@
+#include "bowl/app/engine.hpp"
 #include "bowl/gfx/tilemap.hpp"
 #include "bowl/ecs/world_io.hpp"
 
@@ -535,6 +536,7 @@ TEST_CASE("tilemap: points far off the map give far-off cells") {
 }
 
 TEST_CASE("tilemap: a Map in a level loads in a game, which ignores what Bowl Editor keeps for itself") {
+    register_engine_components(); // what a game's engine does at startup
     REQUIRE(ecs::find_component("bowl::gfx::Map")); // registered under the name level files use
     auto doc = json::parse(R"({ "format": "Bowl.world", "version": 1, "entities": [
         { "id": 0, "components": { "bowl::ecs::Transform2D": { "position": [32, 16] },

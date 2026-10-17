@@ -60,6 +60,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- `BOWL_COMPONENT` types weren't registered by name at startup when built with GCC (Linux): the registration was an
+  unused inline variable, which GCC never initializes, so a saved world naming a type no code had touched yet dropped
+  it as unknown. The registration is now a static in each file. The engine also registers `gfx::Map` with its other
+  components at startup (`register_engine_components()`), so levels holding a Tiled map load in any game.
 - ECS and type ids: types with the same name in two files' anonymous namespaces were taken for one type, since
   their names print the same: two such components of different layouts shared a component id (corrupting memory),
   and two such resource or asset types shared a `type_id`. Each now gets its own id, and the later component is

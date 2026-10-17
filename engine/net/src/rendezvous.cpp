@@ -41,13 +41,14 @@ struct Rendezvous::Impl {
     std::unordered_map<u64, Session> sessions;
     std::unordered_map<u64, u64> by_nonce; // a player's join nonce: its session, for when it asks again
     std::deque<u64> joining;                    // sessions in the order they were made, to find the oldest unrelayed one
-    std::map<std::vector<u8>, u32> joining_per_address; // unrelayed sessions by the player's address, without its port
+    std::map<std::string, u32> joining_per_address; // unrelayed sessions by the player's address, without its port
 
-    static std::vector<u8> without_port(const Address& a) {
+    // (A string, not a byte vector: GCC 13 mistakes comparing vectors of bytes in a map for an over-read.)
+    static std::string without_port(const Address& a) {
         std::vector<u8> bytes;
         a.write(bytes);
-        if (bytes.size() >= 2) bytes.resize(bytes.size() - 2);
-        return bytes;
+        usize n = bytes.size() >= 2 ? bytes.size() - 2 : 0;
+        return std::string(reinterpret_cast<const char*>(bytes.data()), n);
     }
     void stop_joining(Session& s) { // relayed through, or gone
         if (s.relayed) return;
@@ -188,7 +189,7 @@ struct Rendezvous::Impl {
                 socket.send(from, w.out);
                 return;
             }
-            std::vector<u8> address = without_port(from);
+            std::string address = without_port(from);
             if (auto n = joining_per_address.find(address);
                 n != joining_per_address.end() && n->second >= settings.max_joining_per_address)
                 return; // that address has enough asking already: it asks again later
