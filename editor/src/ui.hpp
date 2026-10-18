@@ -28,7 +28,9 @@ enum class Icon {
     Select, Place, Pan, Grid, Snap, Undo, Redo, Save, Open, New, Help, Plus, Trash, Copy, Group, Reload, Eye, Cross,
     AlignLeft, AlignCenterX, AlignRight, AlignTop, AlignCenterY, AlignBottom, Folder, Entity, Image, Brush, Region, Lock,
     // The Content workspace's collections, and its tools
-    Person, Bag, Shop, Bolt, Map, Note, Gear, Search, ArrowUp, ArrowDown, Play, Link
+    Person, Bag, Shop, Bolt, Map, Note, Gear, Search, ArrowUp, ArrowDown, Play, Link,
+    // Paint tools
+    Wand, Bucket, Pipette, Line, Rect, Circle, Gradient, Shade, Eraser
 };
 
 void apply_theme();

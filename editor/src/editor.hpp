@@ -1,6 +1,7 @@
 #pragma once
 
 #include "content.hpp"
+#include "paint_studio.hpp"
 #include "document.hpp"
 #include "ui.hpp"
 
@@ -150,40 +151,10 @@ private:
     std::vector<DataEdit> data_edits_;
     char data_filter_[128] = {};
 
-    // paint.cpp: the Paint workspace, and the Brush tool that paints on art where it stands in the level
-    enum class PaintTool { Pencil, Eraser, Fill, Picker };
-    struct Canvas {
-        std::string path; // virtual path of the picture
-        std::filesystem::path file;
-        u32 w = 0, h = 0;
-        std::vector<u8> pixels;             // RGBA, straight alpha
-        std::unique_ptr<gfx::Texture> view; // nearest-filtered copy for the Paint canvas
-        std::vector<std::vector<u8>> history;
-        usize cursor = 0;
-        bool modified = false, dirty = false; // dirty: the GPU copies are behind
-    };
-    bool paint_open(Engine& engine, const std::string& path);
-    void paint_workspace(Engine& engine);
-    void paint_render(Engine& engine);
-    void paint_mouse(Engine& engine);
+    // paint_studio.cpp: the Paint workspace; the Level's Brush tool paints through it
+    PaintStudio paint_;
     void brush_mouse(Engine& engine); // Level workspace: the Brush tool
-    void paint_stroke(i32 x, i32 y, bool first);
-    void paint_fill(i32 x, i32 y);
-    void paint_commit();              // a stroke ended: an undo step
-    void paint_upload(Engine& engine);
-    bool paint_save(Engine& engine);
-    void paint_undo(int direction);
-    gfx::Camera2D paint_camera(Engine& engine) const;
-
-    std::optional<Canvas> canvas_;
-    PaintTool paint_tool_ = PaintTool::Pencil;
-    Color paint_color_ = Color::hex(0xf2c45c);
-    std::vector<u32> paint_palette_; // colors in the picture, then picked ones
-    f32 paint_zoom_ = 8;
-    Vec2 paint_pan_;
     bool painting_ = false;
-    i32 paint_last_x_ = 0, paint_last_y_ = 0;
-    gfx::SpriteBatch paint_batch_;
 
     // Regions: colliders drawn and edited on the level (regions.cpp)
     bool region_mouse(Engine& engine); // true when it used the mouse

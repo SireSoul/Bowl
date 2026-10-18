@@ -1,6 +1,7 @@
 add_executable(bowl_tests
     main.cpp
     test_assets.cpp
+    test_paint.cpp
     test_audio.cpp
     test_bidi.cpp
     test_collision.cpp
@@ -31,7 +32,7 @@ add_executable(bowl_tests
     test_tilemap.cpp
     test_xml.cpp
     test_ui.cpp)
-target_link_libraries(bowl_tests PRIVATE bowl::engine bowl_atlas bowl_cook bowl_icon bowl_apidoc doctest::doctest)
+target_link_libraries(bowl_tests PRIVATE bowl::engine bowl_atlas bowl_cook bowl_icon bowl_apidoc bowl_paint doctest::doctest)
 target_compile_definitions(bowl_tests PRIVATE BOWL_ENGINE_ASSET_SOURCE_DIR="${BOWL_ENGINE_ASSET_SOURCE_DIR}"
     BOWL_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(BOWL_BOX2D)

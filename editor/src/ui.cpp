@@ -292,6 +292,47 @@ void draw_icon(ImDrawList* l, Icon icon, ImVec2 c, float size, ImU32 col) {
         l->AddRect(P(-0.85f, -0.3f), P(0.15f, 0.3f), col, h * 0.3f, 0, t);
         l->AddRect(P(-0.15f, -0.3f), P(0.85f, 0.3f), col, h * 0.3f, 0, t);
         break;
+    case Icon::Wand: // a stick with a sparkle
+        line(-0.7f, 0.7f, 0.25f, -0.25f);
+        line(0.5f, -0.85f, 0.5f, -0.35f);
+        line(0.25f, -0.6f, 0.75f, -0.6f);
+        line(0.75f, -0.1f, 0.75f, 0.15f);
+        line(0.62f, 0.02f, 0.88f, 0.02f);
+        break;
+    case Icon::Bucket: { // a tipped pail with a drop
+        ImVec2 pts[] = {P(-0.6f, -0.3f), P(0.2f, -0.75f), P(0.65f, 0.05f), P(-0.15f, 0.5f)};
+        l->AddPolyline(pts, 4, col, ImDrawFlags_Closed, t);
+        l->AddCircleFilled(P(0.6f, 0.65f), h * 0.18f, col);
+        break;
+    }
+    case Icon::Pipette:
+        line(-0.65f, 0.65f, 0.2f, -0.2f);
+        line(-0.65f, 0.65f, -0.75f, 0.75f);
+        l->AddCircleFilled(P(0.45f, -0.45f), h * 0.28f, col);
+        line(0.0f, -0.4f, 0.4f, 0.0f);
+        break;
+    case Icon::Line:
+        line(-0.7f, 0.7f, 0.7f, -0.7f);
+        l->AddCircleFilled(P(-0.7f, 0.7f), t * 1.2f, col);
+        l->AddCircleFilled(P(0.7f, -0.7f), t * 1.2f, col);
+        break;
+    case Icon::Rect: box(-0.7f, -0.55f, 0.7f, 0.55f); break;
+    case Icon::Circle: l->AddCircle(c, h * 0.72f, col, 20, t); break;
+    case Icon::Gradient:
+        box(-0.7f, -0.7f, 0.7f, 0.7f);
+        for (int k = 0; k < 4; ++k) l->AddRectFilled(P(-0.7f + k * 0.35f, -0.7f), P(-0.7f + (k + 1) * 0.35f, 0.7f), (col & 0x00ffffff) | (static_cast<ImU32>(40 + k * 60) << 24));
+        break;
+    case Icon::Shade: // half dark, half light
+        l->AddCircle(c, h * 0.72f, col, 20, t);
+        l->PathArcTo(c, h * 0.72f, 1.5708f, 4.7124f, 16);
+        l->PathFillConvex(col);
+        break;
+    case Icon::Eraser: {
+        ImVec2 pts[] = {P(-0.75f, 0.25f), P(0.05f, -0.55f), P(0.65f, 0.05f), P(-0.15f, 0.85f)};
+        l->AddPolyline(pts, 4, col, ImDrawFlags_Closed, t);
+        line(-0.35f, -0.15f, 0.25f, 0.45f);
+        break;
+    }
     case Icon::Region: // a dashed area
         for (float s = -0.75f; s < 0.7f; s += 0.5f) {
             line(s, -0.75f, s + 0.25f, -0.75f);

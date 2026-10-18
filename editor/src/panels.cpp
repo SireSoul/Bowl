@@ -89,7 +89,7 @@ void Editor::dev_ui(Engine& engine) {
     } else if (workspace_ == Workspace::Game) {
         game_workspace(engine);
     } else {
-        paint_workspace(engine);
+        paint_.draw(engine, {0, top_h, io.DisplaySize.x, std::max(1.0f, io.DisplaySize.y - top_h - status_h)});
     }
     status_bar(engine);
     modals(engine);
@@ -751,7 +751,7 @@ void Editor::status_bar(Engine& engine) {
     else if (workspace_ == Workspace::Game)
         what = link_.connected() ? "Attached: changes here happen in the running game." : "Pick a running game on the left to attach.";
     else if (workspace_ == Workspace::Paint)
-        what = "Click and drag to paint. B pencil, E eraser, F fill, I or Alt pick. Wheel zooms, right-drag moves. Ctrl+S saves.";
+        what = "Left button: the first color, right: the second. Alt picks a color. Space-drag or the middle button moves, the wheel zooms. Ctrl+S saves.";
     else if (tool_ == Tool::Brush) what = "Paint on a picture where it stands. Colors and tools are in the Paint workspace.";
     else if (tool_ == Tool::Region) what = "Drag out a region (a click makes a square one). Esc: back to selecting.";
     else if (tool_ == Tool::Place)

@@ -153,6 +153,7 @@ void Editor::init(Engine& engine) {
                 game_pane_ = pane == "systems" ? 1 : pane == "entities" ? 2 : 0;
             }
         }
+        else if (a == "--paint" && has_value && !args[i + 1].starts_with("--")) ++i; // read below
         else if (a == "--content") { // its collection and record are read below
             for (int k = 0; k < 2 && i + 1 < args.size() && !args[i + 1].starts_with("--"); ++k) ++i;
         }
@@ -204,6 +205,7 @@ void Editor::init(Engine& engine) {
     scan_art();
     scan_data();
     content_.init(engine, assets_dir_, [this](std::string m) { say(std::move(m)); });
+    paint_.init(engine, assets_dir_, [this](std::string m) { say(std::move(m)); });
     // --content [collection [record id]]: start in the Content workspace there.
     for (usize i = 0; i < args.size(); ++i)
         if (args[i] == "--content") {
@@ -217,16 +219,21 @@ void Editor::init(Engine& engine) {
         workspace_ = Workspace::Data;
         if (!data_files_.empty()) data_open(0);
     }
-    if (engine.has_arg("--paint")) {
-        workspace_ = Workspace::Paint;
-        if (!art_.empty()) paint_open(engine, art_[0].path);
-    }
+    // --paint [picture]: that picture, or the first.
+    for (usize i = 0; i < args.size(); ++i)
+        if (args[i] == "--paint") {
+            workspace_ = Workspace::Paint;
+            bool named = i + 1 < args.size() && !args[i + 1].starts_with("--");
+            if (named) paint_.open(args[i + 1]);
+            else if (!paint_.pictures().empty()) paint_.open(paint_.pictures()[0]);
+        }
 }
 
 void Editor::shutdown(Engine& engine) {
     if (!doc_ || resave_) return;
     doc_->write_autosave(); // unsaved work is offered back next time
     if (content_.unsaved() && content_.save_all()) info("editor: saved the content changes on the way out");
+    if (paint_.unsaved() && paint_.save()) info("editor: saved the picture being painted on the way out");
     Settings& prefs = engine.settings();
     prefs.set("editor.grid", show_grid_);
     prefs.set("editor.snap", snap_);
@@ -594,7 +601,7 @@ void Editor::shortcuts(Engine& engine) {
 
 void Editor::render(Engine& engine) {
     if (workspace_ == Workspace::Paint) {
-        paint_render(engine);
+        paint_.render(engine);
         return;
     }
     if (workspace_ == Workspace::Data || workspace_ == Workspace::Game || workspace_ == Workspace::Content) return;
