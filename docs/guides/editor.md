@@ -173,6 +173,16 @@ record below it, and its form is on the right.
 **Sounds** are always there: every `.sound` file in the assets, its clips, loudness and pitch (one value or a range
 picked from each time), bus, looping and limits. **+** makes a new one in `sounds/`.
 
+**Maps** are always there too: every Tiled map in `maps/`, shown as the game draws it, with the markers on its
+`markers` layer. **+ Add a marker** places one (pick its kind, click the map); click a marker to pick it, drag it to
+move it (Alt for off the grid), Delete removes it. On the right are its name, place, size and the properties its kind
+has, as a form: a shop's id is a menu of the shops, an exit's spawn point a menu of the spawn points on the map it
+goes to. Problems (a property naming nothing, two spawn points with one name) are listed. **+** in the list of maps
+makes a new map, a copy of the one picked without its markers. Tiles are still painted in Tiled; edits here keep the
+rest of the file as it was, and a running game reloads the map when it's saved.
+
+**Play** (and **Play here** on a map) saves and starts the game, when the schema says how (`"play"`, below).
+
 ### Schemas
 
 A schema is a JSON file in the assets whose name ends in `.schema.json`. It lists **collections** (where records are)
@@ -196,6 +206,8 @@ and **types** (what a record holds):
 }
 ```
 
+Pictures can be pictures or Aseprite sprite sheets (`.json`), shown by their first frame.
+
 A collection is the list under `list` in `file`, or, without `list`, the whole file as one record. `label` and
 `picture` name the fields shown in the list of records; the field named `id` (or `id_key`) is what references use.
 
@@ -212,7 +224,7 @@ A field has a `key`, a `type`, and optionally a `label`, `help` and `default`. T
 | `time` | minutes after midnight, shown as a time of day | past midnight is fine |
 | `ref` | the id of a record in the collection `to` | `optional`, `free` (any text too) |
 | `picture`, `sound` | an asset path | |
-| `audio` | an audio file, from the record file's folder (for sound events) | |
+| `audio` | an audio file | `relative`: from the record file's folder, as sound events want |
 | `map` | a map's name, from the `maps` folder (or `folder`) | |
 | `spawn` | the name of a spawn point on the map named by the field `area` beside it | |
 | `cell` | `[x, y]` in cells of the map named by the field `area` beside it | |
@@ -226,6 +238,22 @@ A type is `{"fields": [...]}`. One with **variants** also has a `tag` (the key s
 variants goes, and the variant's fields follow it. `summary` lists the fields shown in the title of a list item. A
 type can also be an alias for a field with settings: `"days": {"base": "choices", "options": ["mon", ...]}` makes
 `{"type": "days"}` mean that.
+
+Two more keys at the top of a schema:
+
+```json
+{
+  "play": { "command": "../../build/dev/game", "args": ["--new"] },
+  "markers": {
+    "shop": { "label": "Shop counter", "area": true, "fields": [{ "key": "shop", "type": "ref", "to": "shops" }] },
+    "sign": { "label": "Sign", "fields": [{ "key": "text", "type": "text", "multiline": true }] }
+  }
+}
+```
+
+`play` is the game to start, from the schema's folder (`.exe` is added on Windows), with `--area <map>` added for
+Play here. `markers` are the kinds of map markers besides Bowl's own `spawn` and `exit` (which a schema can redefine):
+an `area` one covers cells, the others are points in the middle of a cell, and `fields` are its Tiled properties.
 
 ## The Data workspace
 

@@ -4,6 +4,8 @@
 #include "bowl/core/json_text.hpp"
 #include "bowl/gfx/tilemap.hpp"
 
+#include <imgui.h>
+
 #include <filesystem>
 #include <functional>
 #include <map>
@@ -13,6 +15,8 @@
 #include <set>
 #include <string>
 #include <vector>
+
+struct SDL_Process;
 
 // The Content workspace: a game's content (items, people, shops, events, sounds) edited as forms instead of JSON.
 // What the forms hold comes from schema files in the assets folder (any file ending in .schema.json) that say which
@@ -33,6 +37,7 @@ struct Field {
     bool free = false;                // choice, ref: any text is fine too
     bool multiline = false;           // text
     bool optional = false;            // ref: may be empty
+    bool relative = false;            // audio: the path is from the record file's folder (a leading / from the top)
     std::string to;                   // ref: the collection whose ids it names
     std::string area;                 // spawn, cell: the key of the field beside it naming the map
     std::string suggest;              // text: offer the values other fields with the same suggest hold
@@ -73,10 +78,24 @@ struct Collection {
     bool files() const { return !extension.empty(); }
 };
 
+// A kind of marker on a map's "markers" layer, and its properties (Tiled custom properties).
+struct MarkerType {
+    std::string name, label, help;
+    bool area = false; // covers cells (an exit); otherwise a point in the middle of a cell (a spawn point)
+    std::vector<Field> fields;
+};
+
 struct Schema {
     std::vector<Collection> collections;
     std::map<std::string, Type, std::less<>> types;
+    std::vector<MarkerType> markers;
     std::vector<std::string> problems;
+    // The game, for the Play button: an executable (from the assets folder) and its arguments.
+    std::string play;
+    std::vector<std::string> play_args;
+    std::filesystem::path play_from; // the schema's folder, which `play` is relative to
+
+    const MarkerType* marker(std::string_view name) const;
 
     const Type* type(std::string_view name) const;
     const Collection* collection(std::string_view id) const;
@@ -132,6 +151,7 @@ private:
         const json::Value* value = nullptr; // null when the key is missing
         const json::Value* parent = nullptr; // the object it's in (for fields beside it: a cell's area)
         std::string record_dir;             // folder of the record's file, for paths relative to it
+        std::function<void(json::Value)> setter; // writes the value somewhere other than `path` (a map property)
     };
     struct Problem {
         std::string collection;
@@ -159,6 +179,7 @@ private:
     void new_record(const schema::Collection& c);
     void duplicate_record(const schema::Collection& c, usize index);
     void delete_record(const schema::Collection& c, usize index);
+    void move_record(const schema::Collection& c, usize index, int by); // up (-1) or down (1) the list
 
     void collections_panel(Engine& engine, Rect area);
     void form_panel(Engine& engine, Rect area);
@@ -177,9 +198,30 @@ private:
 
     // Pickers
     bool picture_picker(const char* id, std::string& path);
+    void thumbnail(const std::string& path, f32 box);
     bool path_combo(const char* id, std::string& value, const std::vector<std::string>& options, bool allow_empty);
     void sound_buttons(Engine& engine, const std::string& path, bool audio);
     void map_spot_window(Engine& engine);
+    // A map drawn in the window, filling what's left but `bottom` pixels; wheel zooms, right-drag moves.
+    struct MapView {
+        f32 zoom = 0;
+        Vec2 pan;
+        ImVec2 origin{}, size{};
+        bool hovered = false;
+        Vec2 mouse_cell; // under the mouse, in cells
+        Vec2 center() const { return {origin.x + size.x * 0.5f, origin.y + size.y * 0.5f}; }
+        ImVec2 to_screen(Vec2 world) const {
+            Vec2 s = center() + (world - pan) * zoom;
+            return {s.x, s.y};
+        }
+        Vec2 to_world(ImVec2 s) const { return pan + (Vec2{s.x, s.y} - center()) / zoom; }
+    };
+    void map_canvas(const char* id, const gfx::Tilemap& map, MapView& view, f32 bottom);
+    void cell_outline(const gfx::Tilemap& map, const MapView& view, Rect cells, ImU32 color, f32 thick);
+    // The Maps collection: markers placed and changed on the map itself.
+    void maps_view(Engine& engine, Rect area, const std::string& file);
+    std::vector<Problem> marker_problems(const std::string& file, usize record);
+    void play_game(const std::string& area);
     MapInfo* map_info(const std::string& name, const std::string& folder);
     std::string map_path(const std::string& name, const std::string& folder) const;
     void import_audio(Engine& engine, std::function<void(const std::string& asset_path)> then);
@@ -188,8 +230,9 @@ private:
 
     // Problems: ids missing or repeated, references to nothing, files that aren't there.
     std::vector<Problem> problems(const schema::Collection& c);
+    // `parent`: the object holding the value, for fields that look beside them (a spawn point's map).
     void check(const schema::Field& f, const json::Value* v, const std::string& where, const schema::Collection& c,
-               usize record, std::vector<Problem>& out);
+               usize record, std::vector<Problem>& out, const json::Value* parent = nullptr);
 
     std::filesystem::path assets_dir_;
     AssetManager* assets_ = nullptr;
@@ -220,6 +263,20 @@ private:
         Vec2 pan;
     };
     std::optional<SpotPick> spot_;
+
+    // The Maps view: the marker picked (an index into the markers layer's objects), adding, dragging.
+    struct MarkerEditor {
+        std::string file;
+        i64 selected = -1;
+        MapView view;
+        std::string adding; // a marker type waiting for a click; "" is a plain named marker
+        bool placing = false;
+        bool dragging = false;
+        Vec2 grab;  // where in the marker it was grabbed, in cells
+        Vec2 ghost; // where it would go, in cells
+    };
+    MarkerEditor markers_;
+    SDL_Process* game_ = nullptr;
 
     // File dialogs answer on another thread.
     struct Pending {

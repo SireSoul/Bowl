@@ -16,6 +16,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   are listed and lead to the record. Sound events (`.sound` files) are a collection of their own with no schema needed,
   and a new sound can be made straight from an audio file, which is copied into `sounds/clips/`. See
   [Bowl Editor](docs/guides/editor.md#the-content-workspace).
+- The Content workspace's **Maps**: every Tiled map drawn as the game draws it, with the markers on its `markers`
+  layer placed, moved, resized and removed with the mouse, and their properties edited as forms from the kinds of
+  marker a schema lists (`"markers"`), checked for references to nothing and spawn points that aren't there. New maps
+  start as copies. A schema's `"play"` adds **Play** and **Play here** buttons that save and start the game. Records
+  can be moved up and down their list, and pictures can be Aseprite sprite sheets.
 - `serial::to_json` and `from_json` save `std::set` (as a list) and `std::map` with string keys (as an object).
 
 ## [0.3.0] - 2026-10-17

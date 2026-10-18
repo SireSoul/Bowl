@@ -9,6 +9,7 @@
 #include "bowl/audio/audio.hpp"
 #include "bowl/audio/sound_event.hpp"
 #include "bowl/core/file.hpp"
+#include "bowl/gfx/sprite_sheet.hpp"
 #include "bowl/gfx/tilemap.hpp"
 
 #include <SDL3/SDL.h>
@@ -79,13 +80,22 @@ const ImVec4 accent = ImGui::ColorConvertU32ToFloat4(ui::color::accent);
 // Sound events: a collection every game has, with its schema built in.
 constexpr const char* builtin_schema = R"({
   "collections": [
+    { "id": "bowl.maps", "title": "Maps", "folder": "maps", "extension": ".tmj", "type": "bowl.map",
+      "help": "The maps' markers: spawn points, exits and the game's own (a schema's \"markers\"), placed by clicking on the map. Paint the tiles in Tiled." },
     { "id": "bowl.sounds", "title": "Sounds", "folder": "", "extension": ".sound", "type": "bowl.sound_event",
       "help": "Sound events (.sound files): the clips a sound picks from, and how loud and high it plays. The game plays them by path." }
   ],
+  "markers": {
+    "spawn": { "label": "Spawn point", "help": "Where the player (or someone) arrives. Exits and events name it.", "fields": [] },
+    "exit": { "label": "Exit", "area": true, "help": "Walking into it goes to another map.", "fields": [
+      { "key": "to_area", "type": "map", "label": "To map" },
+      { "key": "to_spawn", "type": "spawn", "area": "to_area", "label": "At" } ] }
+  },
   "types": {
+    "bowl.map": { "fields": [] },
     "bowl.sound_event": {
       "fields": [
-        { "key": "clips", "type": "list", "of": { "type": "audio" }, "help": "One is picked each time it plays." },
+        { "key": "clips", "type": "list", "of": { "type": "audio", "relative": true }, "help": "One is picked each time it plays." },
         { "key": "gain", "type": "range", "min": 0, "max": 4, "step": 0.01, "default": 1, "label": "Loudness", "help": "Picked between the two each time." },
         { "key": "pitch", "type": "range", "min": 0.25, "max": 4, "step": 0.01, "default": 1, "help": "1 is as recorded; picked between the two each time." },
         { "key": "delay", "type": "range", "min": 0, "max": 10, "step": 0.01, "default": 0, "help": "Seconds before it starts." },
@@ -113,6 +123,12 @@ std::string Field::title() const { return label.empty() ? readable(key) : label;
 const Variant* Type::variant(std::string_view n) const {
     for (const Variant& v : variants)
         if (v.name == n) return &v;
+    return nullptr;
+}
+
+const MarkerType* Schema::marker(std::string_view name) const {
+    for (const MarkerType& m : markers)
+        if (m.name == name) return &m;
     return nullptr;
 }
 
@@ -168,6 +184,7 @@ Field parse_field(const Value& o) {
     f.free = o["free"].as_bool();
     f.multiline = o["multiline"].as_bool();
     f.optional = o["optional"].as_bool();
+    f.relative = o["relative"].as_bool();
     f.to = o["to"].as_string();
     f.area = o["area"].as_string();
     f.suggest = o["suggest"].as_string();
@@ -216,6 +233,18 @@ void Schema::add(const Value& doc, std::string_view source) {
             }
             collections.push_back(std::move(c));
         }
+    if (const Value* m = doc.find("markers"); m && m->is_object())
+        for (const auto& [name, o] : m->object()) {
+            MarkerType t{name, std::string(o["label"].as_string(name)), std::string(o["help"].as_string()),
+                         o["area"].as_bool(), parse_fields(o["fields"])};
+            auto it = std::find_if(markers.begin(), markers.end(), [&](const MarkerType& x) { return x.name == name; });
+            if (it != markers.end()) *it = std::move(t); // a game's schema can redo a built-in one
+            else markers.push_back(std::move(t));
+        }
+    if (const Value* p = doc.find("play"); p && p->is_object()) {
+        play = p->find("command") ? std::string((*p)["command"].as_string()) : std::string();
+        play_args = strings((*p)["args"]);
+    }
     if (const Value* map = doc.find("types"); map && map->is_object())
         for (const auto& [name, o] : map->object()) {
             Type t;
@@ -305,6 +334,11 @@ void ContentWorkspace::scan() {
             if (name.ends_with(".schema.json")) schemas.push_back(it->path());
             files_by_ext_[ext].push_back(rel);
             if (is_picture(ext)) pictures_.push_back(rel);
+            if (ext == ".json" && !name.ends_with(".schema.json")) { // an Aseprite sprite sheet is a picture too
+                auto text = read_file_text(it->path());
+                if (text && text->find("\"frameTags\"") != std::string::npos && text->find("\"meta\"") != std::string::npos)
+                    pictures_.push_back(rel);
+            }
             if (ext == ".sound") sounds_.push_back(rel);
             if (is_audio(ext)) audio_.push_back(rel);
         }
@@ -317,6 +351,7 @@ void ContentWorkspace::scan() {
             schema_.problems.push_back(std::format("{}: {}", source, doc.error ? doc.error->message : "can't read it"));
             continue;
         }
+        if (doc.value.find("play")) schema_.play_from = p.parent_path();
         schema_.add(doc.value, source);
     }
     // Game collections first, the built-in sounds last.
@@ -538,6 +573,17 @@ void ContentWorkspace::duplicate_record(const schema::Collection& c, usize index
     record_ = record_count(c);
 }
 
+void ContentWorkspace::move_record(const schema::Collection& c, usize index, int by) {
+    usize other = by < 0 ? index - 1 : index + 1;
+    if (c.files() || c.list.empty() || (by < 0 && index == 0) || other >= record_count(c)) return;
+    const Value* a = record(c, index, nullptr, nullptr);
+    const Value* b = record(c, other, nullptr, nullptr);
+    if (!a || !b) return;
+    edits_.push_back({Edit::Set, c.file, {c.list, index}, *b, {}});
+    edits_.push_back({Edit::Set, c.file, {c.list, other}, *a, {}});
+    record_ = other;
+}
+
 void ContentWorkspace::delete_record(const schema::Collection& c, usize index) {
     if (c.files()) {
         std::string path = record_id(c, index);
@@ -556,6 +602,10 @@ void ContentWorkspace::delete_record(const schema::Collection& c, usize index) {
 // --- The workspace ---------------------------------------------------------------------------------------------------
 
 void ContentWorkspace::update(Engine& engine) {
+    if (game_ && SDL_WaitProcess(game_, false, nullptr)) { // the game we started has quit
+        SDL_DestroyProcess(game_);
+        game_ = nullptr;
+    }
     std::optional<fs::path> picked;
     {
         std::lock_guard lock(pending_->mutex);
@@ -619,7 +669,13 @@ void ContentWorkspace::draw(Engine& engine, Rect area) {
     }
     constexpr float left = 300;
     collections_panel(engine, {area.x, area.y, left, area.h});
-    form_panel(engine, {area.x + left, area.y, area.w - left, area.h});
+    Rect right{area.x + left, area.y, area.w - left, area.h};
+    if (collection_ < schema_.collections.size() && schema_.collections[collection_].id == "bowl.maps") {
+        std::string file = record_id(schema_.collections[collection_], record_);
+        maps_view(engine, right, file);
+    } else {
+        form_panel(engine, right);
+    }
     map_spot_window(engine);
     apply_edits();
     track_history();
@@ -673,6 +729,15 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
             duplicate_record(c, record_);
         ImGui::SameLine();
         if (ui::tool_button("del", ui::Icon::Trash, false, "Remove the one picked")) confirm_delete_ = record_;
+        if (!c.files()) {
+            ImGui::SameLine();
+            if (ui::tool_button("up", ui::Icon::AlignTop, false, "Move it up the list (for events: the first that applies wins)", 30,
+                                record_ > 0))
+                move_record(c, record_, -1);
+            ImGui::SameLine();
+            if (ui::tool_button("down", ui::Icon::AlignBottom, false, "Move it down the list", 30, record_ + 1 < record_count(c)))
+                move_record(c, record_, 1);
+        }
         ImGui::SameLine();
         ImGui::SetNextItemWidth(-1);
         ImGui::InputTextWithHint("##filter", "filter", filter_, sizeof filter_);
@@ -691,14 +756,7 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
             // A thumbnail when the records have a picture.
             if (!c.picture.empty())
                 if (const Value* r = record(c, i, nullptr, nullptr)) {
-                    auto tex = assets_->load<gfx::Texture>((*r)[c.picture].as_string());
-                    if (tex) {
-                        f32 s = 22, k = s / std::max<f32>(1, static_cast<f32>(std::max(tex->width(), tex->height())));
-                        ImVec2 size{tex->width() * k, tex->height() * k};
-                        ImGui::Image(texture_id(*tex), size);
-                    } else {
-                        ImGui::Dummy({22, 22});
-                    }
+                    thumbnail(std::string((*r)[c.picture].as_string()), 22);
                     ImGui::SameLine();
                 }
             if (ImGui::Selectable(label.c_str(), record_ == i)) record_ = i;
@@ -734,7 +792,8 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
     }
     if (ImGui::BeginPopupModal("New file", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         std::string folder = c.folder.empty() ? "sounds" : c.folder;
-        ImGui::Text("A new %s file in %s/", c.extension.c_str(), folder.c_str());
+        if (c.id == "bowl.maps") ImGui::Text("A new map in %s/: a copy of %s, without its markers", folder.c_str(), record_label(c, record_).c_str());
+        else ImGui::Text("A new %s file in %s/", c.extension.c_str(), folder.c_str());
         if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
         bool enter = input_text("##name", new_file_name_, false, "name");
         fs::path target = assets_dir_ / folder / (new_file_name_ + c.extension);
@@ -748,6 +807,23 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
             Value r = t ? schema::default_record(schema_, *t) : Value();
             fs::create_directories(target.parent_path(), ec);
             std::string text = json::stringify(r) + "\n";
+            // A new map starts as a copy of the one picked (its size, tilesets and tiles), with no markers.
+            if (c.id == "bowl.maps") {
+                std::string from = record_id(c, record_);
+                Doc* src = from.empty() ? nullptr : doc(from);
+                if (!src || !src->text.valid()) {
+                    say_("Pick a map to copy first");
+                    ImGui::CloseCurrentPopup();
+                    ImGui::EndPopup();
+                    return;
+                }
+                json::TextDocument copy;
+                copy.load(src->text.text());
+                const Value& layers = copy.value()["layers"];
+                for (usize li = 0; li < layers.size(); ++li)
+                    if (layers[li]["name"].as_string() == "markers") copy.set({"layers", li, "objects"}, json::Array{});
+                text = copy.text();
+            }
             if (write_file_bytes(target, text.data(), text.size())) {
                 std::string rel = virtual_path(target, assets_dir_);
                 scan();
@@ -839,6 +915,14 @@ void ContentWorkspace::form_panel(Engine& engine, Rect area) {
     if (ImGui::SmallButton("Save")) save_all();
     ImGui::EndDisabled();
     ui::tip("Saves every changed content file; a running game picks the change up", "Ctrl+S");
+    ImGui::SameLine();
+    ImGui::BeginDisabled(schema_.play.empty());
+    if (ImGui::SmallButton("Play")) {
+        save_all();
+        play_game({});
+    }
+    ImGui::EndDisabled();
+    ui::tip(schema_.play.empty() ? "Add \"play\" to the game's schema to start the game from here" : "Saves, then starts the game");
     if (r) {
         ImGui::SameLine();
         ImGui::TextDisabled("%s", file.c_str());
@@ -894,6 +978,10 @@ void ContentWorkspace::form_panel(Engine& engine, Rect area) {
 // --- Forms -----------------------------------------------------------------------------------------------------------
 
 void ContentWorkspace::set(const Slot& slot, Value v) {
+    if (slot.setter) {
+        slot.setter(std::move(v));
+        return;
+    }
     if (slot.value) {
         edits_.push_back({Edit::Set, slot.doc, slot.path, std::move(v), {}});
         return;
@@ -1145,16 +1233,35 @@ bool ContentWorkspace::path_combo(const char* id, std::string& value, const std:
     return changed;
 }
 
+void ContentWorkspace::thumbnail(const std::string& path, f32 box) {
+    // A picture, or the first frame of a sprite sheet, as big as fits in the box.
+    const gfx::Texture* tex = nullptr;
+    Rect src;
+    if (path.ends_with(".json")) {
+        auto sheet = assets_->load<gfx::SpriteSheet>(path);
+        if (sheet && sheet->texture && !sheet->frames.empty()) {
+            tex = sheet->texture.get();
+            src = sheet->frames[0].source;
+        }
+    } else if (!path.empty()) {
+        auto t = assets_->load<gfx::Texture>(path);
+        if (t) {
+            tex = t.get();
+            src = {0, 0, static_cast<f32>(t->width()), static_cast<f32>(t->height())};
+        }
+    }
+    if (!tex || src.w <= 0 || src.h <= 0) {
+        ImGui::Dummy({box, box});
+        return;
+    }
+    f32 k = box / std::max(src.w, src.h), w = static_cast<f32>(tex->width()), h = static_cast<f32>(tex->height());
+    ImGui::Image(texture_id(*tex), {src.w * k, src.h * k}, {src.x / w, src.y / h}, {src.right() / w, src.bottom() / h});
+}
+
 bool ContentWorkspace::picture_picker(const char* id, std::string& path) {
     bool changed = false;
     ImGui::PushID(id);
-    auto tex = path.empty() ? Asset<gfx::Texture>{} : assets_->load<gfx::Texture>(path);
-    if (tex) {
-        f32 s = 40, k = s / std::max<f32>(1, static_cast<f32>(std::max(tex->width(), tex->height())));
-        ImGui::Image(texture_id(*tex), {tex->width() * k, tex->height() * k});
-    } else {
-        ImGui::Dummy({40, 40});
-    }
+    thumbnail(path, 40);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1);
     if (ImGui::BeginCombo("##pic", path.empty() ? "(none)" : path.c_str(), ImGuiComboFlags_HeightLargest)) {
@@ -1169,12 +1276,8 @@ bool ContentWorkspace::picture_picker(const char* id, std::string& path) {
             if (find[0] && p.find(find) == std::string::npos) continue;
             if (p.starts_with("engine/")) continue;
             ImGui::PushID(p.c_str());
-            auto t = assets_->load<gfx::Texture>(p);
-            if (t) {
-                f32 k = 28 / std::max<f32>(1, static_cast<f32>(std::max(t->width(), t->height())));
-                ImGui::Image(texture_id(*t), {t->width() * k, t->height() * k});
-                ImGui::SameLine(40);
-            }
+            thumbnail(p, 28);
+            ImGui::SameLine(40);
             if (ImGui::Selectable(p.c_str(), p == path, 0, {0, 28})) {
                 path = p;
                 changed = true;
@@ -1399,11 +1502,11 @@ void ContentWorkspace::value_widget(Engine& engine, const schema::Field& f, cons
     } else if (t == "audio") {
         // Paths in a .sound are from its own folder.
         std::string s(shown.as_string());
-        std::string base = slot.record_dir.empty() ? std::string() : slot.record_dir + "/";
+        std::string base = f.relative && !slot.record_dir.empty() ? slot.record_dir + "/" : std::string();
         std::vector<std::string> options;
         for (const std::string& a : audio_)
-            options.push_back(!base.empty() && a.starts_with(base) ? a.substr(base.size()) : "/" + a);
-        std::string full = s.starts_with('/') ? s.substr(1) : base + s;
+            options.push_back(!f.relative ? a : !base.empty() && a.starts_with(base) ? a.substr(base.size()) : "/" + a);
+        std::string full = !f.relative ? s : s.starts_with('/') ? s.substr(1) : base + s;
         ImGui::SetNextItemWidth(std::max(80.0f, ImGui::CalcItemWidth() - 60));
         if (path_combo("##v", s, options, false)) set(slot, s);
         sound_buttons(engine, full, true);
@@ -1411,11 +1514,12 @@ void ContentWorkspace::value_widget(Engine& engine, const schema::Field& f, cons
         if (ImGui::Button("+", {24, 0})) {
             Slot target{slot.doc, slot.path, nullptr, nullptr, slot.record_dir};
             bool exists = slot.value != nullptr;
-            import_audio(engine, [this, target, exists, base](const std::string& clip) {
+            bool relative = f.relative;
+            import_audio(engine, [this, target, exists, base, relative](const std::string& clip) {
                 Slot at = target;
                 Value dummy;
                 if (exists) at.value = &dummy;
-                set(at, !base.empty() && clip.starts_with(base) ? clip.substr(base.size()) : "/" + clip);
+                set(at, !relative ? clip : !base.empty() && clip.starts_with(base) ? clip.substr(base.size()) : "/" + clip);
                 apply_edits();
             });
         }
@@ -1515,136 +1619,10 @@ ContentWorkspace::MapInfo* ContentWorkspace::map_info(const std::string& name, c
     return &m;
 }
 
-void ContentWorkspace::map_spot_window(Engine& engine) {
-    if (!spot_) return;
-    bool open = true;
-    ImGui::SetNextWindowSize({760, 600}, ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, {0.5f, 0.5f});
-    std::string title = std::format("{} — click a spot###spot", spot_->map);
-    if (!ImGui::Begin(title.c_str(), &open, ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoScrollbar |
-                                                ImGuiWindowFlags_NoScrollWithMouse)) {
-        ImGui::End();
-        if (!open) spot_.reset();
-        return;
-    }
-    MapInfo* info = map_info(spot_->map, spot_->folder);
-    if (!info || !info->map) {
-        ImGui::TextColored(danger, "Can't open %s", map_path(spot_->map, spot_->folder).c_str());
-        ImGui::End();
-        if (!open) spot_.reset();
-        return;
-    }
-    const gfx::Tilemap& m = *info->map;
-    ui::hint("Click to put it in the middle of a cell, Alt-click for exactly there. The wheel zooms, right-drag moves.");
-    ImVec2 origin = ImGui::GetCursorScreenPos(), avail = ImGui::GetContentRegionAvail();
-    avail.y -= 30;
-    ImGui::InvisibleButton("canvas", avail, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-    bool hovered = ImGui::IsItemHovered();
-
-    // The map's extent in map pixels: the cells' corners, with room above for tall tiles.
-    f32 W = static_cast<f32>(m.width), H = static_cast<f32>(m.height);
-    Vec2 corners[] = {m.cell_to_world(0, 0), m.cell_to_world(W, 0), m.cell_to_world(0, H), m.cell_to_world(W, H)};
-    Vec2 lo = corners[0], hi = corners[0];
-    for (Vec2 c : corners) {
-        lo = {std::min(lo.x, c.x), std::min(lo.y, c.y)};
-        hi = {std::max(hi.x, c.x), std::max(hi.y, c.y)};
-    }
-    if (spot_->zoom <= 0) {
-        spot_->zoom = std::min(avail.x / (hi.x - lo.x + 64), avail.y / (hi.y - lo.y + 64));
-        spot_->pan = (lo + hi) * 0.5f;
-    }
-    ImGuiIO& io = ImGui::GetIO();
-    Vec2 center{origin.x + avail.x * 0.5f, origin.y + avail.y * 0.5f};
-    auto to_screen = [&](Vec2 w) { Vec2 s = center + (w - spot_->pan) * spot_->zoom; return ImVec2{s.x, s.y}; };
-    auto to_world = [&](ImVec2 s) { return spot_->pan + (Vec2{s.x, s.y} - center) / spot_->zoom; };
-    if (hovered && io.MouseWheel != 0) {
-        Vec2 before = to_world(io.MousePos);
-        spot_->zoom = std::clamp(spot_->zoom * std::pow(1.15f, io.MouseWheel), 0.1f, 20.0f);
-        Vec2 after = to_world(io.MousePos);
-        spot_->pan += before - after;
-    }
-    if (ImGui::IsItemActive() && ImGui::IsMouseDragging(ImGuiMouseButton_Right))
-        spot_->pan -= Vec2{io.MouseDelta.x, io.MouseDelta.y} / spot_->zoom;
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->PushClipRect(origin, {origin.x + avail.x, origin.y + avail.y}, true);
-    dl->AddRectFilled(origin, {origin.x + avail.x, origin.y + avail.y}, IM_COL32(16, 18, 24, 255));
-    bool iso = m.orientation == gfx::Tilemap::Orientation::Isometric;
-    // Tile layers, in order, each tile with its bottom on its cell like Tiled draws them.
-    for (const gfx::MapLayer& layer : m.layers) {
-        if (layer.kind != gfx::MapLayer::Kind::Tiles || !layer.visible) continue;
-        ImU32 tint = IM_COL32(255, 255, 255, static_cast<int>(layer.opacity * 255));
-        for (i32 y = 0; y < static_cast<i32>(m.height); ++y)
-            for (i32 x = 0; x < static_cast<i32>(m.width); ++x) {
-                u32 gid = layer.at(x, y) & gfx::tile_gid_mask;
-                if (!gid) continue;
-                const gfx::Tileset* ts = m.tileset_for(gid);
-                if (!ts || !ts->image) continue;
-                Rect src = ts->source_rect(gid - ts->first_gid);
-                Vec2 a = m.cell_to_world(static_cast<f32>(x), static_cast<f32>(y));
-                f32 left = iso ? a.x - m.tile_width * 0.5f : a.x, bottom = a.y + m.tile_height;
-                Vec2 p0{left + ts->tile_offset.x, bottom - src.h + ts->tile_offset.y};
-                Vec2 p1 = p0 + Vec2{src.w, src.h};
-                f32 iw = static_cast<f32>(ts->image->width()), ih = static_cast<f32>(ts->image->height());
-                dl->AddImage(texture_id(*ts->image), to_screen(p0), to_screen(p1), {src.x / iw, src.y / ih},
-                             {src.right() / iw, src.bottom() / ih}, tint);
-            }
-    }
-    auto cell_outline = [&](f32 x, f32 y, f32 w, f32 h, ImU32 color, f32 thick) {
-        ImVec2 pts[4] = {to_screen(m.cell_to_world(x, y)), to_screen(m.cell_to_world(x + w, y)),
-                         to_screen(m.cell_to_world(x + w, y + h)), to_screen(m.cell_to_world(x, y + h))};
-        dl->AddPolyline(pts, 4, color, ImDrawFlags_Closed, thick);
-    };
-    for (const auto& [name, r] : info->markers) {
-        cell_outline(r.x, r.y, std::max(r.w, 0.2f), std::max(r.h, 0.2f), IM_COL32(90, 200, 200, 200), 1.5f);
-        dl->AddText(to_screen(m.cell_to_world(r.x, r.y)), IM_COL32(150, 230, 230, 255), name.c_str());
-    }
-    for (const auto& [name, at] : info->spawns) {
-        ImVec2 p = to_screen(m.cell_to_world(at.x, at.y));
-        dl->AddCircleFilled(p, 4, IM_COL32(120, 200, 255, 255));
-        dl->AddText({p.x + 6, p.y - 7}, IM_COL32(200, 230, 255, 255), name.c_str());
-    }
-    // The cell under the mouse, and the spot now.
-    Vec2 under = m.world_to_cell(to_world(io.MousePos));
-    if (hovered) {
-        cell_outline(std::floor(under.x), std::floor(under.y), 1, 1, ui::color::accent, 2);
-        ImGui::SetTooltip("%.2f, %.2f", under.x, under.y);
-    }
-    ImVec2 now = to_screen(m.cell_to_world(spot_->cell.x, spot_->cell.y));
-    dl->AddCircleFilled(now, 6, ui::color::accent);
-    dl->AddCircle(now, 6, IM_COL32(0, 0, 0, 255), 0, 2);
-    dl->PopClipRect();
-
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        Vec2 cell = io.KeyAlt ? Vec2{std::round(under.x * 100) / 100, std::round(under.y * 100) / 100}
-                              : Vec2{std::floor(under.x) + 0.5f, std::floor(under.y) + 0.5f};
-        spot_->cell = cell;
-        Doc* d = doc(spot_->doc);
-        if (d) {
-            Value v = json::Array{Value(cell.x), Value(cell.y)};
-            if (spot_->exists) {
-                d->text.set(spot_->path, v);
-            } else {
-                Path parent = spot_->path;
-                std::string key = std::get<std::string>(parent.back());
-                parent.pop_back();
-                d->text.insert(parent, v, key);
-                spot_->exists = true;
-            }
-        }
-    }
-    ImGui::Text("Spot: %.2f, %.2f", spot_->cell.x, spot_->cell.y);
-    ImGui::SameLine(ImGui::GetContentRegionMax().x - 60);
-    if (ImGui::Button("Done")) open = false;
-    ImGui::End();
-    if (!open) spot_.reset();
-    (void)engine;
-}
-
 // --- Problems --------------------------------------------------------------------------------------------------------
 
 void ContentWorkspace::check(const schema::Field& raw, const Value* v, const std::string& where, const schema::Collection& c,
-                             usize record, std::vector<Problem>& out) {
+                             usize record, std::vector<Problem>& out, const Value* parent) {
     schema::Field f = schema_.resolve(raw);
     std::string here = where.empty() ? f.title() : where + " · " + f.title();
     auto problem = [&](std::string text) { out.push_back({c.id, record, std::format("{}: {}", here, text)}); };
@@ -1668,22 +1646,34 @@ void ContentWorkspace::check(const schema::Field& raw, const Value* v, const std
         problem(std::format("{} isn't there", v->as_string()));
     if (f.type == "map" && !v->as_string().empty() && !fs::exists(assets_dir_ / map_path(std::string(v->as_string()), f.folder), ec))
         problem(std::format("there's no map \"{}\"", v->as_string()));
+    if (f.type == "spawn" && parent && !v->as_string().empty()) {
+        std::string map((*parent)[f.area].as_string());
+        if (MapInfo* m = map.empty() ? nullptr : map_info(map, "maps"); m && m->map &&
+            std::none_of(m->spawns.begin(), m->spawns.end(), [&](const auto& s) { return s.first == v->as_string(); }))
+            problem(std::format("{} has no spawn point \"{}\"", map, v->as_string()));
+    }
     if (f.type == "list" && f.of && v->is_array())
         for (usize i = 0; i < v->size(); ++i) check(*f.of, &(*v)[i], std::format("{} {}", here, i + 1), c, record, out);
     if (const schema::Type* t = schema_.type(f.type); t && !t->base && v->is_object()) {
         for (const schema::Field& sub : t->fields)
-            if (sub.type != "variant") check(sub, v->find(sub.key), where.empty() ? std::string() : here, c, record, out);
+            if (sub.type != "variant") check(sub, v->find(sub.key), where.empty() ? std::string() : here, c, record, out, v);
         if (!t->tag.empty()) {
             const schema::Variant* var = t->variant((*v)[t->tag].as_string());
             if (!var) out.push_back({c.id, record, std::format("{}: \"{}\" isn't one of the kinds", here, (*v)[t->tag].as_string())});
             else
-                for (const schema::Field& sub : var->fields) check(sub, v->find(sub.key), here, c, record, out);
+                for (const schema::Field& sub : var->fields) check(sub, v->find(sub.key), here, c, record, out, v);
         }
     }
 }
 
 std::vector<ContentWorkspace::Problem> ContentWorkspace::problems(const schema::Collection& c) {
     std::vector<Problem> out;
+    if (c.id == "bowl.maps") {
+        usize n = record_count(c);
+        for (usize i = 0; i < n; ++i)
+            for (Problem& p : marker_problems(record_id(c, i), i)) out.push_back(std::move(p));
+        return out;
+    }
     if (!schema_.type(c.type)) return out;
     usize n = record_count(c);
     std::map<std::string, usize> seen;
