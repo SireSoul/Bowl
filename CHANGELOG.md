@@ -5,6 +5,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-17
+
 ### Added
 - Bowl Editor's **Game** tab (Ctrl+4, or `--attach`): attaches to a game running on this computer from a dev build and
   shows its profiler (frame times, zones, pause, step and speed), its schedules (each system's batch, time and reads
@@ -337,5 +339,6 @@ The first version: everything needed to start making a game.
 - **Samples:** `isometric` and `sprites`.
 - **CI:** Windows, macOS and Linux, `dev` and `release`, tests, and a Direct3D 12 render on Windows.
 
-[Unreleased]: https://github.com/SireSoul/Bowl/compare/v0.2.0...develop
+[Unreleased]: https://github.com/SireSoul/Bowl/compare/v0.3.0...develop
+[0.3.0]: https://github.com/SireSoul/Bowl/releases/tag/v0.3.0
 [0.2.0]: https://github.com/SireSoul/Bowl/releases/tag/v0.2.0

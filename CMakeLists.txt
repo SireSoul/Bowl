@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 # Bowl Engine. Code uses the short namespace `bowl`.
-project(Bowl VERSION 0.2.0 LANGUAGES C CXX)
+project(Bowl VERSION 0.3.0 LANGUAGES C CXX)
 
 option(BOWL_BUILD_TESTS   "Build unit tests and benchmarks"                          ${PROJECT_IS_TOP_LEVEL})
 option(BOWL_BUILD_SAMPLES "Build sample games"                                       ${PROJECT_IS_TOP_LEVEL})
