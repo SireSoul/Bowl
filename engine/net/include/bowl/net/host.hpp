@@ -45,6 +45,7 @@ enum class Route : u8 { Auto, Relay };
 struct HostSettings {
     u16 port = 0;              // 0: any free port (what clients want)
     bool ipv6 = false;         // an IPv6 socket also talks to IPv4
+    bool local_only = false;   // listen on this computer's loopback only: nothing on a network can reach it
     u32 max_peers = 32;        // how many may connect to this host
     u32 protocol = 0x424F574C; // hosts with different numbers ignore each other: put your game's version in it
     std::string secret;        // optional; both ends need the same one to connect (see above)

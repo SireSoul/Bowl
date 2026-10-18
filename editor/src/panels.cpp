@@ -72,6 +72,7 @@ bool segment(const char* label, bool on, const char* tip_text, float width = 0) 
 } // namespace
 
 void Editor::dev_ui(Engine& engine) {
+    game_update(engine);
     const ImGuiIO& io = ImGui::GetIO();
     free_area_ = {left_w, top_h, std::max(1.0f, io.DisplaySize.x - left_w - right_w),
                   std::max(1.0f, io.DisplaySize.y - top_h - status_h)};
@@ -82,6 +83,8 @@ void Editor::dev_ui(Engine& engine) {
         art_drop(engine);
     } else if (workspace_ == Workspace::Data) {
         data_workspace(engine);
+    } else if (workspace_ == Workspace::Game) {
+        game_workspace(engine);
     } else {
         paint_workspace(engine);
     }
@@ -109,6 +112,9 @@ void Editor::top_bar(Engine& engine) {
     if (segment("Data", workspace_ == Workspace::Data, "The game's data files, edited in place|Ctrl+2")) workspace_ = Workspace::Data;
     ImGui::SameLine(0, 2);
     if (segment("Paint", workspace_ == Workspace::Paint, "Paint pixel art|Ctrl+3")) workspace_ = Workspace::Paint;
+    ImGui::SameLine(0, 2);
+    if (segment("Game", workspace_ == Workspace::Game, "Attach to a running game: its profiler, systems and entities|Ctrl+4"))
+        workspace_ = Workspace::Game;
     if (workspace_ != Workspace::Level) {
         ImGui::SameLine(io.DisplaySize.x - 44);
         if (ui::tool_button("help", ui::Icon::Help, show_help_, "Every key and mouse action|F1")) show_help_ = !show_help_;
@@ -505,6 +511,7 @@ void Editor::inspect_one(Engine& engine, ecs::Entity e) {
     }
     raw_cards(engine, e);
     add_component_button(engine, e);
+    game_access_note(engine, e);
 }
 
 void Editor::transform_card(Engine& engine, ecs::Entity e) {
@@ -732,6 +739,8 @@ void Editor::status_bar(Engine& engine) {
     std::string what;
     if (workspace_ == Workspace::Data)
         what = "Change values on the left or the text on the right; comments and layout stay. Ctrl+S saves, Ctrl+Z undoes.";
+    else if (workspace_ == Workspace::Game)
+        what = link_.connected() ? "Attached: changes here happen in the running game." : "Pick a running game on the left to attach.";
     else if (workspace_ == Workspace::Paint)
         what = "Click and drag to paint. B pencil, E eraser, F fill, I or Alt pick. Wheel zooms, right-drag moves. Ctrl+S saves.";
     else if (tool_ == Tool::Brush) what = "Paint on a picture where it stands. Colors and tools are in the Paint workspace.";
@@ -851,7 +860,7 @@ void Editor::help_window() {
         {"V / P / H", "Select, Place, Move the view"},
         {"B / R", "Brush (paint on art in the level), Region (drag out an area)"},
         {"C", "Show or hide collision shapes and regions"},
-        {"Ctrl+1 / 2 / 3", "Level, Data and Paint workspaces"},
+        {"Ctrl+1 / 2 / 3 / 4", "Level, Data, Paint and Game workspaces"},
         {"G / Shift+G", "Show the grid / snap to it"},
         {"Arrows (Shift)", "Nudge one unit (a grid step)"},
         {"Q / E (Shift)", "Turn 15 degrees (1 degree)"},

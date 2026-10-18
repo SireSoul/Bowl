@@ -41,7 +41,9 @@ here, then copy the values into code. The number of cached GPU pipelines is show
 
 Both schedules, each system with its parallel batch number, its last run time and whether it runs exclusively. Each
 system has a checkbox to switch it off, which is a quick way to see what a system is responsible for. The
-**parallel** checkbox runs a schedule on one thread, in order, to rule out a race.
+**parallel** checkbox runs a schedule on one thread, in order, to rule out a race. A system that starts a new batch
+says why when the mouse rests on it ("remember position writes Position, which wander reads"), and **access** opens a
+table of which system reads (R) and writes (W) which component.
 
 ### Entities
 
@@ -113,6 +115,15 @@ Window positions and sizes are remembered between runs in `devtools.ini` in the 
 When the overlay is using the keyboard (typing in a field) or the mouse (over a window, dragging), the game doesn't see
 new presses from that device. Everything else reaches the game as usual, so you can keep playing with the overlay
 open.
+
+## Bowl Editor attached to the game
+
+A dev build's game also lets Bowl Editor attach to it, from the editor's **Game** tab (see
+[the editor guide](editor.md#the-game-workspace)): the profiler, the schedules and the entities, from a window of their
+own, with the game's own window left as it is. The game listens on this computer only (the loopback address), with a
+random key in a file only you can read, so nothing on a network can reach it. `AppConfig::dev_link = false` turns it
+off; shipping builds don't have it. Tools of your own can attach the same way with `devlink::DevLinkClient`
+(`bowl/app/dev_link.hpp`).
 
 ## Screenshots and automated runs
 

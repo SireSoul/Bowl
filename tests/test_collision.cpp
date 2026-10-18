@@ -177,3 +177,17 @@ TEST_CASE("triggers: entered, inside and exited, with layers") {
     CHECK(e.exited[0].other == hero);
     CHECK(overlapping(world, Circle{{0, 0}, 1}, 0b10) == std::vector<ecs::Entity>{ghost});
 }
+
+TEST_CASE("shapes: a shape inside another is pushed all the way out, and points inside count") {
+    // A thin box across a wide one: the way out is to the wide one's nearer edge, not the thin one's width.
+    Shape thin = Rect{19.2f, -17.5f, 1.5f, 14.2f}, wide = Rect{14.9f, -14.8f, 7.2f, 7.8f};
+    Contact c = collide(thin, wide);
+    REQUIRE(c.hit);
+    CHECK(c.normal.x == doctest::Approx(1));
+    CHECK(c.depth == doctest::Approx(22.1f - 19.2f).epsilon(1e-3));
+    CHECK_FALSE(overlaps(Polygon::box(Rect{19.2f + c.depth + 0.01f, -17.5f, 1.5f, 14.2f}), wide));
+    // A point is the thinnest shape of all: contains() turned it away from every box and polygon.
+    CHECK(contains(Shape{Rect{0, 0, 10, 10}}, Vec2{3, 4}));
+    CHECK(contains(Shape{Polygon::box({0, 0}, {10, 10}, pi / 4)}, Vec2{1, 1}));
+    CHECK_FALSE(contains(Shape{Rect{0, 0, 10, 10}}, Vec2{11, 4}));
+}

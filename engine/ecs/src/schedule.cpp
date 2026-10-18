@@ -41,18 +41,63 @@ bool Schedule::conflicts(const System& a, const System& b) const {
     return false;
 }
 
+namespace {
+
+std::string names_of(const ComponentMask& mask) {
+    std::string out;
+    mask.for_each([&](ComponentId c) {
+        if (!out.empty()) out += ", ";
+        out += component_info(c).name;
+    });
+    return out;
+}
+
+std::string common_names(const std::vector<TypeId>& a, const std::vector<std::string>& a_names,
+                         const std::vector<TypeId>& b) {
+    std::string out;
+    for (usize i = 0; i < a.size(); ++i)
+        if (std::find(b.begin(), b.end(), a[i]) != b.end()) {
+            if (!out.empty()) out += ", ";
+            out += i < a_names.size() ? a_names[i] : std::string("a resource");
+        }
+    return out;
+}
+
+} // namespace
+
+std::string Schedule::conflict_reason(const System& a, const System& b) const {
+    if (a.exclusive) return a.name + " is exclusive";
+    if (b.exclusive) return b.name + " is exclusive";
+    if (a.writes.intersects(b.writes)) return a.name + " and " + b.name + " both write " + names_of(a.writes & b.writes);
+    if (a.writes.intersects(b.reads)) return a.name + " writes " + names_of(a.writes & b.reads) + ", which " + b.name + " reads";
+    if (b.writes.intersects(a.reads)) return b.name + " writes " + names_of(b.writes & a.reads) + ", which " + a.name + " reads";
+    if (auto both = common_names(a.resource_writes, a.resource_write_names, b.resource_writes); !both.empty())
+        return a.name + " and " + b.name + " both write " + both;
+    if (auto r = common_names(a.resource_writes, a.resource_write_names, b.resource_reads); !r.empty())
+        return a.name + " writes " + r + ", which " + b.name + " reads";
+    if (auto r = common_names(b.resource_writes, b.resource_write_names, a.resource_reads); !r.empty())
+        return b.name + " writes " + r + ", which " + a.name + " reads";
+    return {};
+}
+
 void Schedule::build_batches() {
     batches_.clear();
     std::vector<usize> current;
+    bool after_barrier = false;
     for (usize i = 0; i < systems_.size(); ++i) {
-        const System& s = *systems_[i];
-        bool fits = std::none_of(current.begin(), current.end(), [&](usize j) { return conflicts(s, *systems_[j]); });
-        if (!fits) {
+        System& s = *systems_[i];
+        s.why_new_batch.clear();
+        if (after_barrier) s.why_new_batch = "barrier";
+        after_barrier = false;
+        auto clash = std::find_if(current.begin(), current.end(), [&](usize j) { return conflicts(s, *systems_[j]); });
+        if (clash != current.end()) {
+            s.why_new_batch = conflict_reason(*systems_[*clash], s);
             batches_.push_back(std::move(current));
             current.clear();
         }
         current.push_back(i);
         if (s.barrier_after) {
+            after_barrier = true;
             batches_.push_back(std::move(current));
             current.clear();
         }
@@ -64,6 +109,27 @@ void Schedule::build_batches() {
 const std::vector<std::vector<usize>>& Schedule::batches() {
     if (dirty_) build_batches();
     return batches_;
+}
+
+std::vector<SystemInfo> Schedule::describe() {
+    const auto& all = batches();
+    std::vector<SystemInfo> out(systems_.size());
+    for (usize b = 0; b < all.size(); ++b)
+        for (usize i : all[b]) {
+            const System& s = *systems_[i];
+            SystemInfo& info = out[i];
+            info.name = s.name;
+            info.batch = static_cast<u32>(b);
+            info.ms = s.last_ms;
+            info.enabled = s.enabled;
+            info.exclusive = s.exclusive;
+            s.reads.for_each([&](ComponentId c) { info.reads.emplace_back(component_info(c).name); });
+            s.writes.for_each([&](ComponentId c) { info.writes.emplace_back(component_info(c).name); });
+            info.resource_reads = s.resource_read_names;
+            info.resource_writes = s.resource_write_names;
+            info.why_new_batch = s.why_new_batch;
+        }
+    return out;
 }
 
 void Schedule::run_system(System& s, World& world, JobSystem& jobs, f32 dt) {

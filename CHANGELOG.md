@@ -6,6 +6,16 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Bowl Editor's **Game** tab (Ctrl+4, or `--attach`): attaches to a game running on this computer from a dev build and
+  shows its profiler (frame times, zones, pause, step and speed), its schedules (each system's batch, time and reads
+  and writes, why each batch starts, and a switch to turn it off) and its entities, whose components can be changed
+  while it runs. The game listens on the loopback address only, with a random key in a file only its user can read
+  (`devlink::DevLink`, `devlink::DevLinkClient` in `bowl/app/dev_link.hpp`; `AppConfig::dev_link` turns it off). The
+  editor keeps the last schedules a game sent, and the Level tab says which systems read and write a thing's components.
+- `Schedule::describe()` (an `ecs::SystemInfo` per system: batch, time, component and resource reads and writes, and
+  why it starts a new batch) and `Schedule::conflict_reason(a, b)`. The F1 overlay's Systems panel shows why each batch
+  starts and a table of which system reads and writes which component.
+- `HostSettings::local_only` (and `Socket::open`'s `loopback`): a host only this computer can reach.
 - Tiled layers with the bool property `above` draw over everything y-sorted, for what characters walk under (roofs,
   the tops of arches and gates), like Stardew Valley's Front layer. `TilemapCache` leaves them to `draw_tilemap` with
   `Layers::Sorted`.
@@ -29,6 +39,17 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   [CONTRIBUTING](CONTRIBUTING.md#fuzzing).
 
 ### Changed
+- UI: confirm (Enter, Space, the gamepad's South) presses only a widget that keys or the gamepad moved focus to, in a
+  panel that takes keys. A button the mouse passed over is still highlighted but no longer waits for the Space the
+  player jumps with, and widgets outside any panel are for the mouse only. `begin_panel(id, rect, keys)` takes
+  `keys = false` for a HUD, so the game's WASD and Space don't move focus into it. The first key press after the mouse
+  highlighted a widget takes that widget.
+- `bowl-rendezvous`: introductions nothing has been relayed through go after `join_timeout` (10 s) instead of the
+  60 s session timeout; at most `max_joining_per_address` (32) wait at once for one address; and when every slot is
+  taken, the oldest of them makes way for a new player instead of the player being turned away.
+- **Breaking** for old clients of a new `bowl-rendezvous`: the server answers `ListRooms` with no more bytes than the
+  request had, and `Host::list_rooms` pads its request to a full answer's size. A client from before this lists no
+  rooms (it still gets the count).
 - Bowl Editor: the Outline's eye hides a thing in the editor only; it used to switch the picture's `Shown`, which the
   game sees. The Art card's **Shown** still does that.
 - Fonts are checked before stb_truetype reads them (it checks nothing itself): a font whose tables run past the end of
@@ -39,6 +60,50 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- GCC builds named the engine's own types without `bowl::` (`ecs::Transform2D`, `gfx::Map`), since GCC writes a type
+  relative to the namespace of the function describing it. Levels saved on macOS or Windows lost those components on
+  Linux, and the other way round. `type_name` now gives the full name on every compiler, and a level saved by an older
+  GCC build still loads.
+- `BOWL_COMPONENT` types weren't registered by name at startup when built with GCC (Linux): the registration was an
+  unused inline variable, which GCC never initializes, so a saved world naming a type no code had touched yet dropped
+  it as unknown. The registration is now a static in each file. The engine also registers `gfx::Map` with its other
+  components at startup (`register_engine_components()`), so levels holding a Tiled map load in any game.
+- ECS and type ids: types with the same name in two files' anonymous namespaces were taken for one type, since
+  their names print the same: two such components of different layouts shared a component id (corrupting memory),
+  and two such resource or asset types shared a `type_id`. Each now gets its own id, and the later component is
+  listed as "Name #2". Components declared in functions (which Clang names without the function) are told apart too.
+  Named types keep one id in every module, as hot reload needs.
+- `Lockstep` and `Rollback` kept any input a peer sent, for any tick: a peer sending far-off ticks filled memory. Inputs
+  further ahead than a machine in step could be are now dropped.
+- A `CommandBuffer` cleared or destroyed without being applied kept the entity slots its `create()` had reserved for
+  good; it now hands them back (the handles it gave out stay dead).
+- `Localization::tr()` returned a view into the language's table, which a hot reload (or anything else that freed the
+  table) left dangling; the strings it returns now last as long as the `Localization`.
+- Physics: `collide` and `overlaps` on `Shape`s measured how far a shape inside another (on some axis) must move by
+  the length they share, so a thin shape across a wide one wasn't pushed all the way out, and `contains` said no for
+  every point inside a `Rect` or `Polygon` passed as a `Shape`.
+- Text: right-to-left text ending in a newline read past the end of its levels (a heap overflow).
+- Assets: a path with `..` or an absolute path (from a map, prefab or sheet anyone can write) reached files outside
+  the mounted folder.
+- Rendezvous: a forged `ListRooms` made the server send a stranger up to 58 times as many bytes as it was sent, so a
+  public server could be used to flood someone.
+- `Lockstep` turned away messages naming its own player only for ticks it had its input for; one for a later tick
+  (two machines set to the same index) took the place of the local input, which was then never sent.
+- `World::create(...)`, `insert` and `add` read the values given after moving the entity, so components copied from
+  another entity of the same archetype (`w.create(w.get<A>(other))`, and Bowl Editor's Duplicate) read freed memory
+  when the archetype grew.
+- Replication: a batch of changes bigger than a reliable message (64 KB) was refused by `Host::send` and never sent
+  again, so players never saw those entities; batches are now cut to fit, and a single component too big for any
+  message is reported instead. A component pointing at an entity a player is shown later is sent again once it
+  arrives, instead of pointing at nothing for good. An unreliable value that arrives after its component was removed
+  no longer adds it back.
+- `Host::connect` and `join_room` on a host that hadn't updated in more than `timeout` seconds (a game that waited in
+  its menu) dropped the new peer at the next update. A peer sending pieces of a reliable message past 64 KB is
+  disconnected instead of growing it without end.
+- Hierarchy: `set_parent` and `destroy_recursive` no longer hang on a parent cycle in loaded data, and entities whose
+  parent was destroyed without `destroy_recursive` keep having their global transform updated, as roots.
+- Tilemaps: an infinite map's chunk with a corner past 64 bits overflowed the check meant to refuse it, then was
+  written outside the layer (found by fuzzing).
 - Y-sorted tiles sort by the middle of their cell (`Tilemap::sort_y`) instead of the bottom of the picture, so a
   character walking up to a tall tile on an isometric map's near sides (down-left, down-right) is drawn in front of it,
   not behind.

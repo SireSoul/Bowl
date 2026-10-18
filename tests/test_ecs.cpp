@@ -2,6 +2,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
@@ -263,4 +264,47 @@ TEST_CASE("compact frees unused archetypes; queries and moves keep working") {
     w.destroy(keep);
     w.compact();
     CHECK(positions.count() == 0);
+}
+
+namespace {
+struct Label {
+    std::string text;
+};
+std::string long_name(int i) { return "entity number " + std::to_string(i) + ", with a name too long to fit inline"; }
+} // namespace
+
+TEST_CASE("ecs: components copied from another entity, while the archetype they land in grows") {
+    // 16 rows fill an archetype's first allocation, so the 17th moves every row: what's given must be read first.
+    World w;
+    std::vector<Entity> made;
+    for (int i = 0; i < 16; ++i) made.push_back(w.create(Label{long_name(i)}, Position{static_cast<f32>(i), 1}));
+    Entity copy = w.create(w.get<Label>(made[0]), w.get<Position>(made[0]));
+    CHECK(w.get<Label>(copy).text == long_name(0));
+    CHECK(w.get<Position>(copy).y == 1);
+
+    World v;
+    std::vector<Entity> labelled;
+    for (int i = 0; i < 16; ++i) labelled.push_back(v.create(Label{long_name(i)}));
+    Entity e = v.create();
+    v.add<Label>(e, v.get<Label>(labelled[3]));
+    CHECK(v.get<Label>(e).text == long_name(3));
+}
+
+TEST_CASE("ecs: a command buffer thrown away hands back the ids it reserved") {
+    World w;
+    std::vector<Entity> reserved;
+    {
+        CommandBuffer cmd(w);
+        for (int i = 0; i < 100; ++i) reserved.push_back(cmd.create(Position{}));
+    } // never applied
+    u32 highest = 0;
+    for (int i = 0; i < 100; ++i) highest = std::max(highest, w.create().index);
+    CHECK(highest < 100); // the same slots again: without them back, these would be 100 to 199
+    for (Entity e : reserved) CHECK_FALSE(w.alive(e)); // and the old handles stay dead
+
+    CommandBuffer late(w);
+    late.create();
+    w.reset(); // the ids it holds mean nothing in the world after this
+    late.clear();
+    CHECK(w.create().index == 0);
 }

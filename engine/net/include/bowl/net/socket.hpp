@@ -49,7 +49,8 @@ public:
     Socket& operator=(Socket&& o) noexcept;
 
     // Port 0 picks a free one (port() then says which).
-    bool open(u16 port = 0, bool ipv6 = false);
+    // loopback: only this computer can send to it (dev tools), instead of every network it's on.
+    bool open(u16 port = 0, bool ipv6 = false, bool loopback = false);
     void close();
     bool is_open() const;
     u16 port() const { return port_; }

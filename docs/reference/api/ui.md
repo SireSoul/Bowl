@@ -13,6 +13,9 @@ Immediate-mode game UI: menus, settings screens, HUD widgets, dialogue. Call wid
 end; they return what happened. Works with the mouse, and with keyboard/gamepad focus (up/down to move, confirm to
 press, left/right on sliders) through the input actions ui_up, ui_down, ui_left, ui_right, ui_confirm, ui_back
 (bound to arrows/WASD, Enter/Space, Escape and the gamepad's d-pad, South and East unless the game binds them).
+Those keys only reach widgets in panels that take them, and confirm only presses a widget they focused: the mouse
+passing over a button doesn't leave it waiting for the Space the player jumps with. Widgets outside any panel, and
+in panels begun with keys = false (a HUD, while the game's own keys are in use), are for the mouse only.
 
 Widgets draw into a batch you begin yourself with a screen camera, so your own HUD can share it:
 
@@ -91,10 +94,11 @@ void begin(gfx::SpriteBatch& batch, Input& input, Vec2 screen_size, f32 dt, f32 
 void end();
 ```
 
-A panel lays its widgets out top to bottom. rect.h = 0 grows to fit its contents (as of last frame).
+A panel lays its widgets out top to bottom. rect.h = 0 grows to fit its contents (as of last frame). keys: whether
+its widgets take keyboard and gamepad focus (menus); false for a HUD the game's own keys pass by.
 
 ```cpp
-bool begin_panel(std::string_view id, Rect rect);
+bool begin_panel(std::string_view id, Rect rect, bool keys = true);
 void end_panel();
 ```
 

@@ -18,6 +18,22 @@ struct SystemContext {
     f32 dt;
 };
 
+// What a schedule's system does and where it runs, for tools (the F1 overlay, Bowl Editor's Game tab).
+struct SystemInfo {
+    std::string name;
+    u32 batch = 0;     // systems in one batch run side by side
+    f64 ms = 0;        // its last run
+    bool enabled = true;
+    bool exclusive = false; // declared no access: runs alone
+    std::vector<std::string> reads, writes;                   // component names
+    std::vector<std::string> resource_reads, resource_writes; // resource type names
+    // Why it starts a new batch instead of joining the one before: "barrier", "exclusive", or the system it conflicts
+    // with and on what ("writes Position, which physics reads"). Empty for the first system and those that joined.
+    std::string why_new_batch;
+};
+BOWL_REFLECT(SystemInfo, name, batch, ms, enabled, exclusive, reads, writes, resource_reads, resource_writes,
+             why_new_batch)
+
 // An ordered list of systems. Systems that declare non-conflicting access run in parallel; the result is always the
 // same as running them one by one in insertion order, because only systems with no data in common share a batch.
 //
@@ -34,6 +50,8 @@ public:
         std::function<void(SystemContext&)> fn;
         ComponentMask reads, writes;
         std::vector<TypeId> resource_reads, resource_writes;
+        std::vector<std::string> resource_read_names, resource_write_names; // owned: a reloaded library's text goes
+        std::string why_new_batch; // see SystemInfo
         bool exclusive = true;
         bool barrier_after = false;
         bool enabled = true;
@@ -46,8 +64,14 @@ public:
         Builder(Schedule& s, usize index) : schedule_(&s), index_(index) {}
         template <class... Ts> Builder& reads() { sys().reads = sys().reads | ComponentMask::of<Ts...>(); return declared(); }
         template <class... Ts> Builder& writes() { sys().writes = sys().writes | ComponentMask::of<Ts...>(); return declared(); }
-        template <class... Rs> Builder& reads_resource() { (sys().resource_reads.push_back(type_id<Rs>()), ...); return declared(); }
-        template <class... Rs> Builder& writes_resource() { (sys().resource_writes.push_back(type_id<Rs>()), ...); return declared(); }
+        template <class... Rs> Builder& reads_resource() {
+            ((sys().resource_reads.push_back(type_id<Rs>()), sys().resource_read_names.emplace_back(type_name<Rs>())), ...);
+            return declared();
+        }
+        template <class... Rs> Builder& writes_resource() {
+            ((sys().resource_writes.push_back(type_id<Rs>()), sys().resource_write_names.emplace_back(type_name<Rs>())), ...);
+            return declared();
+        }
         // Run alone, after everything before it and before everything after it.
         Builder& exclusive() { sys().exclusive = true; schedule_->dirty_ = true; return *this; }
 
@@ -89,6 +113,11 @@ public:
     const std::vector<std::unique_ptr<System>>& systems() const { return systems_; }
     // Batches of system indices that run concurrently (for tools).
     const std::vector<std::vector<usize>>& batches();
+    // Every system in order, with its access and batch (for tools).
+    std::vector<SystemInfo> describe();
+    // Why a and b can't run side by side, as a sentence ("" when they can): "physics is exclusive", "ai writes Brain,
+    // which steering reads".
+    std::string conflict_reason(const System& a, const System& b) const;
 
 private:
     bool conflicts(const System& a, const System& b) const;

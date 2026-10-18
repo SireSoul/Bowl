@@ -80,8 +80,20 @@ Getting a declaration wrong (writing something you declared as read) is a data r
 exclusive; correctness first, then profile.
 
 The F1 overlay's **Systems** panel lists each system with its last run time and its batch, and has a checkbox to
-switch any system off. `schedule.set_parallel(false)` runs everything on one thread, in order, which is the quickest
-way to rule out a race.
+switch any system off. Rest the mouse on a system that starts a batch to see why, and open **access** for a table of
+which system reads (R) and writes (W) which component. Bowl Editor's Game tab shows the same for a running game (see
+[the editor guide](editor.md#the-game-workspace)). `schedule.set_parallel(false)` runs everything on one thread, in
+order, which is the quickest way to rule out a race.
+
+The same facts are there for your own tools: `schedule.describe()` returns an `ecs::SystemInfo` per system (name,
+batch, last time, on or off, component and resource reads and writes, and `why_new_batch`), and
+`schedule.conflict_reason(a, b)` says in a sentence why two systems can't share a batch:
+
+```cpp
+for (const ecs::SystemInfo& s : engine.fixed_schedule().describe())
+    if (!s.why_new_batch.empty()) info("{} starts batch {}: {}", s.name, s.batch, s.why_new_batch);
+// wander starts batch 1: remember position writes Position, which wander reads
+```
 
 ## Structural changes
 

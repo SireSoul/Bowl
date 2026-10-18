@@ -54,6 +54,9 @@ public:
     // Applies every command to the world in recording order, then clears. Commands targeting entities that died in
     // the meantime are skipped.
     void apply();
+    // Drops the commands unapplied. Entity ids create() reserved go back to the world (their handles stay dead), so a
+    // buffer thrown away doesn't use up slots for good. (The destructor does the same: a buffer mustn't outlive its
+    // world.)
     void clear();
     bool empty() const { return commands_.empty(); }
     usize size() const { return commands_.size(); }
@@ -120,6 +123,9 @@ private:
     u32 placeholder_tag_ = 0;       // 0: real reserved ids
     u32 next_placeholder_ = 0;      // stand-ins handed out since the last apply
     bool has_placeholders_ = false; // its commands (its own or appended) mention stand-ins
+    std::vector<Entity> reserved_;  // real ids create() reserved that no apply has spawned yet
+    u32 reserved_in_ = 0;           // the world's reset count when they were reserved
+    void release_reserved();
 };
 
 } // namespace bowl::ecs

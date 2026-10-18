@@ -65,11 +65,18 @@ void Localization::set_fallback(std::string_view code) {
     fallback_table_ = assets_->resolve(path) ? assets_->load<StringTable>(path) : Asset<StringTable>{};
 }
 
+std::string_view Localization::keep(const std::string& s) const {
+    std::lock_guard lock(handed_out_mutex_);
+    auto it = handed_out_.find(std::string_view(s));
+    if (it == handed_out_.end()) it = handed_out_.insert(s).first; // set nodes don't move: views into them last
+    return *it;
+}
+
 std::string_view Localization::tr(std::string_view key) const {
     if (current_)
-        if (const std::string* s = current_->find(key)) return *s;
+        if (const std::string* s = current_->find(key)) return keep(*s);
     if (fallback_table_)
-        if (const std::string* s = fallback_table_->find(key)) return *s;
+        if (const std::string* s = fallback_table_->find(key)) return keep(*s);
     return key;
 }
 

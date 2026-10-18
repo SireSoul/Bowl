@@ -78,3 +78,48 @@ TEST_CASE("hierarchy: saves and loads with references intact") {
     propagate_transforms(other);
     CHECK(other.get<GlobalTransform2D>(c2).position == Vec2{11, 11});
 }
+
+TEST_CASE("hierarchy: a child whose parent was destroyed on its own becomes a root") {
+    World w;
+    Entity parent = w.create(Transform2D{{100, 0}});
+    Entity child = w.create(Transform2D{{5, 0}});
+    REQUIRE(set_parent(w, child, parent));
+    propagate_transforms(w);
+    CHECK(w.get<GlobalTransform2D>(child).position == Vec2{105, 0});
+    w.destroy(parent); // not destroy_recursive: the child keeps a Parent that's gone
+    w.get<Transform2D>(child).position.x = 7;
+    propagate_transforms(w);
+    CHECK(w.get<GlobalTransform2D>(child).position == Vec2{7, 0}); // still followed, from the origin
+}
+
+TEST_CASE("hierarchy: a cycle in loaded data doesn't hang anything") {
+    World w;
+    Entity a = w.create(Transform2D{}), b = w.create(Transform2D{}), c = w.create(Transform2D{});
+    // As a hand-edited save might have it: a and b are each other's parent.
+    w.add<Parent>(a, b);
+    w.add<Parent>(b, a);
+    w.add<Children>(a, std::vector<Entity>{b});
+    w.add<Children>(b, std::vector<Entity>{a});
+    propagate_transforms(w);
+    CHECK_FALSE(set_parent(w, c, a)); // refused: walking up from a never ends
+    destroy_recursive(w, a);
+    CHECK_FALSE(w.alive(a));
+    CHECK_FALSE(w.alive(b));
+    CHECK(w.alive(c));
+}
+
+TEST_CASE("world io: names are the same on every compiler, and GCC's old shorter ones still load") {
+    CHECK(type_name<Transform2D>() == "bowl::ecs::Transform2D");
+    // A GCC build used to write engine types without "bowl::".
+    auto doc = json::parse(R"({ "format": "Bowl.world", "version": 1, "entities": [
+        { "id": 0, "components": { "ecs::Transform2D": { "position": [3, 4] }, "ecs::Name": { "value": "old" } } } ] })");
+    REQUIRE(doc);
+    register_components<Transform2D, Name>();
+    World w;
+    serial::Context ctx;
+    auto made = load_entities(w, doc.value, ctx);
+    REQUIRE(made.size() == 1);
+    CHECK(w.get<Name>(made[0]).value == "old");
+    CHECK(w.get<Transform2D>(made[0]).position == Vec2{3, 4});
+    CHECK(ctx.warnings.empty());
+}

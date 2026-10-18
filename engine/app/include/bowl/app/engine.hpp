@@ -39,9 +39,16 @@ struct AppConfig {
     // For tools built on the engine, like the editor: Game::dev_ui is always shown, not only while the F1 overlay
     // is open, and the engine's own windows move from F1 to F12. Dev builds only.
     bool dev_ui_always = false;
+    // Dev builds: let Bowl Editor's Game tab attach to the running game (bowl/app/dev_link.hpp), on this computer only.
+    bool dev_link = true;
 };
 
 class Engine;
+
+// Registers the engine's own components (transforms, names, sprites, maps, colliders...), so saved levels that hold
+// them load by name. The engine does it at startup, before a hot-reloadable game library loads, so their code never
+// belongs to a library that gets unloaded; tools and tests that load levels without an Engine call it themselves.
+void register_engine_components();
 
 // Implement this, then put BOWL_MAIN(YourGame) in one .cpp file (see bowl/app/main.hpp).
 class Game {

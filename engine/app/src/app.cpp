@@ -1,6 +1,7 @@
 #include "bowl/app/entry.hpp"
 
 #include "dev_tools.hpp"
+#include "bowl/app/dev_link.hpp"
 #include "bowl/app/icon.hpp"
 #include "bowl/core/profiler.hpp"
 #include "bowl/core/time.hpp"
@@ -8,6 +9,7 @@
 #include "bowl/gfx/particles.hpp"
 #include "bowl/gfx/sprite.hpp"
 #include "bowl/gfx/sprite_sheet.hpp"
+#include "bowl/gfx/tilemap.hpp"
 #include "bowl/physics/colliders.hpp"
 #if BOWL_BOX2D
 #include "bowl/physics/rigid_bodies.hpp"
@@ -21,6 +23,14 @@
 
 namespace bowl {
 
+void register_engine_components() {
+    ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
+                             gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, gfx::Map, physics::Collider>();
+#if BOWL_BOX2D
+    ecs::register_components<physics::RigidBody, physics::Joint>();
+#endif
+}
+
 Engine::Engine() = default;
 Engine::~Engine() = default;
 
@@ -28,6 +38,7 @@ struct AppRunner {
     std::unique_ptr<Game> game;
     std::unique_ptr<Engine> engine;
     std::unique_ptr<DevTools> dev;
+    std::unique_ptr<devlink::DevLink> link; // dev builds: Bowl Editor's Game tab
     u64 last_ticks = 0;
     f64 last_asset_poll = 0;
     u64 frame_limit = 0;        // --frames N: quit after N frames (automated runs)
@@ -35,16 +46,41 @@ struct AppRunner {
     bool start_with_overlay = false; // --overlay: open the dev overlay at startup
     i64 inspect_index = -1;          // --inspect N
 
+    void start_link(Engine& e) {
+        devlink::Sources s;
+        s.game = e.config_.window.title;
+        s.world = &e.world_;
+        s.assets = &e.assets_;
+        s.fixed = &e.fixed_schedule_;
+        s.frame = &e.frame_schedule_;
+        s.stats = [&e] {
+            devlink::Frame f;
+            const auto& history = profiler::frame_history();
+            f.ms = history.empty() ? 0.0f : history.back();
+            f.entities = static_cast<u32>(e.world_.entity_count());
+            f.archetypes = static_cast<u32>(e.world_.archetypes().size());
+            f.voices = e.audio_.active_voices();
+            f.sprites = e.renderer_.stats().sprites;
+            f.draw_calls = e.renderer_.stats().draw_calls;
+            return f;
+        };
+        s.time = [&e](const devlink::TimeControl& t) {
+            e.set_paused(t.paused);
+            e.set_time_scale(t.time_scale > 0 ? t.time_scale : 1.0f);
+            if (t.step) e.step();
+        };
+        s.time_state = [&e] { return devlink::TimeControl{e.paused(), false, e.time_scale()}; };
+        link = std::make_unique<devlink::DevLink>(std::move(s));
+        if (!link->start()) {
+            warn("dev link: couldn't listen; Bowl Editor can't attach to this game");
+            link.reset();
+        }
+    }
+
     bool init(int argc, char** argv, const char* game_asset_dir) {
         Engine& e = *engine;
         profiler::set_thread_name("main");
-        // The engine's own components are registered by engine code before any game library loads (a hot-reloadable
-        // game is loaded by configure()), so their code never belongs to a library that gets unloaded.
-        ecs::register_components<ecs::Transform2D, ecs::GlobalTransform2D, ecs::Parent, ecs::Children, ecs::Name,
-                                 gfx::Sprite, gfx::SpriteAnimator, gfx::ParticleEmitter, physics::Collider>();
-#if BOWL_BOX2D
-        ecs::register_components<physics::RigidBody, physics::Joint>();
-#endif
+        register_engine_components();
         e.config_ = game->configure();
         for (int i = 1; i < argc; ++i) e.args_.emplace_back(argv[i]);
         for (int i = 1; i < argc; ++i) {
@@ -132,6 +168,9 @@ struct AppRunner {
         // Player rebinds win over the defaults the game just set.
         if (const json::Value* saved = e.settings_.find("input")) e.input_.load_bindings(*saved);
         game->start(e);
+#if BOWL_DEV_TOOLS
+        if (e.config_.dev_link) start_link(e);
+#endif
         if (inspect_index >= 0)
             for (const auto& a : e.world_.archetypes())
                 for (ecs::Entity ent : a->entities())
@@ -243,6 +282,10 @@ struct AppRunner {
         }
         dev->end_frame(*game);
         e.renderer_.end_frame();
+        if (link) {
+            BOWL_PROFILE_SCOPE("dev link");
+            link->update();
+        }
 
         e.scenes_.apply_pending(e);
         e.input_.begin_frame();

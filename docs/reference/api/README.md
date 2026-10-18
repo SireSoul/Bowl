@@ -7,7 +7,8 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 
 | Header | |
 | --- | --- |
-| [bowl/app/engine.hpp](app.md#bowlappenginehpp) | Implement this, then put BOWL_MAIN(YourGame) in one .cpp file (see bowl/app/main.hpp). |
+| [bowl/app/dev_link.hpp](app.md#bowlappdev_linkhpp) | Game to editor. |
+| [bowl/app/engine.hpp](app.md#bowlappenginehpp) | Registers the engine's own components (transforms, names, sprites, maps, colliders...), so saved levels that hold them load by name. |
 | [bowl/app/entry.hpp](app.md#bowlappentryhpp) | The engine side of the entry point. |
 | [bowl/app/hot_reload.hpp](app.md#bowlapphot_reloadhpp) | Game-code hot reload (dev builds). |
 | [bowl/app/icon.hpp](app.md#bowlappiconhpp) | The game's icon as a PNG, put into the executable by bowl_add_game(... ICON icon.png); empty without one. |
@@ -42,7 +43,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/ecs/component.hpp](ecs.md#bowlecscomponenthpp) | An entity is an index plus a generation. |
 | [bowl/ecs/ecs.hpp](ecs.md#bowlecsecshpp) |  |
 | [bowl/ecs/hierarchy.hpp](ecs.md#bowlecshierarchyhpp) | Parent/child transforms. |
-| [bowl/ecs/schedule.hpp](ecs.md#bowlecsschedulehpp) | An ordered list of systems. |
+| [bowl/ecs/schedule.hpp](ecs.md#bowlecsschedulehpp) | What a schedule's system does and where it runs, for tools (the F1 overlay, Bowl Editor's Game tab). |
 | [bowl/ecs/world.hpp](ecs.md#bowlecsworldhpp) | Extra include/exclude terms for a query, for components you filter on but don't read. |
 | [bowl/ecs/world_io.hpp](ecs.md#bowlecsworld_iohpp) | Saving and loading entities as JSON, for save games, scenes, prefabs and copy/paste in tools. |
 | [bowl/gfx/bidi.hpp](gfx.md#bowlgfxbidihpp) | Embedding levels for one paragraph's characters: even runs left to right, odd right to left. |

@@ -146,3 +146,13 @@ TEST_CASE("text: shaping joins Arabic letters (HarfBuzz builds)") {
             break;
         }
 }
+
+TEST_CASE("text: right-to-left text ending in a newline") {
+    // The empty line after the newline read one past the end of the text's levels.
+    auto font = load_font(std::filesystem::path(BOWL_ENGINE_ASSET_SOURCE_DIR) / "fonts" / "Roboto-Medium.ttf");
+    REQUIRE(font);
+    TextStyle style;
+    style.size = 20;
+    CHECK(layout_text(*font, "\xD7\x90\xD7\x91\n", {}, style).size() == 2);
+    CHECK(layout_text(*font, "a\n\xD7\x90\n\n", {}, style).size() == 2);
+}

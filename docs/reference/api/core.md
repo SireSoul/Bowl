@@ -729,6 +729,9 @@ void set_fallback(std::string_view code);
 const std::string& language() const;
 ```
 
+The string stays valid as long as this Localization does, even after the table reloads or the language changes
+(only `key` itself, given back when nothing has it, lives as long as the caller's).
+
 ```cpp
 std::string_view tr(std::string_view key) const;
 std::string format(std::string_view key, std::initializer_list<std::pair<std::string_view, std::string_view>> args) const;
@@ -1508,8 +1511,17 @@ Stable 64-bit id derived from the type's name: identical across runs and builds 
 template <class T> constexpr u64 type_hash();
 ```
 
+Whether type_name&lt;T>() fails to identify T on its own: it's in an anonymous namespace, or declared in a function.
+
+```cpp
+template <class T> constexpr bool has_local_name();
+```
+
 Identifies a type in maps (resources, asset loaders). Derived from the type's name, so it's the same in every
-module of the process (a hot-reloaded game library and its host agree on it) and across runs.
+module of the process (a hot-reloaded game library and its host agree on it) and across runs. Types with a local
+name (has_local_name) instead get an id of their own each time the process runs, so two files' private
+`namespace { struct Settings; }` stay apart. Clang can't show that a type was declared in a function, so give
+resource and asset types a namespace-scope name there.
 
 ```cpp
 using TypeId = u64;

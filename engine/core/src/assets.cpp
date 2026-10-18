@@ -145,7 +145,11 @@ std::optional<AssetManager::Source> AssetManager::locate(std::string_view virtua
             if (m.archive->contains(rest)) return Source{{}, m.archive, std::string(rest)};
             continue;
         }
-        fs::path candidate = m.directory / fs::path(rest);
+        // Paths come from data (maps, prefabs, sheets) that strangers may write: none may leave the folder, whether
+        // by being absolute (which `/` would take instead of the folder) or by climbing out with "..".
+        fs::path relative = fs::path(rest).lexically_normal();
+        if (relative.has_root_path() || (!relative.empty() && *relative.begin() == "..")) continue;
+        fs::path candidate = m.directory / relative;
         std::error_code ec;
         if (fs::is_regular_file(candidate, ec)) return Source{std::move(candidate), nullptr, {}};
     }

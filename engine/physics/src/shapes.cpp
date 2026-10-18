@@ -229,14 +229,16 @@ Contact collide(const Shape& sa, const Shape& sb) {
         f32 alo, ahi, blo, bhi;
         project(a, axis, a.radius, alo, ahi);
         project(b, axis, b.radius, blo, bhi);
-        f32 overlap = std::min(ahi, bhi) - std::max(alo, blo);
+        // How far a must move along the axis to clear b, each way. Not the length the projections share: when one
+        // holds the other (a point, or a thin shape inside a wide one) that's less than the way out, even zero.
+        f32 forward = bhi - alo, back = ahi - blo;
+        f32 overlap = std::min(forward, back);
         if (overlap < best) {
             best = overlap;
-            best_axis = axis;
+            best_axis = forward <= back ? axis : -axis; // from b toward a
         }
     }
     if (best <= 0) return {};
-    if ((centroid(a.core) - centroid(b.core)).dot(best_axis) < 0) best_axis = -best_axis; // from b toward a
     return {true, best_axis, best};
 }
 

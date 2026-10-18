@@ -173,6 +173,7 @@ private:
     // Entity id reservation, thread-safe while the world is locked (see CommandBuffer::create).
     Entity reserve_entity();
     void materialize_reserved();
+    void release_reserved(std::span<const Entity> reserved); // ids reserved but never spawned: free again
     void spawn_reserved(Entity e);
 
     Archetype& archetype_for(const ComponentMask& mask);
@@ -208,6 +209,7 @@ private:
     std::unordered_map<ComponentMask, Archetype*, ComponentMaskHash> by_mask_;
     Archetype* empty_ = nullptr;
     u64 layout_epoch_ = 0;
+    u32 resets_ = 0; // reset() calls: ids reserved before one mean nothing after it
     u32 next_archetype_id_ = 0;
 
     std::vector<std::unique_ptr<Hooks>> hooks_;
@@ -395,10 +397,16 @@ template <Component T, class... Args> T& World::add(Entity e, Args&&... args) {
         *existing = T{std::forward<Args>(args)...};
         return *existing;
     }
-    u32 row = move_entity(e, archetype_with(*r.archetype, c));
     T* p;
-    if constexpr (std::is_empty_v<T>) p = try_get<T>(e);
-    else p = ::new (records_[e.index].archetype->at(c, row)) T{std::forward<Args>(args)...};
+    if constexpr (std::is_empty_v<T>) {
+        move_entity(e, archetype_with(*r.archetype, c));
+        p = try_get<T>(e);
+    } else {
+        // Made before the move: the arguments may be another entity's components, which the move can reallocate.
+        T value{std::forward<Args>(args)...};
+        u32 row = move_entity(e, archetype_with(*r.archetype, c));
+        p = ::new (records_[e.index].archetype->at(c, row)) T(std::move(value));
+    }
     run_add_hooks(c, e);
     return *p;
 }
@@ -408,6 +416,8 @@ template <class... Ts>
 void World::insert(Entity e, Ts&&... components) {
     check_unlocked();
     BOWL_ASSERT(alive(e));
+    // Taken before the move: the values may be another entity's components, which the move can reallocate.
+    std::tuple<std::decay_t<Ts>...> values{std::forward<Ts>(components)...};
     Archetype* from = records_[e.index].archetype;
     ComponentMask added;
     ((from->has(component_id<std::decay_t<Ts>>()) ? void() : added.set(component_id<std::decay_t<Ts>>())), ...);
@@ -423,7 +433,7 @@ void World::insert(Entity e, Ts&&... components) {
             else *static_cast<T*>(at) = std::forward<V>(value);
         }
     };
-    (place(std::forward<Ts>(components)), ...);
+    std::apply([&](auto&... value) { (place(std::move(value)), ...); }, values);
     added.for_each([&](ComponentId c) { run_add_hooks(c, e); });
 }
 

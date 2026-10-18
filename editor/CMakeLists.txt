@@ -6,6 +6,7 @@ add_executable(bowl-editor
     src/document.cpp
     src/editor.cpp
     src/data.cpp
+    src/game.cpp
     src/paint.cpp
     src/panels.cpp
     src/regions.cpp

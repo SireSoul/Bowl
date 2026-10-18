@@ -600,3 +600,139 @@ TEST_CASE("rollback: machines guess, correct themselves, and agree on every conf
     CHECK(machines[0].rollbacks() > 0); // it guessed wrong and went back
     CHECK(machines[0].resimulated() > 0);
 }
+
+TEST_CASE("net: connect() long after the host's last update doesn't time out at once") {
+    Host server, client;
+    REQUIRE(server.start());
+    REQUIRE(client.start());
+    // A game that sat in its menu for a while before joining: the first update is long after start().
+    PeerId id = client.connect(Address::loopback(server.port()));
+    f64 now = 100;
+    bool connected = false, dropped = false;
+    run(now, 3, [&](f64 t) { server.update(t), client.update(t); }, [&] {
+        while (auto e = client.receive()) {
+            connected = connected || (e->type == Event::Type::Connected && e->peer == id);
+            dropped = dropped || (e->type == Event::Type::Disconnected && e->peer == id);
+        }
+        while (server.receive()) {}
+        return connected || dropped;
+    });
+    CHECK(connected);
+    CHECK_FALSE(dropped);
+}
+
+TEST_CASE("net: lobbies: the server never answers with more than it's sent") {
+    // Otherwise a small request with someone else's address on it makes the server flood them with room lists.
+    Rendezvous rendezvous;
+    REQUIRE(rendezvous.start({.port = 0}));
+    Address server = Address::loopback(rendezvous.port());
+    Host host;
+    REQUIRE(host.start());
+    host.host_room(server, "room-listed", {.listed = true, .label = std::string(60, 'x')});
+    f64 now = 0;
+    wait(now, 0.1, [&](f64 t) { rendezvous.update(t), host.update(t); });
+
+    Socket asker;
+    REQUIRE(asker.open());
+    auto ask = [&](usize size) {
+        std::vector<u8> request{0x4E, 0x56, 0x44, 0x52, 6}; // rendezvous magic, ListRooms
+        for (u8 b : {0x4C, 0x57, 0x4F, 0x42}) request.push_back(b); // the default game protocol
+        for (int i = 0; i < 8; ++i) request.push_back(static_cast<u8>(i + 1)); // nonce
+        request.push_back(0), request.push_back(0);                           // from
+        request.resize(std::max(size, request.size()));
+        asker.send(server, request);
+        std::array<u8, 2048> buffer;
+        Address from;
+        std::optional<usize> got;
+        run(now, 1, [&](f64 t) { rendezvous.update(t), host.update(t); }, [&] { return (got = asker.receive(from, buffer)).has_value(); });
+        return got ? *got : 0;
+    };
+    usize small = ask(19);
+    CHECK(small > 0);
+    CHECK(small <= 19); // the count of rooms, but none of them
+    CHECK(ask(1100) > 60); // a padded request (as list_rooms sends) gets the list
+}
+
+TEST_CASE("lockstep: a message claiming to be this machine's player is turned away") {
+    Lockstep<Pad> me(2, 0, 2);
+    // Two machines set up with the same index: the other's input for tick 2 must not take the place of ours.
+    CHECK_FALSE(me.receive(InputMessage<Pad>{0, 2, {pad_for(1, 2)}}.encode()));
+    CHECK(me.local(pad_for(0, 2)).has_value()); // ours still goes out
+}
+
+TEST_CASE("lockstep and rollback: inputs far ahead of the game are dropped, not kept") {
+    // A message for a tick no machine in step could have reached yet is turned away rather than stored (a peer that
+    // kept sending such ticks would otherwise fill memory). Seen from outside: the real input, when it comes, is used.
+    Pad bogus{2, 2}, real{-1, 1};
+    Lockstep<Pad> lockstep(2, 0, 2);
+    CHECK(lockstep.receive(InputMessage<Pad>{1, 400, {bogus}}.encode()));
+    for (u32 t = 0; t < 400; ++t) {
+        lockstep.local(Pad{});
+        if (t + 2 < 400) lockstep.receive(InputMessage<Pad>{1, t + 2, {Pad{}}}.encode());
+        REQUIRE(lockstep.ready());
+        lockstep.advance();
+    }
+    lockstep.receive(InputMessage<Pad>{1, 400, {real}}.encode());
+    lockstep.local(Pad{});
+    REQUIRE(lockstep.ready());
+    CHECK(lockstep.inputs()[1] == real);
+
+    std::vector<Pad> used;
+    i32 state = 0;
+    Rollback<Pad, i32> rollback({.players = 2, .local = 0, .delay = 1, .max_rollback = 8},
+                                {.step = [&](u32 tick, std::span<const Pad> pads) {
+                                     if (used.size() <= tick) used.resize(tick + 1);
+                                     used[tick] = pads[1];
+                                     ++state;
+                                 },
+                                 .save = [&] { return state; },
+                                 .load = [&](const i32& s) { state = s; }});
+    CHECK(rollback.receive(InputMessage<Pad>{1, 300, {bogus}}.encode()));
+    for (u32 t = 0; t < 300; ++t) {
+        rollback.receive(InputMessage<Pad>{1, t, {t == 299 ? real : Pad{}}}.encode());
+        rollback.advance(Pad{});
+    }
+    rollback.receive(InputMessage<Pad>{1, 300, {real}}.encode());
+    rollback.advance(Pad{});
+    REQUIRE(used.size() > 300);
+    CHECK(used[300] == real);
+}
+
+namespace bowl::net {
+struct FuzzAccess { // as tests/fuzz does: packets straight to the server, from any address
+    static void handle(Rendezvous& server, const Address& from, std::span<const u8> packet, f64 now) {
+        server.handle(from, packet, now);
+    }
+};
+} // namespace bowl::net
+
+TEST_CASE("net: rendezvous: forged join requests can't keep real players out") {
+    Rendezvous server;
+    REQUIRE(server.start({.port = 0, .max_sessions = 3, .max_joining_per_address = 2}));
+    auto packet = [](u8 kind, std::string_view room, u64 nonce) {
+        std::vector<u8> p{0x4E, 0x56, 0x44, 0x52, kind, 0x4C, 0x57, 0x4F, 0x42}; // magic, kind, the default protocol
+        p.push_back(static_cast<u8>(room.size()));
+        p.insert(p.end(), room.begin(), room.end());
+        if (kind == 2) { // JoinRoom: nonce, route
+            for (int i = 0; i < 8; ++i) p.push_back(static_cast<u8>(nonce >> (8 * i)));
+            p.push_back(0);
+        }
+        return p;
+    };
+    auto at = [](const char* ip, u16 port) { return *Address::resolve(ip, port); };
+    f64 now = 100;
+    FuzzAccess::handle(server, at("127.0.0.1", 40000), packet(1, "room", 0), now); // HostRoom
+    // Two requests from one address are all it may have waiting; a third is turned away.
+    FuzzAccess::handle(server, at("127.0.0.2", 1), packet(2, "room", 1), now);
+    FuzzAccess::handle(server, at("127.0.0.2", 2), packet(2, "room", 2), now);
+    FuzzAccess::handle(server, at("127.0.0.2", 3), packet(2, "room", 3), now);
+    CHECK(server.stats().introductions == 2);
+    // Every slot taken by requests nothing has come through: a new player still gets in, in the oldest one's place.
+    FuzzAccess::handle(server, at("127.0.0.3", 1), packet(2, "room", 4), now);
+    FuzzAccess::handle(server, at("127.0.0.4", 1), packet(2, "room", 5), now);
+    CHECK(server.stats().introductions == 4);
+    CHECK(server.stats().sessions == 3);
+    // And requests that went nowhere don't wait out the whole session timeout.
+    FuzzAccess::handle(server, at("127.0.0.1", 40000), packet(1, "room", 0), now + 11);
+    CHECK(server.stats().sessions == 0);
+}

@@ -114,3 +114,47 @@ TEST_CASE("ui: typewriter reveals, skips, and finishes") {
     tw.skip();
     CHECK(tw.done());
 }
+
+TEST_CASE("ui: confirm presses only what keys focused, and only in panels that take keys") {
+    Harness h;
+    h.frame();
+    // The mouse passes over Start and away: Start is highlighted, but Space (the game's jump) doesn't press it.
+    h.frame({mouse_move(150, 130)});
+    h.frame({mouse_move(700, 500)});
+    h.frame({key(Key::Space, true)});
+    h.frame({key(Key::Space, false)});
+    CHECK(h.start_clicks == 0);
+    // Keys moving onto it still make confirm press it.
+    h.frame({key(Key::Down, true)});
+    h.frame({key(Key::Down, false), key(Key::Enter, true)});
+    CHECK(h.start_clicks == 1);
+
+    // A HUD: a panel without keys, and a button outside any panel. Only the mouse reaches them.
+    Input input;
+    gfx::SpriteBatch batch;
+    ui::Context ui;
+    int map = 0, loose = 0;
+    auto hud = [&](std::initializer_list<SDL_Event> events) {
+        input.begin_frame();
+        for (const SDL_Event& e : events) input.handle_event(e);
+        input.end_events();
+        batch.begin(gfx::Camera2D::screen({800, 600}), gfx::SpriteSort::None);
+        ui.begin(batch, input, {800, 600}, 1.0f / 60);
+        ui.begin_panel("hud", {600, 20, 180, 0}, false);
+        if (ui.button("Map")) ++map;
+        ui.end_panel();
+        if (ui.button("Loose")) ++loose;
+        ui.end();
+    };
+    hud({});
+    for (Key k : {Key::Down, Key::S, Key::Down}) {
+        hud({key(k, true)});
+        hud({key(k, false), key(Key::Space, true)});
+        hud({key(Key::Space, false)});
+    }
+    CHECK(map == 0);
+    CHECK(loose == 0);
+    hud({mouse_move(690, 50), mouse_button(true)}); // Map spans 614..766 x 34..68
+    hud({mouse_button(false)});
+    CHECK(map == 1);
+}

@@ -57,3 +57,20 @@ TEST_CASE("localization: bad JSON is reported") {
     CHECK_FALSE(error.empty());
     CHECK_FALSE(StringTable::parse("[1, 2]", t, error));
 }
+
+TEST_CASE("localization: a string from tr() outlives a reload of its table") {
+    fs::path dir = fs::temp_directory_path() / "bowl_tests" / "lang_reload";
+    fs::remove_all(dir);
+    write(dir / "lang" / "en.json", R"({ "title": "A title long enough not to fit in a short string" })");
+    AssetManager assets;
+    assets.mount("", dir);
+    register_string_table_loader(assets);
+    Localization i18n(assets);
+    i18n.set_language("en");
+    std::string_view title = i18n.tr("title");
+    write(dir / "lang" / "en.json", R"({ "title": "Another title, also too long for a short string" })");
+    REQUIRE(assets.reload("lang/en.json")); // the old table is freed
+    CHECK(title == "A title long enough not to fit in a short string");
+    CHECK(i18n.tr("title") == "Another title, also too long for a short string");
+    CHECK(i18n.tr("title").data() == i18n.tr("title").data()); // the same string twice isn't kept twice
+}

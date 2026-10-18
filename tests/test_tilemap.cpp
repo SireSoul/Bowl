@@ -1,3 +1,4 @@
+#include "bowl/app/engine.hpp"
 #include "bowl/gfx/tilemap.hpp"
 #include "bowl/ecs/world_io.hpp"
 
@@ -502,6 +503,14 @@ TEST_CASE("tilemap: layers bigger than their data or than memory fail to load, w
             { "x": 2147483647, "y": 0, "width": 2, "height": 1, "data": [1, 2] },
             { "x": 0, "y": 0, "width": 1, "height": 1, "data": [3] } ] } ] })", &error);
     CHECK(error.find("out of range") != std::string::npos);
+    // Found by fuzzing: a corner past 64 bits reads as the largest i64, and adding the size to it overflowed in the
+    // very check meant to catch it.
+    error.clear();
+    load(R"({ "orientation": "orthogonal", "width": 0, "height": 0, "tilewidth": 8, "tileheight": 8, "infinite": true,
+        "layers": [ { "type": "tilelayer", "name": "g", "chunks": [
+            { "x": 0, "y": 0, "width": 2, "height": 2, "data": [1, 0, 0, 2] },
+            { "x": 0, "y": 44444444444444444444444444, "width": 2, "height": 2, "data": [3, 0, 0, 4] } ] } ] })", &error);
+    CHECK(error.find("out of range") != std::string::npos);
     load(R"({ "orientation": "orthogonal", "width": 0, "height": 0, "tilewidth": 8, "tileheight": 8, "infinite": true,
         "layers": [ { "type": "tilelayer", "name": "g", "chunks": [
             { "x": 0, "y": 0, "width": 1, "height": 1, "data": [1] },
@@ -527,6 +536,12 @@ TEST_CASE("tilemap: points far off the map give far-off cells") {
 }
 
 TEST_CASE("tilemap: a Map in a level loads in a game, which ignores what Bowl Editor keeps for itself") {
+    register_engine_components(); // what a game's engine does at startup
+    std::string known; // on failure, what is registered instead
+    for (usize i = 0; i < ecs::component_type_count(); ++i)
+        known += std::string(ecs::component_info(static_cast<ecs::ComponentId>(i)).name) + " | ";
+    INFO("registered: ", known);
+    INFO("type_name<gfx::Map>(): ", type_name<gfx::Map>());
     REQUIRE(ecs::find_component("bowl::gfx::Map")); // registered under the name level files use
     auto doc = json::parse(R"({ "format": "Bowl.world", "version": 1, "entities": [
         { "id": 0, "components": { "bowl::ecs::Transform2D": { "position": [32, 16] },

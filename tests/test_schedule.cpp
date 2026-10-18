@@ -146,3 +146,30 @@ TEST_CASE("schedule: entities spawned from sequential systems get deterministic 
     };
     CHECK(simulate(4) == simulate(0));
 }
+
+TEST_CASE("schedule: describe() says what each system touches and why each batch starts") {
+    Schedule s;
+    s.add("move", [](SystemContext&) {}).reads<B>().writes<A>();
+    s.add("count", [](SystemContext&) {}).reads<C>(); // shares nothing with move: same batch
+    s.add("steer", [](SystemContext&) {}).reads<A>();  // reads what move writes: a new batch
+    s.add("tally", [](SystemContext&) {}).writes_resource<Counter>();
+    s.add("spawn", [](SystemContext&) {});             // declares nothing: exclusive
+    s.barrier();
+    s.add("after", [](SystemContext&) {}).reads<C>();
+    std::vector<SystemInfo> info = s.describe();
+    REQUIRE(info.size() == 6);
+    CHECK(info[0].name == "move");
+    REQUIRE(info[0].writes.size() == 1);
+    CHECK(info[0].writes[0].find("A") != std::string::npos);
+    CHECK(info[0].reads[0].find("B") != std::string::npos);
+    CHECK(info[1].batch == info[0].batch);
+    CHECK(info[1].why_new_batch.empty());
+    CHECK(info[2].batch == info[0].batch + 1);
+    CHECK(info[2].why_new_batch.find("move writes") != std::string::npos);
+    CHECK(info[2].why_new_batch.find("which steer reads") != std::string::npos);
+    REQUIRE(info[3].resource_writes.size() == 1);
+    CHECK(info[3].resource_writes[0].find("Counter") != std::string::npos);
+    CHECK(info[4].exclusive);
+    CHECK(info[4].why_new_batch.find("spawn is exclusive") != std::string::npos);
+    CHECK(info[5].why_new_batch == "barrier");
+}

@@ -58,6 +58,7 @@ enum class Route : u8 { Auto, Relay };
 struct HostSettings {
     u16 port = 0;              // 0: any free port (what clients want)
     bool ipv6 = false;         // an IPv6 socket also talks to IPv4
+    bool local_only = false;   // listen on this computer's loopback only: nothing on a network can reach it
     u32 max_peers = 32;        // how many may connect to this host
     u32 protocol = 0x424F574C; // hosts with different numbers ignore each other: put your game's version in it
     std::string secret;        // optional; both ends need the same one to connect (see above)
@@ -328,6 +329,11 @@ struct RendezvousSettings {
     u32 max_sessions = 10000;                // introductions remembered (each can be relayed)
     f32 room_timeout = 5;                    // a room goes when its host hasn't said it's still there for this long
     f32 session_timeout = 60;                // an introduction goes when nothing has been relayed for this long
+    // Introductions nothing has been relayed through yet: these go sooner, at most this many wait at once for one
+    // address (players behind one router share it), and when every slot is taken the oldest of them makes way. So
+    // join requests from forged addresses can't keep real players out for long.
+    f32 join_timeout = 10;
+    u32 max_joining_per_address = 32;
     u32 relay_bytes_per_second = 256 * 1024; // per introduction, each way; more is dropped
 };
 ```
@@ -655,9 +661,10 @@ Socket& operator=(Socket&& o) noexcept;
 ```
 
 Port 0 picks a free one (port() then says which).
+loopback: only this computer can send to it (dev tools), instead of every network it's on.
 
 ```cpp
-bool open(u16 port = 0, bool ipv6 = false);
+bool open(u16 port = 0, bool ipv6 = false, bool loopback = false);
 void close();
 bool is_open() const;
 u16 port() const;

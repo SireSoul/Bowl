@@ -94,6 +94,10 @@ struct ComponentInfo {
     json::Value (*save)(const void* ptr, serial::Context& ctx) = nullptr;
     bool (*load)(const json::Value& j, void* ptr, serial::Context& ctx) = nullptr;
     void (*visit)(void* ptr, reflect::FieldVisitor& v) = nullptr; // live editing (reflected only)
+    // Who registered it: the type's anchor and its module's (type_id.hpp). Two types can share a name (ones in
+    // anonymous namespaces or functions); these tell them apart.
+    const void* type_key = nullptr;
+    const void* module_key = nullptr;
     // Its code was in a game library that hot reload unloaded; the next registration of the name refreshes it.
     bool dormant = false;
     bool savable() const { return save != nullptr && !dormant; }
@@ -109,6 +113,8 @@ ComponentId register_component(const ComponentInfo& info);
 template <Component T> ComponentInfo make_component_info() {
     ComponentInfo info;
     info.name = type_name<T>();
+    info.type_key = &::bowl::detail::type_anchor<T>;
+    info.module_key = &::bowl::detail::module_anchor;
     if constexpr (!std::is_empty_v<T>) {
         info.size = sizeof(T);
         info.align = alignof(T);
@@ -143,6 +149,8 @@ template <Component T> ComponentInfo make_component_info() {
 const ComponentInfo& component_info(ComponentId id);
 usize component_type_count();
 // Looks a component type up by its type_name (e.g. "game::Health"). Only types used (or registered) so far exist.
+// Types that share a name (in anonymous namespaces in different files, say) are told apart by a number: the first
+// one registered has the plain name, the next "Name #2", and so on.
 std::optional<ComponentId> find_component(std::string_view name);
 
 namespace detail {
@@ -169,9 +177,11 @@ void restore_components(const std::vector<std::pair<ComponentId, ComponentInfo>>
 
 // BOWL_COMPONENT(Type, fields...): BOWL_REFLECT plus registration when the program (or game library) loads, so saved
 // worlds can name the type before any code touches it. Use it for components; BOWL_REFLECT for other structs.
+// The registration is a static in every file that includes the definition, not an inline variable: compilers may skip
+// initializing an inline variable nothing uses, and GCC does, which left types unknown by name on Linux.
 #define BOWL_COMPONENT(Type, ...)                                                                                      \
     BOWL_REFLECT(Type, __VA_ARGS__)                                                                                    \
-    [[maybe_unused]] inline const ::bowl::ecs::ComponentId bowl_component_registration_##Type =                        \
+    [[maybe_unused]] static const ::bowl::ecs::ComponentId bowl_component_registration_##Type =                        \
         ::bowl::ecs::component_id<Type>();
 
 namespace bowl::ecs {
@@ -201,6 +211,11 @@ struct ComponentMask {
     ComponentMask operator|(const ComponentMask& o) const {
         ComponentMask m;
         for (usize i = 0; i < words.size(); ++i) m.words[i] = words[i] | o.words[i];
+        return m;
+    }
+    ComponentMask operator&(const ComponentMask& o) const {
+        ComponentMask m;
+        for (usize i = 0; i < words.size(); ++i) m.words[i] = words[i] & o.words[i];
         return m;
     }
     bool operator==(const ComponentMask&) const = default;

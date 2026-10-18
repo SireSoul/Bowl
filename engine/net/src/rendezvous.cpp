@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <deque>
 #include <map>
 #include <string>
 #include <unordered_map>
@@ -33,11 +34,45 @@ struct Rendezvous::Impl {
         Address player, host;
         u64 nonce = 0;
         bool auto_route = true;
+        bool relayed = false; // anything has gone through it: a player that's in, not just asking
         f64 used = 0, refilled = 0;
         f64 to_host = 0, to_player = 0; // bytes the relay may still pass each way (refilled every second)
     };
     std::unordered_map<u64, Session> sessions;
     std::unordered_map<u64, u64> by_nonce; // a player's join nonce: its session, for when it asks again
+    std::deque<u64> joining;                    // sessions in the order they were made, to find the oldest unrelayed one
+    std::map<std::string, u32> joining_per_address; // unrelayed sessions by the player's address, without its port
+
+    // (A string, not a byte vector: GCC 13 mistakes comparing vectors of bytes in a map for an over-read.)
+    static std::string without_port(const Address& a) {
+        std::vector<u8> bytes;
+        a.write(bytes);
+        usize n = bytes.size() >= 2 ? bytes.size() - 2 : 0;
+        return std::string(reinterpret_cast<const char*>(bytes.data()), n);
+    }
+    void stop_joining(Session& s) { // relayed through, or gone
+        if (s.relayed) return;
+        s.relayed = true;
+        auto it = joining_per_address.find(without_port(s.player));
+        if (it != joining_per_address.end() && --it->second == 0) joining_per_address.erase(it);
+    }
+    void forget(std::unordered_map<u64, Session>::iterator it) {
+        stop_joining(it->second);
+        by_nonce.erase(it->second.nonce);
+        sessions.erase(it);
+    }
+    // Makes room by dropping the oldest session nothing has been relayed through. False if there's none.
+    bool evict_joining() {
+        while (!joining.empty()) {
+            auto it = sessions.find(joining.front());
+            joining.pop_front();
+            if (it != sessions.end() && !it->second.relayed) {
+                forget(it);
+                return true;
+            }
+        }
+        return false;
+    }
     RendezvousStats stats;
     f64 now = 0, last_cleanup = 0;
 
@@ -111,7 +146,10 @@ struct Rendezvous::Impl {
             u8 count = 0;
             for (usize i = from_index; i < open.size() && count < 255; ++i) {
                 const auto& [key, room] = *open[i];
-                if (w.out.size() + 2 + key.second.size() + room.label.size() + 2 > 1100) break; // one packet's worth
+                // One packet's worth, and never more than was asked with: a list sent to a forged address would make
+                // this server a way to flood it (list_rooms pads its request to a full answer's size).
+                usize limit = std::min(wire::list_answer_size, packet.size());
+                if (w.out.size() + 2 + key.second.size() + room.label.size() + 2 > limit) break;
                 w.text(key.second);
                 w.text(room.label);
                 w.u8_(room.players);
@@ -151,7 +189,11 @@ struct Rendezvous::Impl {
                 socket.send(from, w.out);
                 return;
             }
-            if (sessions.size() >= settings.max_sessions) return; // full: the player asks again later
+            std::string address = without_port(from);
+            if (auto n = joining_per_address.find(address);
+                n != joining_per_address.end() && n->second >= settings.max_joining_per_address)
+                return; // that address has enough asking already: it asks again later
+            if (sessions.size() >= settings.max_sessions && !evict_joining()) return; // full of players that are in
             u64 id = 0;
             while (id == 0 || sessions.contains(id)) id = crypto::random_u64();
             Session s;
@@ -163,6 +205,8 @@ struct Rendezvous::Impl {
             s.to_host = s.to_player = settings.relay_bytes_per_second;
             sessions[id] = s;
             by_nonce[nonce] = id;
+            joining.push_back(id);
+            ++joining_per_address[address];
             if (room->players < 255) ++room->players; // until the host's next word: several matches at once spread out
             ++stats.introductions;
             introduce(id, s);
@@ -192,6 +236,7 @@ struct Rendezvous::Impl {
             }
             budget -= static_cast<f64>(packet.size());
             s.used = now;
+            stop_joining(s);
             ++stats.relayed_packets;
             stats.relayed_bytes += packet.size();
             socket.send(from_player ? s.host : s.player, packet); // the same Relay packet: the session says whose
@@ -202,12 +247,13 @@ struct Rendezvous::Impl {
         for (auto it = rooms.begin(); it != rooms.end();)
             it = now - it->second.seen > settings.room_timeout ? rooms.erase(it) : std::next(it);
         for (auto it = sessions.begin(); it != sessions.end();) {
-            if (now - it->second.used > settings.session_timeout) {
-                by_nonce.erase(it->second.nonce);
-                it = sessions.erase(it);
-            } else {
-                ++it;
-            }
+            f64 timeout = it->second.relayed ? settings.session_timeout : settings.join_timeout;
+            if (now - it->second.used > timeout) forget(it++);
+            else ++it;
+        }
+        for (; !joining.empty(); joining.pop_front()) { // what's at the front is gone or in: only the joining matter
+            auto front = sessions.find(joining.front());
+            if (front != sessions.end() && !front->second.relayed) break;
         }
         last_cleanup = now;
     }
@@ -227,6 +273,8 @@ void Rendezvous::stop() {
     impl_->rooms.clear();
     impl_->sessions.clear();
     impl_->by_nonce.clear();
+    impl_->joining.clear();
+    impl_->joining_per_address.clear();
 }
 
 bool Rendezvous::running() const { return impl_->socket.is_open(); }

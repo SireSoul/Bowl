@@ -3,6 +3,7 @@
 Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: change the header, then run
 `cmake --build <build folder> --target bowl_api_docs`.
 
+- [bowl/app/dev_link.hpp](#bowlappdev_linkhpp)
 - [bowl/app/engine.hpp](#bowlappenginehpp)
 - [bowl/app/entry.hpp](#bowlappentryhpp)
 - [bowl/app/hot_reload.hpp](#bowlapphot_reloadhpp)
@@ -10,6 +11,303 @@ Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: chan
 - [bowl/app/inspector.hpp](#bowlappinspectorhpp)
 - [bowl/app/main.hpp](#bowlappmainhpp)
 - [bowl/app/scene.hpp](#bowlappscenehpp)
+
+## bowl/app/dev_link.hpp
+
+`#include "bowl/app/dev_link.hpp"` · namespace `bowl::devlink`
+
+```cpp
+inline constexpr u32 protocol_version = 1;
+```
+
+### Hello
+
+Game to editor.
+
+```cpp
+struct Hello {
+    std::string game;
+    u32 version = protocol_version;
+};
+```
+
+```cpp
+BOWL_REFLECT(Hello, game, version)
+```
+
+### Schedules
+
+```cpp
+struct Schedules {
+    std::vector<ecs::SystemInfo> fixed, frame;
+};
+```
+
+```cpp
+BOWL_REFLECT(Schedules, fixed, frame)
+```
+
+### Zone
+
+```cpp
+struct Zone {
+    std::string name;
+    f64 ms = 0; // this frame, all calls and threads
+    u32 calls = 0;
+};
+```
+
+```cpp
+BOWL_REFLECT(Zone, name, ms, calls)
+```
+
+### Frame
+
+```cpp
+struct Frame {
+    f32 ms = 0; // CPU time of the last frame
+    u32 entities = 0, archetypes = 0, voices = 0, sprites = 0, draw_calls = 0;
+    bool paused = false;
+    f32 time_scale = 1;
+    std::vector<Zone> zones;
+};
+```
+
+```cpp
+BOWL_REFLECT(Frame, ms, entities, archetypes, voices, sprites, draw_calls, paused, time_scale, zones)
+```
+
+### EntityRow
+
+```cpp
+struct EntityRow {
+    u32 index = 0, generation = 0; // the entity, in two halves (JSON numbers hold 53 bits)
+    std::string name;              // its ecs::Name, if any
+    std::vector<std::string> components;
+};
+```
+
+```cpp
+BOWL_REFLECT(EntityRow, index, generation, name, components)
+```
+
+### EntityPage
+
+```cpp
+struct EntityPage {
+    u32 from = 0, total = 0; // total: entities matching the filter
+    std::vector<EntityRow> rows;
+};
+```
+
+```cpp
+BOWL_REFLECT(EntityPage, from, total, rows)
+```
+
+### ComponentJson
+
+```cpp
+struct ComponentJson {
+    std::string name;
+    std::string json;      // as a save writes it; empty if it can't be shown
+    bool editable = false; // savable, and small enough to show
+};
+```
+
+```cpp
+BOWL_REFLECT(ComponentJson, name, json, editable)
+```
+
+### EntityDetail
+
+```cpp
+struct EntityDetail {
+    u32 index = 0, generation = 0;
+    bool alive = false;
+    std::vector<ComponentJson> components;
+};
+```
+
+```cpp
+BOWL_REFLECT(EntityDetail, index, generation, alive, components)
+```
+
+### ListEntities
+
+Editor to game.
+
+```cpp
+struct ListEntities {
+    u32 from = 0, count = 200;
+    std::string filter; // part of the name or a component name; empty: all
+};
+```
+
+```cpp
+BOWL_REFLECT(ListEntities, from, count, filter)
+```
+
+### Watch
+
+```cpp
+struct Watch { // the game sends this entity's EntityDetail a few times a second; generation 0: none
+    u32 index = 0, generation = 0;
+};
+```
+
+```cpp
+BOWL_REFLECT(Watch, index, generation)
+```
+
+### SetComponent
+
+```cpp
+struct SetComponent {
+    u32 index = 0, generation = 0;
+    std::string component, json;
+};
+```
+
+```cpp
+BOWL_REFLECT(SetComponent, index, generation, component, json)
+```
+
+### SetSystemEnabled
+
+```cpp
+struct SetSystemEnabled {
+    std::string schedule; // "fixed" or "frame"
+    std::string system;
+    bool enabled = true;
+};
+```
+
+```cpp
+BOWL_REFLECT(SetSystemEnabled, schedule, system, enabled)
+```
+
+### TimeControl
+
+```cpp
+struct TimeControl {
+    bool paused = false;
+    bool step = false; // one fixed tick while paused
+    f32 time_scale = 1;
+};
+```
+
+```cpp
+BOWL_REFLECT(TimeControl, paused, step, time_scale)
+```
+
+### GameEntry
+
+A running game, from its file in the dev link folder.
+
+```cpp
+struct GameEntry {
+    std::string game;
+    u16 port = 0;
+    std::string key;
+    i64 pid = 0;
+    std::filesystem::path file;
+};
+```
+
+The folder games announce themselves in: &lt;temp>/bowl-devlink.
+
+```cpp
+std::filesystem::path folder();
+```
+
+The games running now. Files left by games that have exited are removed.
+
+```cpp
+std::vector<GameEntry> running_games();
+```
+
+### Sources
+
+What the game's side reads and drives. Plain callbacks, so it runs without a window (tests).
+
+```cpp
+struct Sources
+```
+
+```cpp
+std::string game;
+ecs::World* world = nullptr;
+AssetManager* assets = nullptr; // for components with Asset fields
+ecs::Schedule* fixed = nullptr;
+ecs::Schedule* frame = nullptr;
+std::function<Frame()> stats;                       // the frame's numbers (zones are added by DevLink)
+std::function<void(const TimeControl&)> time;       // pause, step, time scale
+std::function<TimeControl()> time_state;
+```
+
+### DevLink
+
+The game's side: listens, answers and streams. Call update() once a frame, outside the schedules.
+
+```cpp
+class DevLink : NonCopyable
+```
+
+```cpp
+explicit DevLink(Sources sources);
+~DevLink();
+```
+
+Starts listening and writes the announcement file (announce = false: no file, for tests). False if the socket
+can't open.
+
+```cpp
+bool start(bool announce = true);
+void update(f64 now = -1);
+u16 port() const;
+const std::string& key() const;
+usize connections() const;
+```
+
+### DevLinkClient
+
+The editor's side: connects to a running game and keeps what it last heard.
+
+```cpp
+class DevLinkClient : NonCopyable
+```
+
+```cpp
+DevLinkClient();
+~DevLinkClient();
+```
+
+```cpp
+bool connect(const GameEntry& game);
+bool connect(u16 port, const std::string& key); // to a game on this computer
+void disconnect();
+bool connected() const;
+bool connecting() const;
+void update(f64 now = -1);
+```
+
+What the game last said.
+
+```cpp
+const std::optional<Hello>& hello() const;
+const std::optional<Schedules>& schedules() const;
+const std::deque<Frame>& frames() const; // the last few seconds, oldest first
+const std::optional<EntityPage>& page() const;
+const std::optional<EntityDetail>& detail() const;
+```
+
+```cpp
+void list_entities(const ListEntities& request);
+void watch(u32 index, u32 generation);
+void set_component(const SetComponent& change);
+void set_system_enabled(const SetSystemEnabled& change);
+void time(const TimeControl& control);
+```
 
 ## bowl/app/engine.hpp
 
@@ -41,7 +339,17 @@ struct AppConfig {
     // For tools built on the engine, like the editor: Game::dev_ui is always shown, not only while the F1 overlay
     // is open, and the engine's own windows move from F1 to F12. Dev builds only.
     bool dev_ui_always = false;
+    // Dev builds: let Bowl Editor's Game tab attach to the running game (bowl/app/dev_link.hpp), on this computer only.
+    bool dev_link = true;
 };
+```
+
+Registers the engine's own components (transforms, names, sprites, maps, colliders...), so saved levels that hold
+them load by name. The engine does it at startup, before a hot-reloadable game library loads, so their code never
+belongs to a library that gets unloaded; tools and tests that load levels without an Engine call it themselves.
+
+```cpp
+void register_engine_components();
 ```
 
 ### Game

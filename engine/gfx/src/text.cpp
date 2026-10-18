@@ -512,7 +512,8 @@ struct TextShaper {
     ShapedLine unshaped(usize a, usize b) const {
         ShapedLine line;
         std::vector<u32> order;
-        if (any_rtl) order = bidi::visual_order(std::span(cps).subspan(a, b - a), line_levels(a, b), paragraph_levels[a]);
+        // (An empty line can start right past the last character: text ending in a newline.)
+        if (any_rtl && a < b) order = bidi::visual_order(std::span(cps).subspan(a, b - a), line_levels(a, b), paragraph_levels[a]);
         f32 x = 0;
         u32 prev = 0;
         for (usize k = 0; k < b - a; ++k) {
@@ -561,7 +562,7 @@ struct TextShaper {
         std::vector<u32> dummy(items.size(), 'x');
         std::vector<u8> item_levels;
         for (const Item& it : items) item_levels.push_back(it.level);
-        std::vector<u32> order = bidi::visual_order(dummy, item_levels, paragraph_levels.empty() ? 0 : paragraph_levels[a]);
+        std::vector<u32> order = bidi::visual_order(dummy, item_levels, a < paragraph_levels.size() ? paragraph_levels[a] : 0);
 
         ShapedLine line;
         f32 x = 0;

@@ -131,6 +131,13 @@ the meantime are skipped.
 
 ```cpp
 void apply();
+```
+
+Drops the commands unapplied. Entity ids create() reserved go back to the world (their handles stay dead), so a
+buffer thrown away doesn't use up slots for good. (The destructor does the same: a buffer mustn't outlive its
+world.)
+
+```cpp
 void clear();
 bool empty() const;
 usize size() const;
@@ -239,6 +246,14 @@ bool (*load)(const json::Value& j, void* ptr, serial::Context& ctx) = nullptr;
 void (*visit)(void* ptr, reflect::FieldVisitor& v) = nullptr; // live editing (reflected only)
 ```
 
+Who registered it: the type's anchor and its module's (type_id.hpp). Two types can share a name (ones in
+anonymous namespaces or functions); these tell them apart.
+
+```cpp
+const void* type_key = nullptr;
+const void* module_key = nullptr;
+```
+
 Its code was in a game library that hot reload unloaded; the next registration of the name refreshes it.
 
 ```cpp
@@ -258,6 +273,8 @@ usize component_type_count();
 ```
 
 Looks a component type up by its type_name (e.g. "game::Health"). Only types used (or registered) so far exist.
+Types that share a name (in anonymous namespaces in different files, say) are told apart by a number: the first
+one registered has the plain name, the next "Name #2", and so on.
 
 ```cpp
 std::optional<ComponentId> find_component(std::string_view name);
@@ -286,6 +303,8 @@ void restore_components(const std::vector<std::pair<ComponentId, ComponentInfo>>
 
 BOWL_COMPONENT(Type, fields...): BOWL_REFLECT plus registration when the program (or game library) loads, so saved
 worlds can name the type before any code touches it. Use it for components; BOWL_REFLECT for other structs.
+The registration is a static in every file that includes the definition, not an inline variable: compilers may skip
+initializing an inline variable nothing uses, and GCC does, which left types unknown by name on Linux.
 
 ```cpp
 #define BOWL_COMPONENT(Type, ...)
@@ -311,6 +330,7 @@ bool contains(const ComponentMask& o) const;
 bool intersects(const ComponentMask& o) const;
 bool empty() const;
 ComponentMask operator|(const ComponentMask& o) const;
+ComponentMask operator&(const ComponentMask& o) const;
 bool operator==(const ComponentMask&) const = default;
 usize hash() const;
 template <class F> void for_each(F&& f) const;
@@ -473,6 +493,30 @@ struct SystemContext {
 };
 ```
 
+### SystemInfo
+
+What a schedule's system does and where it runs, for tools (the F1 overlay, Bowl Editor's Game tab).
+
+```cpp
+struct SystemInfo {
+    std::string name;
+    u32 batch = 0;     // systems in one batch run side by side
+    f64 ms = 0;        // its last run
+    bool enabled = true;
+    bool exclusive = false; // declared no access: runs alone
+    std::vector<std::string> reads, writes;                   // component names
+    std::vector<std::string> resource_reads, resource_writes; // resource type names
+    // Why it starts a new batch instead of joining the one before: "barrier", "exclusive", or the system it conflicts
+    // with and on what ("writes Position, which physics reads"). Empty for the first system and those that joined.
+    std::string why_new_batch;
+};
+```
+
+```cpp
+BOWL_REFLECT(SystemInfo, name, batch, ms, enabled, exclusive, reads, writes, resource_reads, resource_writes,
+             why_new_batch)
+```
+
 ### Schedule
 
 An ordered list of systems. Systems that declare non-conflicting access run in parallel; the result is always the
@@ -501,6 +545,8 @@ std::string name;
 std::function<void(SystemContext&)> fn;
 ComponentMask reads, writes;
 std::vector<TypeId> resource_reads, resource_writes;
+std::vector<std::string> resource_read_names, resource_write_names; // owned: a reloaded library's text goes
+std::string why_new_batch; // see SystemInfo
 bool exclusive = true;
 bool barrier_after = false;
 bool enabled = true;
@@ -584,6 +630,19 @@ Batches of system indices that run concurrently (for tools).
 
 ```cpp
 const std::vector<std::vector<usize>>& batches();
+```
+
+Every system in order, with its access and batch (for tools).
+
+```cpp
+std::vector<SystemInfo> describe();
+```
+
+Why a and b can't run side by side, as a sentence ("" when they can): "physics is exclusive", "ai writes Brain,
+which steering reads".
+
+```cpp
+std::string conflict_reason(const System& a, const System& b) const;
 ```
 
 ## bowl/ecs/world.hpp

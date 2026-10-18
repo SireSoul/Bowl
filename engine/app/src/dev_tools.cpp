@@ -235,10 +235,43 @@ void DevTools::draw_systems(const char* label, ecs::Schedule& schedule) {
             ImGui::Checkbox("##on", &s.enabled);
             ImGui::SameLine();
             ImGui::Text("[%zu] %-24s %.3f ms%s", b, s.name.c_str(), s.last_ms, s.exclusive ? "  (exclusive)" : "");
+            if (!s.why_new_batch.empty() && ImGui::IsItemHovered())
+                ImGui::SetTooltip("Starts batch %zu: %s", b, s.why_new_batch.c_str());
             ImGui::PopID();
         }
     }
     if (systems.empty()) ImGui::TextDisabled("  (no systems)");
+    // Which system reads (R) and writes (W) which component: what decides the batches above.
+    if (!systems.empty() && ImGui::TreeNode("access")) {
+        std::vector<ecs::SystemInfo> infos = schedule.describe();
+        std::vector<std::string> components;
+        for (const auto& info : infos)
+            for (const auto* list : {&info.reads, &info.writes})
+                for (const auto& c : *list)
+                    if (std::find(components.begin(), components.end(), c) == components.end()) components.push_back(c);
+        std::sort(components.begin(), components.end());
+        if (components.empty()) ImGui::TextDisabled("(no system declares component access)");
+        else if (ImGui::BeginTable("access", static_cast<int>(components.size()) + 1,
+                                   ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollX | ImGuiTableFlags_SizingFixedFit)) {
+            ImGui::TableSetupColumn("system");
+            for (const auto& c : components) ImGui::TableSetupColumn(c.c_str());
+            ImGui::TableHeadersRow();
+            for (const auto& info : infos) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::TextUnformatted(info.name.c_str());
+                for (const auto& c : components) {
+                    ImGui::TableNextColumn();
+                    bool w = std::find(info.writes.begin(), info.writes.end(), c) != info.writes.end();
+                    bool r = std::find(info.reads.begin(), info.reads.end(), c) != info.reads.end();
+                    if (w) ImGui::TextColored({1.0f, 0.7f, 0.3f, 1.0f}, "W");
+                    else if (r) ImGui::TextUnformatted("R");
+                }
+            }
+            ImGui::EndTable();
+        }
+        ImGui::TreePop();
+    }
     ImGui::PopID();
 }
 
