@@ -235,6 +235,13 @@ void ContentWorkspace::palette(Engine& engine) {
     all.push_back({"Save all", "Ctrl+S", nullptr, [this] { save_all(); }});
     if (!schema_.play.empty()) all.push_back({"Play", "a new game", nullptr, [this] { save_all(); play_game({}); }});
     all.push_back({"Look for new files", "F5", nullptr, [this] { scan(); }});
+    if (hooks.go) {
+        all.push_back({"Paint", "workspace", nullptr, [this] { hooks.go(1); }});
+        all.push_back({"Levels", "workspace", nullptr, [this] { hooks.go(2); }});
+        all.push_back({"Files as text", "workspace: every data file as JSON", nullptr, [this] { hooks.go(3); }});
+    }
+    if (hooks.pictures && hooks.open_picture)
+        for (const std::string& p : hooks.pictures()) all.push_back({fs::path(p).filename().string(), "picture: " + p, nullptr, [this, p] { hooks.open_picture(p); }});
     for (usize ci = 0; ci < schema_.collections.size(); ++ci) {
         const schema::Collection& c = schema_.collections[ci];
         all.push_back({c.title, "collection", &c, [this, ci] { select(ci, 0); }});
@@ -244,7 +251,11 @@ void ContentWorkspace::palette(Engine& engine) {
                                new_record(schema_.collections[ci]);
                            }});
         usize n = record_count(c);
-        for (usize r = 0; r < n; ++r) all.push_back({record_label(c, r), c.title, &c, [this, ci, r] { select(ci, r); }});
+        for (usize r = 0; r < n; ++r)
+            all.push_back({record_label(c, r), c.title, &c, [this, ci, r] {
+                               select(ci, r);
+                               if (hooks.go) hooks.go(0);
+                           }});
     }
     for (Entry& e : all) e.score = std::max(match_score(e.label, palette_query_), match_score(e.detail + " " + e.label, palette_query_) - 200);
     std::erase_if(all, [](const Entry& e) { return e.score < 0; });

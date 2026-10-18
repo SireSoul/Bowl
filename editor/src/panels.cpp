@@ -91,6 +91,7 @@ void Editor::dev_ui(Engine& engine) {
     } else {
         paint_.draw(engine, {0, top_h, io.DisplaySize.x, std::max(1.0f, io.DisplaySize.y - top_h - status_h)});
     }
+    content_.search(engine);
     status_bar(engine);
     modals(engine);
 }
@@ -109,19 +110,52 @@ void Editor::top_bar(Engine& engine) {
     ImGui::AlignTextToFramePadding();
     ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ui::color::accent), "Bowl");
     ImGui::SameLine(0, 12);
-    // The three workspaces.
-    if (segment("Level", workspace_ == Workspace::Level, "Lay out the level|Ctrl+1")) workspace_ = Workspace::Level;
-    ImGui::SameLine(0, 2);
-    if (segment("Content", workspace_ == Workspace::Content,
-                "The game's items, people, shops, events and sounds, as forms|Ctrl+5"))
+    // The workspaces this project uses: content and painting always; levels when it has them; a running game when
+    // there is one; the data files as text while they're open (they're reached from a record, or search).
+    if (segment("Content", workspace_ == Workspace::Content, "The game's items, people, shops, events, maps and sounds|Ctrl+1"))
         workspace_ = Workspace::Content;
     ImGui::SameLine(0, 2);
-    if (segment("Data", workspace_ == Workspace::Data, "The game's data files, edited in place|Ctrl+2")) workspace_ = Workspace::Data;
-    ImGui::SameLine(0, 2);
-    if (segment("Paint", workspace_ == Workspace::Paint, "Paint pixel art|Ctrl+3")) workspace_ = Workspace::Paint;
-    ImGui::SameLine(0, 2);
-    if (segment("Game", workspace_ == Workspace::Game, "Attach to a running game: its profiler, systems and entities|Ctrl+4"))
-        workspace_ = Workspace::Game;
+    if (segment("Paint", workspace_ == Workspace::Paint, "The pixel-art studio|Ctrl+2")) workspace_ = Workspace::Paint;
+    if (has_levels_ || workspace_ == Workspace::Level) {
+        ImGui::SameLine(0, 2);
+        if (segment("Level", workspace_ == Workspace::Level, "Lay out levels (.world files)|Ctrl+3")) workspace_ = Workspace::Level;
+    }
+    if (workspace_ == Workspace::Game || link_.connected() || !link_games_.empty()) {
+        ImGui::SameLine(0, 2);
+        if (segment("Game", workspace_ == Workspace::Game, "The running game: its profiler, systems and entities|Ctrl+4"))
+            workspace_ = Workspace::Game;
+    }
+    if (workspace_ == Workspace::Data) {
+        ImGui::SameLine(0, 2);
+        segment("Files as text", true, "Every data file as JSON text|Ctrl+5");
+    }
+    // On the right: find anything, everything unsaved, and help.
+    {
+        f32 right = io.DisplaySize.x - 44;
+        if (unsaved_anywhere()) {
+            const char* label = "Save all";
+            f32 w = ImGui::CalcTextSize(label).x + 40;
+            right -= w + 8;
+            ImGui::SameLine(right);
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            ImGui::GetWindowDrawList()->AddCircleFilled({p.x + 10, p.y + ImGui::GetFrameHeight() * 0.5f}, 4, ui::color::accent);
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 20);
+            if (ImGui::Button(label)) save_everything(engine);
+            ui::tip("Something isn't saved: this saves every change in every workspace", "Ctrl+S saves the one you're in");
+        }
+        f32 fw = 190;
+        right -= fw + 8;
+        ImGui::SameLine(right);
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        f32 h = ImGui::GetFrameHeight();
+        if (ImGui::InvisibleButton("##search", {fw, h})) content_.open_search();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, {p.x + fw, p.y + h}, ImGui::IsItemHovered() ? ui::color::hover : ui::color::field, 6);
+        ui::draw_icon(dl, ui::Icon::Search, {p.x + 13, p.y + h * 0.5f}, 13, ui::color::muted);
+        dl->AddText({p.x + 26, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f}, ui::color::muted, "Search");
+        dl->AddText({p.x + fw - ImGui::CalcTextSize("Ctrl+K").x - 8, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f}, ui::color::muted, "Ctrl+K");
+        ui::tip("Find anything: a record, a picture, a map, a sound or a command", "Ctrl+K");
+    }
     if (workspace_ != Workspace::Level) {
         ImGui::SameLine(io.DisplaySize.x - 44);
         if (ui::tool_button("help", ui::Icon::Help, show_help_, "Every key and mouse action|F1")) show_help_ = !show_help_;
@@ -827,7 +861,7 @@ void Editor::modals(Engine& engine) {
         ImGui::EndPopup();
     }
 
-    if (recovery_) ImGui::OpenPopup("Unsaved work");
+    if (recovery_ && workspace_ == Workspace::Level) ImGui::OpenPopup("Unsaved work");
     ImGui::SetNextWindowPos(screen_center(), ImGuiCond_Appearing, {0.5f, 0.5f});
     if (ImGui::BeginPopupModal("Unsaved work", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("%s has changes that weren't saved when the editor last closed.", doc_->title().c_str());
@@ -869,7 +903,8 @@ void Editor::help_window() {
         {"V / P / H", "Select, Place, Move the view"},
         {"B / R", "Brush (paint on art in the level), Region (drag out an area)"},
         {"C", "Show or hide collision shapes and regions"},
-        {"Ctrl+1 / 2 / 3 / 4 / 5", "Level, Data, Paint, Game and Content workspaces"},
+        {"Ctrl+1 / 2 / 3 / 4 / 5", "Content, Paint, Level, Game, and the data files as text"},
+        {"Ctrl+K", "Find anything: records, pictures, maps, sounds, commands"},
         {"G / Shift+G", "Show the grid / snap to it"},
         {"Arrows (Shift)", "Nudge one unit (a grid step)"},
         {"Q / E (Shift)", "Turn 15 degrees (1 degree)"},

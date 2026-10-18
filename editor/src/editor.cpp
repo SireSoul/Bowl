@@ -206,6 +206,29 @@ void Editor::init(Engine& engine) {
     scan_data();
     content_.init(engine, assets_dir_, [this](std::string m) { say(std::move(m)); });
     paint_.init(engine, assets_dir_, [this](std::string m) { say(std::move(m)); });
+    content_.hooks.pictures = [this] { return paint_.pictures(); };
+    content_.hooks.open_picture = [this](const std::string& p) {
+        if (paint_.open(p)) workspace_ = Workspace::Paint;
+    };
+    content_.hooks.open_text = [this](const std::string& p) {
+        scan_data();
+        data_open_path(p);
+        workspace_ = Workspace::Data;
+    };
+    content_.hooks.go = [this](int w) {
+        static constexpr Workspace order[] = {Workspace::Content, Workspace::Paint, Workspace::Level, Workspace::Data, Workspace::Game};
+        workspace_ = order[std::clamp(w, 0, 4)];
+    };
+    // The Level tab is for games that lay out levels: shown when there are .world files (or one was opened).
+    {
+        std::error_code ec;
+        for (auto it = fs::recursive_directory_iterator(assets_dir_, ec); it != fs::recursive_directory_iterator(); it.increment(ec))
+            if (!ec && it->path().extension() == ".world") {
+                has_levels_ = true;
+                break;
+            }
+        if (!file.empty()) has_levels_ = true, workspace_ = Workspace::Level;
+    }
     // --content [collection [record id]]: start in the Content workspace there.
     for (usize i = 0; i < args.size(); ++i)
         if (args[i] == "--content") {
@@ -227,6 +250,23 @@ void Editor::init(Engine& engine) {
             if (named) paint_.open(args[i + 1]);
             else if (!paint_.pictures().empty()) paint_.open(paint_.pictures()[0]);
         }
+}
+
+void Editor::data_open_path(const std::string& path) {
+    for (usize i = 0; i < data_files_.size(); ++i)
+        if (data_files_[i].path == path) data_open(i);
+}
+
+bool Editor::unsaved_anywhere() const {
+    return (doc_ && doc_->modified() && !doc_->file().empty()) || content_.unsaved() || paint_.unsaved() ||
+           (data_index_ && data_doc_.text() != data_saved_);
+}
+
+void Editor::save_everything(Engine& engine) {
+    if (doc_ && doc_->modified() && !doc_->file().empty()) save(engine, false);
+    if (content_.unsaved()) content_.save_all();
+    if (paint_.unsaved()) paint_.save();
+    if (data_index_ && data_doc_.text() != data_saved_) data_save();
 }
 
 void Editor::shutdown(Engine& engine) {
@@ -276,11 +316,12 @@ void Editor::update(Engine& engine, f32) {
     {
         Input& in = engine.input();
         bool cmd = in.down(Key::LeftCtrl) || in.down(Key::RightCtrl) || in.down(Key::LeftSuper) || in.down(Key::RightSuper);
-        if (cmd && in.pressed(Key::Num1)) workspace_ = Workspace::Level;
-        if (cmd && in.pressed(Key::Num2)) workspace_ = Workspace::Data;
-        if (cmd && in.pressed(Key::Num3)) workspace_ = Workspace::Paint;
+        if (cmd && in.pressed(Key::Num1)) workspace_ = Workspace::Content;
+        if (cmd && in.pressed(Key::Num2)) workspace_ = Workspace::Paint;
+        if (cmd && in.pressed(Key::Num3)) workspace_ = Workspace::Level;
         if (cmd && in.pressed(Key::Num4)) workspace_ = Workspace::Game;
-        if (cmd && in.pressed(Key::Num5)) workspace_ = Workspace::Content;
+        if (cmd && in.pressed(Key::Num5)) workspace_ = Workspace::Data;
+        if (cmd && in.pressed(Key::K) && !content_.searching()) content_.open_search(); // find anything, from anywhere
     }
     if (workspace_ == Workspace::Level) {
         scene_mouse(engine);

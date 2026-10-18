@@ -2,6 +2,7 @@
 // changing the markers on a map's "markers" layer, and starting the game.
 
 #include "content.hpp"
+#include "content_util.hpp"
 
 #include "ui.hpp"
 
@@ -20,40 +21,9 @@ using json::Value;
 
 namespace {
 
-ImTextureID texture_id(const gfx::Texture& t) { return static_cast<ImTextureID>(reinterpret_cast<intptr_t>(t.handle())); }
+using namespace content_util;
 
 const ImVec4 danger = ImGui::ColorConvertU32ToFloat4(ui::color::danger);
-
-// Map pixels per cell for object positions: isometric maps measure both axes in tile heights.
-Vec2 per_cell(const Value& map) {
-    f32 tw = map["tilewidth"].as_float(32), th = map["tileheight"].as_float(16);
-    return {map["orientation"].as_string() == "isometric" ? th : tw, th};
-}
-
-// The index of the "markers" object layer in the map's layers, or -1.
-i64 markers_layer(const Value& map) {
-    const Value& layers = map["layers"];
-    for (usize i = 0; i < layers.size(); ++i)
-        if (layers[i]["name"].as_string() == "markers" && layers[i]["type"].as_string() == "objectgroup") return static_cast<i64>(i);
-    return -1;
-}
-
-bool is_point(const Value& o) { return o["point"].as_bool() || (o["width"].as_number() == 0 && o["height"].as_number() == 0); }
-
-// Where an object is, in cells: a point's position, or an area's rectangle.
-Rect cells_of(const Value& o, Vec2 per) {
-    return {o["x"].as_float() / per.x, o["y"].as_float() / per.y, o["width"].as_float() / per.x, o["height"].as_float() / per.y};
-}
-
-// Tiled's custom properties ([{name, type, value}]) as one object.
-Value properties_of(const Value& o) {
-    Value out;
-    out.make_object();
-    for (const Value& p : o["properties"].array()) out.set(p["name"].as_string(), p["value"]);
-    return out;
-}
-
-f64 round2(f64 v) { return std::round(v * 100) / 100; }
 
 } // namespace
 
@@ -99,35 +69,7 @@ void ContentWorkspace::map_canvas(const char* id, const gfx::Tilemap& m, MapView
     ImVec2 end{view.origin.x + view.size.x, view.origin.y + view.size.y};
     dl->PushClipRect(view.origin, end, true);
     dl->AddRectFilled(view.origin, end, IM_COL32(16, 18, 24, 255));
-    bool iso = m.orientation == gfx::Tilemap::Orientation::Isometric;
-    // Tile layers in order, each tile with its bottom on its cell, the way Tiled draws them.
-    for (const gfx::MapLayer& layer : m.layers) {
-        if (layer.kind != gfx::MapLayer::Kind::Tiles || !layer.visible) continue;
-        ImU32 tint = IM_COL32(255, 255, 255, static_cast<int>(layer.opacity * 255));
-        for (i32 y = 0; y < static_cast<i32>(m.height); ++y)
-            for (i32 x = 0; x < static_cast<i32>(m.width); ++x) {
-                u32 gid = layer.at(x, y) & gfx::tile_gid_mask;
-                if (!gid) continue;
-                const gfx::Tileset* ts = m.tileset_for(gid);
-                if (!ts || !ts->image) continue;
-                Rect src = ts->source_rect(gid - ts->first_gid);
-                Vec2 a = m.cell_to_world(static_cast<f32>(x), static_cast<f32>(y));
-                f32 left = iso ? a.x - m.tile_width * 0.5f : a.x, base = a.y + m.tile_height;
-                Vec2 p0{left + ts->tile_offset.x, base - src.h + ts->tile_offset.y};
-                f32 iw = static_cast<f32>(ts->image->width()), ih = static_cast<f32>(ts->image->height());
-                dl->AddImage(texture_id(*ts->image), view.to_screen(p0), view.to_screen(p0 + Vec2{src.w, src.h}),
-                             {src.x / iw, src.y / ih}, {src.right() / iw, src.bottom() / ih}, tint);
-            }
-    }
-    // Things on the other object layers (trees, rocks): dots, so there's something to place markers by.
-    f32 per_x = static_cast<f32>(iso ? m.tile_height : m.tile_width), per_y = static_cast<f32>(m.tile_height);
-    for (const gfx::MapLayer& layer : m.layers) {
-        if (layer.kind != gfx::MapLayer::Kind::Objects || layer.name == "markers") continue;
-        for (const gfx::MapObject& o : layer.objects) {
-            ImVec2 p = view.to_screen(m.cell_to_world(o.bounds.x / per_x, o.bounds.y / per_y));
-            dl->AddCircleFilled(p, std::max(2.0f, view.zoom * 2), IM_COL32(20, 60, 30, 200));
-        }
-    }
+    draw_tiles(m, [&](Vec2 w) { return view.to_screen(w); });
     dl->PopClipRect();
 }
 
@@ -158,6 +100,8 @@ void ContentWorkspace::map_spot_window(Engine& engine) {
     spot_->pan = view.pan;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     dl->PushClipRect(view.origin, {view.origin.x + view.size.x, view.origin.y + view.size.y}, true);
+    if (Doc* md = doc(map_path(spot_->map, spot_->folder)); md && md->text.valid())
+        draw_objects(m, md->text.value(), [&](Vec2 w) { return view.to_screen(w); }, view.zoom);
     for (const auto& [name, r] : info->markers) {
         cell_outline(m, view, {r.x, r.y, std::max(r.w, 0.2f), std::max(r.h, 0.2f)}, IM_COL32(90, 200, 200, 200), 1.5f);
         dl->AddText(view.to_screen(m.cell_to_world(r.x, r.y)), IM_COL32(150, 230, 230, 255), name.c_str());
@@ -272,7 +216,53 @@ void ContentWorkspace::maps_view(Engine& engine, Rect area, const std::string& f
     ui::tip(schema_.play.empty() ? "Add \"play\" to the game's schema to start the game from here"
                                  : "Saves, then starts the game in this map");
     ImGui::SameLine();
+    if (ImGui::SmallButton("World")) world_ = true;
+    ui::tip("Every map at once, and the exits between them");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Map...")) ImGui::OpenPopup("mapmenu");
+    if (ImGui::BeginPopup("mapmenu")) {
+        if (ImGui::MenuItem("Rename...")) rename_open_ = true, rename_text_ = name;
+        if (ImGui::MenuItem("Open in Tiled (to paint tiles)")) {
+            save_all();
+            SDL_OpenURL(("file://" + fs::absolute(assets_dir_ / file).string()).c_str());
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Delete...")) delete_open_ = true;
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine();
     ImGui::TextDisabled("%s", file.c_str());
+    // Renaming and deleting, with what leads there.
+    if (rename_open_) ImGui::OpenPopup("Rename the map"), rename_open_ = false;
+    if (ImGui::BeginPopupModal("Rename the map", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        usize n = map_refs(name).size();
+        ImGui::Text("A new name for %s", name.c_str());
+        char buf[96];
+        std::snprintf(buf, sizeof buf, "%s", rename_text_.c_str());
+        if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
+        if (ImGui::InputText("##to", buf, sizeof buf)) rename_text_ = buf;
+        ui::hint(std::format("{} place{} name it (exits, areas, schedules...): they change too.", n, n == 1 ? "" : "s"));
+        if (ImGui::Button("Rename") && rename_map(file, rename_text_)) ImGui::CloseCurrentPopup();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
+    if (delete_open_) ImGui::OpenPopup("Delete the map"), delete_open_ = false;
+    if (ImGui::BeginPopupModal("Delete the map", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        std::vector<Ref> refs = map_refs(name);
+        ImGui::Text("Delete %s? It goes to the Trash.", name.c_str());
+        if (!refs.empty()) {
+            ImGui::TextColored(danger, "These still name it, and will need fixing:");
+            for (const Ref& r : refs) ImGui::BulletText("%s", r.where.c_str());
+        }
+        if (ImGui::Button("Delete")) {
+            delete_map(file);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Keep it")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 
     if (li < 0) {
         ui::hint("This map has no \"markers\" object layer yet.");
@@ -292,8 +282,16 @@ void ContentWorkspace::maps_view(Engine& engine, Rect area, const std::string& f
     Path objects_path{"layers", static_cast<usize>(li), "objects"};
     if (markers_.selected >= static_cast<i64>(objects.size())) markers_.selected = -1;
 
+    if (schema_.objects) {
+        ImGui::SameLine(0, 24);
+        if (ImGui::RadioButton("Markers", !painting_objects_)) painting_objects_ = false;
+        ui::tip("Spawn points, exits, shops, signs, items: things on the markers layer");
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Objects", painting_objects_)) painting_objects_ = true, markers_.placing = false;
+        ui::tip("Paint trees, rocks and the like, one a cell: drag to place, Alt-drag to remove");
+    }
     ImGui::SameLine(0, 24);
-    if (ImGui::Button(markers_.placing ? "Click the map..." : "+ Add a marker")) ImGui::OpenPopup("add");
+    if (!painting_objects_ && ImGui::Button(markers_.placing ? "Click the map..." : "+ Add a marker")) ImGui::OpenPopup("add");
     ui::tip("Pick a kind, then click where it goes");
     if (ImGui::BeginPopup("add")) {
         for (const schema::MarkerType& t : schema_.markers)
@@ -314,10 +312,18 @@ void ContentWorkspace::maps_view(Engine& engine, Rect area, const std::string& f
     // The map on the left, the markers and the one picked on the right.
     constexpr float side = 340;
     ImGui::BeginChild("canvas", {ImGui::GetContentRegionAvail().x - side - 8, 0});
-    ui::hint(markers_.placing ? "Click where it goes. Esc: never mind."
-                              : "Click a marker to pick it, drag it to move it (Alt: off the grid). Wheel zooms, right-drag moves.");
+    ui::hint(painting_objects_ ? "Drag to place the picked object, one a cell; Alt-drag removes. Wheel zooms, right-drag moves."
+             : markers_.placing ? "Click where it goes. Esc: never mind."
+                                : "Click a marker to pick it, drag it to move it (Alt: off the grid). Wheel zooms, right-drag moves.");
     map_canvas("map", m, markers_.view, 0);
     MapView& view = markers_.view;
+    {
+        ImDrawList* odl = ImGui::GetWindowDrawList();
+        odl->PushClipRect(view.origin, {view.origin.x + view.size.x, view.origin.y + view.size.y}, true);
+        draw_objects(m, map, [&](Vec2 w) { return view.to_screen(w); }, view.zoom);
+        odl->PopClipRect();
+    }
+    if (painting_objects_) object_painting(file, map, view, m);
     ImGuiIO& io = ImGui::GetIO();
     Vec2 mouse = view.mouse_cell;
     auto snapped = [&](Vec2 p, bool area_marker) {
@@ -330,7 +336,7 @@ void ContentWorkspace::maps_view(Engine& engine, Rect area, const std::string& f
     };
 
     // Picking, dragging and placing.
-    if (view.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+    if (!painting_objects_ && view.hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
         if (markers_.placing) {
             bool is_area = area_kind(markers_.adding);
             Vec2 at = snapped(is_area ? mouse - Vec2{0.5f, 0.5f} : mouse, is_area);
@@ -432,12 +438,48 @@ void ContentWorkspace::maps_view(Engine& engine, Rect area, const std::string& f
             if (record_id(*maps, i) == file) record = i;
     }
     for (const Problem& p : marker_problems(file, record)) ImGui::TextColored(danger, "%s", p.text.c_str());
+    if (painting_objects_) {
+        // What to paint: every kind, with its picture.
+        ui::section("Objects");
+        std::vector<ObjectKind> kinds = object_kinds();
+        if (kinds.empty()) ui::hint("The schema's \"objects\" names no kinds (or their file is empty).");
+        if (object_kind_.empty() && !kinds.empty()) object_kind_ = kinds[0].name;
+        for (const ObjectKind& k : kinds) {
+            ImGui::PushID(k.name.c_str());
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            if (ImGui::Selectable("##k", object_kind_ == k.name, 0, {0, 40})) object_kind_ = k.name;
+            ImGui::SetCursorScreenPos({p.x + 4, p.y + 2});
+            thumbnail(k.picture, 36);
+            ImGui::GetWindowDrawList()->AddText({p.x + 48, p.y + 11}, object_kind_ == k.name ? ui::color::accent : ui::color::text, k.name.c_str());
+            ImGui::SetCursorScreenPos({p.x, p.y + 44});
+            ImGui::Dummy({0, 0});
+            ImGui::PopID();
+        }
+        ImGui::Spacing();
+        ui::hint("Drag on the map to place one a cell; Alt-drag removes. Ctrl+Z undoes. What each kind looks like and blocks is "
+                 "in its data file.");
+        ImGui::EndChild();
+        ImGui::End();
+        return;
+    }
     ImGui::BeginChild("list", {0, std::min(220.0f, 8 + ImGui::GetFrameHeightWithSpacing() * static_cast<f32>(objects.size() + 1))},
                       ImGuiChildFlags_Borders);
     for (usize i = 0; i < objects.size(); ++i) {
         const Value& o = objects[i];
         std::string type(o["type"].as_string()), label(o["name"].as_string());
-        std::string row = std::format("{}  {}##{}", type.empty() ? "(named)" : type, label, i);
+        // What it is, its name, and its first property ("item  apple x2", "shop  general_store").
+        std::string detail;
+        if (const schema::MarkerType* t = schema_.marker(type); t && !t->fields.empty()) {
+            Value props = properties_of(o);
+            for (const schema::Field& f : t->fields)
+                if (const Value* v = props.find(f.key); v && (v->is_string() ? !v->as_string().empty() : v->is_number())) {
+                    detail += detail.empty() ? "" : " x";
+                    detail += v->is_string() ? std::string(v->as_string()) : std::format("{}", v->as_int());
+                    if (f.key == "prompt" || detail.size() > 24) break;
+                }
+        }
+        std::string row = std::format("{}  {}{}{}##{}", type.empty() ? "(named)" : type, label, label.empty() || detail.empty() ? "" : "  ",
+                                      detail, i);
         if (ImGui::Selectable(row.c_str(), static_cast<i64>(i) == markers_.selected)) markers_.selected = static_cast<i64>(i);
     }
     if (objects.size() == 0) ui::hint("No markers yet: + Add a marker.");
@@ -533,6 +575,12 @@ void ContentWorkspace::maps_view(Engine& engine, Rect area, const std::string& f
             }
         }
         ImGui::Spacing();
+        if (type == "exit") {
+            if (ImGui::Button("Make the way back")) say_(make_way_back(file, i));
+            ui::tip("On the map it leads to: a spawn point just inside the matching edge and an exit home. Here: a spawn "
+                    "point for coming back, and this exit arriving at the new one.");
+            ImGui::SameLine();
+        }
         if (ImGui::Button("Remove it")) {
             edits_.push_back({Edit::Erase, file, op, {}, {}});
             markers_.selected = -1;

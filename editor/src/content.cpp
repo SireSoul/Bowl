@@ -242,6 +242,16 @@ void Schema::add(const Value& doc, std::string_view source) {
             if (it != markers.end()) *it = std::move(t); // a game's schema can redo a built-in one
             else markers.push_back(std::move(t));
         }
+    if (const Value* o = doc.find("objects"); o && o->is_object()) {
+        MapObjects mo;
+        mo.layer = o->find("layer") ? std::string((*o)["layer"].as_string()) : "features";
+        mo.file = (*o)["file"].as_string();
+        mo.list = (*o)["list"].as_string("kinds");
+        mo.name = (*o)["name"].as_string("name");
+        mo.picture = (*o)["picture"].as_string("picture");
+        mo.origin = (*o)["origin"].as_string("origin");
+        objects = mo;
+    }
     if (const Value* p = doc.find("play"); p && p->is_object()) {
         play = p->find("command") ? std::string((*p)["command"].as_string()) : std::string();
         play_args = strings((*p)["args"]);
@@ -452,11 +462,6 @@ void ContentWorkspace::shortcuts(Engine& engine) {
         if (in.pressed(Key::Up) && record_ > 0) --record_;
     }
     if (!cmd) return;
-    if (in.pressed(Key::K) || in.pressed(Key::P)) {
-        palette_open_ = true;
-        palette_query_.clear();
-        palette_pick_ = 0;
-    }
     if (!typing && collection_ < schema_.collections.size()) {
         const schema::Collection& c = schema_.collections[collection_];
         if (in.pressed(Key::N) && (c.files() || !c.list.empty())) new_record(c);
@@ -680,6 +685,7 @@ void ContentWorkspace::draw(Engine& engine, Rect area) {
         usize nl = jump_to_.find('\n');
         std::string coll = jump_to_.substr(0, nl), id = jump_to_.substr(nl + 1);
         jump_to_.clear();
+        world_ = coll == "bowl.maps" && id == "world";
         for (usize i = 0; i < schema_.collections.size(); ++i)
             if (schema_.collections[i].id == coll) {
                 collection_ = i;
@@ -693,16 +699,16 @@ void ContentWorkspace::draw(Engine& engine, Rect area) {
     collections_panel(engine, {area.x, area.y, left, area.h});
     Rect right{area.x + left, area.y, area.w - left, area.h};
     bool maps = collection_ < schema_.collections.size() && schema_.collections[collection_].id == "bowl.maps";
-    if (maps) maps_view(engine, right, record_id(schema_.collections[collection_], record_));
+    if (maps && world_) world_view(engine, right);
+    else if (maps) maps_view(engine, right, record_id(schema_.collections[collection_], record_));
     else form_panel(engine, right);
     splitter("##split_left", {right.x - 3, area.y, 6, area.h}, left_w_, 220, std::max(220.0f, area.w * 0.45f), 1);
-    if (maps) {
+    if (maps && !world_) {
         side_w_ = std::clamp(side_w_, 240.0f, std::max(240.0f, right.w * 0.5f));
         splitter("##split_side", {right.right() - side_w_ - 18, area.y + 60, 6, area.h - 60}, side_w_, 240,
                  std::max(240.0f, right.w * 0.5f), -1);
     }
     map_spot_window(engine);
-    palette(engine);
     apply_edits();
     track_history();
     shortcuts(engine);
@@ -720,23 +726,6 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
                  "(see the editor guide). Sound events work without one.");
     for (const std::string& p : schema_.problems) ImGui::TextColored(danger, "%s", p.c_str());
 
-    // Find anything.
-    {
-        ImVec2 p = ImGui::GetCursorScreenPos();
-        f32 w = ImGui::GetContentRegionAvail().x, h = ImGui::GetFrameHeight();
-        if (ImGui::InvisibleButton("##find", {w, h})) {
-            palette_open_ = true;
-            palette_query_.clear();
-            palette_pick_ = 0;
-        }
-        ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(p, {p.x + w, p.y + h}, ImGui::IsItemHovered() ? ui::color::hover : ui::color::field, 6);
-        ui::draw_icon(dl, ui::Icon::Search, {p.x + 14, p.y + h * 0.5f}, 13, ui::color::muted);
-        dl->AddText({p.x + 28, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f}, ui::color::muted, "Find anything");
-        const char* keys = "Ctrl+K";
-        dl->AddText({p.x + w - ImGui::CalcTextSize(keys).x - 10, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f}, ui::color::muted, keys);
-        ui::tip("Any item, person, event or map by name, and commands", "Ctrl+K");
-    }
     ImGui::Spacing();
     ui::section("Content");
 
@@ -980,7 +969,7 @@ void ContentWorkspace::form_panel(Engine& engine, Rect area) {
         if (!d->text.valid()) {
             const auto& e = *d->text.error();
             ImGui::TextColored(danger, "%s line %u, column %u: %s", c.file.c_str(), e.line, e.column, e.message.c_str());
-            ui::hint("Fix it in the Data workspace (Ctrl+2) to edit it here.");
+            ui::hint("Fix it as text (Ctrl+5) to edit it here.");
             ImGui::End();
             return;
         }
@@ -1010,9 +999,15 @@ void ContentWorkspace::form_panel(Engine& engine, Rect area) {
     ImGui::EndGroup();
     ImGui::EndGroup();
     {
-        f32 bw = 30, x = ImGui::GetContentRegionMax().x - bw * 2 - 4;
+        f32 bw = 30, x = ImGui::GetContentRegionMax().x - bw * 3 - 8;
         ImVec2 back = ImGui::GetCursorPos();
         ImGui::SetCursorPos({x, ImGui::GetStyle().WindowPadding.y});
+        if (ui::tool_button("text", ui::Icon::New, false, "Edit the file as JSON text (the comments and layout stay)", bw,
+                            r && hooks.open_text != nullptr)) {
+            save_all();
+            hooks.open_text(file);
+        }
+        ImGui::SameLine(0, 4);
         if (ui::tool_button("save", ui::Icon::Save, unsaved(), unsaved() ? "Save every change; a running game picks it up|Ctrl+S"
                                                                        : "Nothing to save|Ctrl+S", bw, unsaved()))
             save_all();

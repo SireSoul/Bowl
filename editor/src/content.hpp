@@ -86,8 +86,17 @@ struct MarkerType {
     std::vector<Field> fields;
 };
 
+// Things a game places on a map's object layer one per cell (trees, rocks), and where their pictures are said: a list
+// in a data file, each with a name (the object's type), a picture and the point of it that stands on the cell.
+struct MapObjects {
+    std::string layer;                       // the object layer ("features")
+    std::string file, list = "kinds";        // the data file and the key of its list
+    std::string name = "name", picture = "picture", origin = "origin";
+};
+
 struct Schema {
     std::vector<Collection> collections;
+    std::optional<MapObjects> objects;
     std::map<std::string, Type, std::less<>> types;
     std::vector<MarkerType> markers;
     std::vector<std::string> problems;
@@ -122,6 +131,22 @@ public:
     void draw(Engine& engine, Rect area);
     void update(Engine& engine); // every frame, whichever workspace shows (file dialogs answer here)
     bool unsaved() const;
+    // Find anything (Ctrl+K, from any workspace): draws it when it's open.
+    void search(Engine& engine) { palette(engine); }
+    void open_search() {
+        palette_open_ = true;
+        palette_query_.clear();
+        palette_pick_ = 0;
+    }
+    bool searching() const { return palette_open_; }
+    // What the editor around it does for search results and buttons that lead elsewhere.
+    struct Hooks {
+        std::function<std::vector<std::string>()> pictures;       // every picture, for search
+        std::function<void(const std::string&)> open_picture;     // in the Paint workspace
+        std::function<void(const std::string&)> open_text;        // a file as JSON text (the Data workspace)
+        std::function<void(int)> go;                              // 0 Content, 1 Paint, 2 Level, 3 files as text, 4 Game
+    };
+    Hooks hooks;
     // Shows a collection, and one of its records by id (or the first).
     void open(std::string_view collection, std::string_view record = {}) { jump_to_ = std::string(collection) + "\n" + std::string(record); }
     bool save_all();
@@ -236,6 +261,26 @@ private:
     void maps_view(Engine& engine, Rect area, const std::string& file);
     std::vector<Problem> marker_problems(const std::string& file, usize record);
     void play_game(const std::string& area);
+
+    // content_world.cpp: more for maps, and the world
+    struct ObjectKind {
+        std::string name, picture;
+        Vec2 origin{0.5f, 1.0f};
+    };
+    std::vector<ObjectKind> object_kinds(); // from the schema's "objects"
+    // The map's tiles drawn through `to_screen` (map pixels to the screen).
+    void draw_tiles(const gfx::Tilemap& m, const std::function<ImVec2(Vec2)>& to_screen, f32 alpha = 1);
+    // Objects on the schema's object layer, drawn with their pictures.
+    void draw_objects(const gfx::Tilemap& m, const json::Value& map, const std::function<ImVec2(Vec2)>& to_screen, f32 zoom);
+    // An exit's way back: on the map it leads to, a spawn point just inside the matching edge and an exit home; on
+    // this map, a spawn point just inside this exit for coming back. Returns what it did, to say.
+    std::string make_way_back(const std::string& file, usize object);
+    // Every value naming a map (exits, areas, schedules...), in content and maps.
+    std::vector<Ref> map_refs(const std::string& name);
+    bool rename_map(const std::string& file, const std::string& to);
+    bool delete_map(const std::string& file);
+    void world_view(Engine& engine, Rect area);
+    void object_painting(const std::string& file, const json::Value& map, const MapView& view, const gfx::Tilemap& m);
     MapInfo* map_info(const std::string& name, const std::string& folder);
     std::string map_path(const std::string& name, const std::string& folder) const;
     void import_audio(Engine& engine, std::function<void(const std::string& asset_path)> then);
@@ -313,6 +358,16 @@ private:
         Vec2 ghost; // where it would go, in cells
     };
     MarkerEditor markers_;
+    bool world_ = false;           // the Maps view shows every map
+    bool painting_objects_ = false; // the Maps view's other mode: placing trees and rocks
+    std::string object_kind_;
+    Vec2 last_object_cell_{-1e9f, -1e9f};
+    struct WorldView {
+        f32 zoom = 0;
+        Vec2 pan;
+    } world_view_;
+    std::string rename_text_;
+    bool rename_open_ = false, delete_open_ = false;
     SDL_Process* game_ = nullptr;
 
     // File dialogs answer on another thread.

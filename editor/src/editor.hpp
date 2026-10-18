@@ -188,7 +188,11 @@ private:
     std::optional<devlink::Schedules> known_schedules_;   // the last a game sent, kept in the editor's settings
     std::string known_schedules_when_;
 
-    Workspace workspace_ = Workspace::Level;
+    Workspace workspace_ = Workspace::Content;
+    bool has_levels_ = false; // .world files in the assets: the Level tab shows
+    void data_open_path(const std::string& path); // the Data workspace on a file
+    bool unsaved_anywhere() const;
+    void save_everything(Engine& engine);
     std::unique_ptr<Document> doc_;
     Selection selection_;
     Tool tool_ = Tool::Select;
