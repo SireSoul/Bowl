@@ -537,6 +537,11 @@ TEST_CASE("tilemap: points far off the map give far-off cells") {
 
 TEST_CASE("tilemap: a Map in a level loads in a game, which ignores what Bowl Editor keeps for itself") {
     register_engine_components(); // what a game's engine does at startup
+    std::string known; // on failure, what is registered instead
+    for (usize i = 0; i < ecs::component_type_count(); ++i)
+        known += std::string(ecs::component_info(static_cast<ecs::ComponentId>(i)).name) + " | ";
+    INFO("registered: ", known);
+    INFO("type_name<gfx::Map>(): ", type_name<gfx::Map>());
     REQUIRE(ecs::find_component("bowl::gfx::Map")); // registered under the name level files use
     auto doc = json::parse(R"({ "format": "Bowl.world", "version": 1, "entities": [
         { "id": 0, "components": { "bowl::ecs::Transform2D": { "position": [32, 16] },
