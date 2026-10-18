@@ -158,7 +158,17 @@ public:
     // Uploads raw bytes into a buffer through a temporary transfer buffer, on its own command buffer.
     bool upload(SDL_GPUBuffer* buffer, const void* data, u32 size, u32 offset = 0);
 
+    // While a frame is being recorded, textures destroyed (a hot reload, an editor replacing a picture) may still be
+    // drawn by it, so their GPU memory is let go only once the frame is submitted. The renderer holds and lets go.
+    void hold_releases();
+    void let_go_releases();
+
 private:
+    friend class Texture;
+    void release(SDL_GPUTexture* texture);
+    bool holding_ = false;
+    std::vector<SDL_GPUTexture*> held_;
+
     bool upload_pixels(SDL_GPUTexture* texture, PixelRect rect, const void* rgba8, u32 row_pixels, bool premultiplied,
                        bool mips);
     // The bundle's code for this device; Direct3D 12 compiles (or finds in the cache) DXBC from its HLSL.

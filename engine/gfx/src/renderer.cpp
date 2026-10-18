@@ -249,6 +249,7 @@ bool Renderer::begin_frame() {
         error("renderer: SDL_AcquireGPUCommandBuffer failed: {}", SDL_GetError());
         return false;
     }
+    device_->hold_releases(); // textures destroyed from here on may still be drawn by this frame
     Uint32 w = 0, h = 0;
     if (!SDL_WaitAndAcquireGPUSwapchainTexture(cmd_, device_->window(), &swapchain_, &w, &h)) {
         error("renderer: swapchain acquire failed: {}", SDL_GetError());
@@ -268,7 +269,7 @@ void Renderer::submit(const GpuBuffer& sprites, u32 count, const Texture* textur
     count = std::min<u32>(count, sprites.size() / static_cast<u32>(sizeof(SpriteInstance)));
     if (!swapchain_ || count == 0) return;
     Pass pass{camera.view_projection(), static_cast<u32>(draws_.size()), 1, blend, material, sprites.handle()};
-    draws_.push_back({0, count, texture ? texture : white_.get()});
+    draws_.push_back(draw_of(0, count, texture ? *texture : *white_));
     passes_.push_back(pass);
     stats_.sprites += count;
     ++stats_.batches;
@@ -285,8 +286,9 @@ void Renderer::record(const SpriteBatch& batch, std::vector<Pass>& passes) {
         u32 i = order_[k];
         const Texture* t = batch.textures_[i] ? batch.textures_[i] : white_.get();
         frame_sprites_.push_back(batch.sprites_[i]);
-        if (draws_.size() > pass.first_draw && draws_.back().texture == t) ++draws_.back().count;
-        else draws_.push_back({base + k, 1, t});
+        if (draws_.size() > pass.first_draw && draws_.back().texture == t->handle() && draws_.back().filter == t->filter())
+            ++draws_.back().count;
+        else draws_.push_back(draw_of(base + k, 1, *t));
     }
     pass.draw_count = static_cast<u32>(draws_.size()) - pass.first_draw;
     passes.push_back(pass);
@@ -302,7 +304,7 @@ void Renderer::submit(const StaticSprites& sprites, const Camera2D& camera, Blen
     if (!swapchain_ || sprites.empty() || !sprites.buffer_) return;
     Pass pass{camera.view_projection(), static_cast<u32>(draws_.size()), 0, blend, material, sprites.buffer_};
     for (const StaticSprites::Run& run : sprites.runs_)
-        draws_.push_back({run.first, run.count, run.texture ? run.texture : white_.get()});
+        draws_.push_back(draw_of(run.first, run.count, run.texture ? *run.texture : *white_));
     pass.draw_count = static_cast<u32>(sprites.runs_.size());
     passes_.push_back(pass);
     stats_.sprites += sprites.count_;
@@ -366,7 +368,7 @@ void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& pa
         for (u32 i = p.first_draw; i < p.first_draw + p.draw_count; ++i) {
             const Draw& draw = draws_[i];
             SDL_GPUTextureSamplerBinding bindings[4];
-            bindings[0] = {draw.texture->handle(), draw.texture->filter() == Filter::Nearest ? nearest_ : linear_};
+            bindings[0] = {draw.texture, draw.filter == Filter::Nearest ? nearest_ : linear_};
             for (u32 b = 1; b < sampler_count; ++b) {
                 const Texture* extra = p.material ? p.material->textures[b - 1] : nullptr;
                 if (extra) bindings[b] = {extra->handle(), extra->filter() == Filter::Nearest ? nearest_ : linear_};
@@ -618,6 +620,7 @@ void Renderer::end_frame() {
     } else {
         SDL_SubmitGPUCommandBuffer(cmd_);
     }
+    device_->let_go_releases(); // submitted: SDL frees them once the GPU is done with the frame
     cmd_ = nullptr;
     swapchain_ = nullptr;
     last_stats_ = stats_;

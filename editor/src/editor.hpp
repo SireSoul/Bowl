@@ -1,5 +1,7 @@
 #pragma once
 
+#include "content.hpp"
+#include "paint_studio.hpp"
 #include "document.hpp"
 #include "ui.hpp"
 
@@ -37,8 +39,8 @@ public:
     void shutdown(Engine& engine) override;
 
 private:
-    // The editor's three rooms: levels, the game's data files, and painting art.
-    enum class Workspace { Level, Data, Paint, Game };
+    // The editor's rooms: levels, the game's content as forms, its data files as JSON, painting art, and a running game.
+    enum class Workspace { Level, Content, Data, Paint, Game };
     enum class Tool { Select, Place, Pan, Brush, Region };
     enum class Drag { None, Move, Box, Pan };
 
@@ -149,40 +151,10 @@ private:
     std::vector<DataEdit> data_edits_;
     char data_filter_[128] = {};
 
-    // paint.cpp: the Paint workspace, and the Brush tool that paints on art where it stands in the level
-    enum class PaintTool { Pencil, Eraser, Fill, Picker };
-    struct Canvas {
-        std::string path; // virtual path of the picture
-        std::filesystem::path file;
-        u32 w = 0, h = 0;
-        std::vector<u8> pixels;             // RGBA, straight alpha
-        std::unique_ptr<gfx::Texture> view; // nearest-filtered copy for the Paint canvas
-        std::vector<std::vector<u8>> history;
-        usize cursor = 0;
-        bool modified = false, dirty = false; // dirty: the GPU copies are behind
-    };
-    bool paint_open(Engine& engine, const std::string& path);
-    void paint_workspace(Engine& engine);
-    void paint_render(Engine& engine);
-    void paint_mouse(Engine& engine);
+    // paint_studio.cpp: the Paint workspace; the Level's Brush tool paints through it
+    PaintStudio paint_;
     void brush_mouse(Engine& engine); // Level workspace: the Brush tool
-    void paint_stroke(i32 x, i32 y, bool first);
-    void paint_fill(i32 x, i32 y);
-    void paint_commit();              // a stroke ended: an undo step
-    void paint_upload(Engine& engine);
-    bool paint_save(Engine& engine);
-    void paint_undo(int direction);
-    gfx::Camera2D paint_camera(Engine& engine) const;
-
-    std::optional<Canvas> canvas_;
-    PaintTool paint_tool_ = PaintTool::Pencil;
-    Color paint_color_ = Color::hex(0xf2c45c);
-    std::vector<u32> paint_palette_; // colors in the picture, then picked ones
-    f32 paint_zoom_ = 8;
-    Vec2 paint_pan_;
     bool painting_ = false;
-    i32 paint_last_x_ = 0, paint_last_y_ = 0;
-    gfx::SpriteBatch paint_batch_;
 
     // Regions: colliders drawn and edited on the level (regions.cpp)
     bool region_mouse(Engine& engine); // true when it used the mouse
@@ -191,6 +163,9 @@ private:
     ecs::Entity brush_target_;          // the sprite the Brush is painting on
     int region_handle_ = -1; // the resize handle being dragged
     Vec2 region_anchor_;
+
+    // content.cpp: the Content workspace, forms for the game's content from its schemas
+    ContentWorkspace content_;
 
     // game.cpp: the Game workspace, attached to a running game through its dev link
     void game_workspace(Engine& engine);
@@ -213,7 +188,11 @@ private:
     std::optional<devlink::Schedules> known_schedules_;   // the last a game sent, kept in the editor's settings
     std::string known_schedules_when_;
 
-    Workspace workspace_ = Workspace::Level;
+    Workspace workspace_ = Workspace::Content;
+    bool has_levels_ = false; // .world files in the assets: the Level tab shows
+    void data_open_path(const std::string& path); // the Data workspace on a file
+    bool unsaved_anywhere() const;
+    void save_everything(Engine& engine);
     std::unique_ptr<Document> doc_;
     Selection selection_;
     Tool tool_ = Tool::Select;

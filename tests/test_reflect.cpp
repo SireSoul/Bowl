@@ -6,6 +6,8 @@
 
 #include <filesystem>
 #include <limits>
+#include <map>
+#include <set>
 
 using namespace bowl;
 using namespace bowl::ecs;
@@ -120,6 +122,22 @@ TEST_CASE("serialize: numbers that don't fit a field are clamped to it") {
     CHECK(c.small == 0);
     CHECK(c.big == std::numeric_limits<u64>::max());
     CHECK(c.level == std::numeric_limits<i32>::min());
+}
+
+TEST_CASE("serialize: sets save as lists and maps with text keys as objects") {
+    std::set<std::string> flags{"met_mayor", "bridge_fixed"};
+    std::map<std::string, i32> friendship{{"ana", 40}, {"bo", -5}};
+    serial::Context ctx;
+    json::Value f = serial::to_json(flags, ctx), m = serial::to_json(friendship, ctx);
+    CHECK(json::stringify(f, -1) == R"(["bridge_fixed","met_mayor"])");
+    CHECK(json::stringify(m, -1) == R"({"ana":40,"bo":-5})");
+    std::set<std::string> flags2{"stale"};
+    std::map<std::string, i32> friendship2{{"stale", 1}};
+    REQUIRE(serial::from_json(f, flags2, ctx));
+    REQUIRE(serial::from_json(m, friendship2, ctx));
+    CHECK(flags2 == flags);
+    CHECK(friendship2 == friendship);
+    CHECK_FALSE(serial::from_json(json::parse(R"({"ana": "lots"})").value, friendship2, ctx));
 }
 
 TEST_CASE("world io: entities, references, tags and unsavable components round-trip") {

@@ -160,11 +160,15 @@ public:
     void capture_next_frame(CaptureCallback callback) { capture_ = std::move(callback); }
 
 private:
+    // A run of sprites with one texture. The texture is kept as its GPU handle, read when the run is recorded:
+    // something drawn this frame may be destroyed before the frame ends (the device holds its memory until then).
     struct Draw {
         u32 first; // sprite index in the frame buffer
         u32 count;
-        const Texture* texture;
+        SDL_GPUTexture* texture;
+        Filter filter;
     };
+    static Draw draw_of(u32 first, u32 count, const Texture& t) { return {first, count, t.handle(), t.filter()}; }
     struct Pass {
         Mat4 view_projection;
         u32 first_draw, draw_count;

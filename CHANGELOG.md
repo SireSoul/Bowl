@@ -5,6 +5,58 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+### Added
+- Bowl Editor's Paint workspace takes tools from Aseprite, LibreSprite, Piskel and Paintbrush: a lasso (dragged or
+  clicked corner by corner) and ellipse selection, a dither pen, a spray can, recolor-all-of-a-color (in every layer
+  and frame), blur and jumble, curves bent by the mouse, rounded boxes, polygons and freehand contours, and text in a
+  3 x 5 pixel font; lock alpha, the selection as a brush (Ctrl+B), tiled mode, a tile grid, scaling without smoothing,
+  and color ramps. Pictures have animation frames, with onion skin, per-frame times, tags and a looping preview, and
+  save as sprite sheets with Aseprite's JSON (which the engine's sprite sheets read); Aseprite sheets open as frames.
+  `bowl::paint` adds `rounded_box`, `polygon`, `curve`, `spray`, `text`, `blurred`, `jumbled`, `scaled`, `ramp`, and
+  frames, tags and sheets on `Document`.
+- Bowl Editor's **Content** workspace (Ctrl+5, or `--content [collection [id]]`): a game's content (items, people,
+  shops, events, anything) edited as forms instead of JSON. Schema files in the assets (`*.schema.json`) say which
+  data files hold which records and what each field is: text, numbers, switches, choices, times of day, days of the
+  week, references to other records (with a menu of their ids and a button to go to one), pictures with thumbnails,
+  sounds with a play button, maps, spawn points read from a map, a spot picked by clicking on the map itself, lists
+  with reordering, and records with variants (an event's trigger, an action's kind). Records can be added, copied and
+  removed; edits keep each file's comments and layout; problems (repeated ids, references to nothing, missing files)
+  are listed and lead to the record. Sound events (`.sound` files) are a collection of their own with no schema needed,
+  and a new sound can be made straight from an audio file, which is copied into `sounds/clips/`. See
+  [Bowl Editor](docs/guides/editor.md#the-content-workspace).
+- The Content workspace's **Maps**: every Tiled map drawn as the game draws it, with the markers on its `markers`
+  layer placed, moved, resized and removed with the mouse, and their properties edited as forms from the kinds of
+  marker a schema lists (`"markers"`), checked for references to nothing and spawn points that aren't there. New maps
+  start as copies. A schema's `"play"` adds **Play** and **Play here** buttons that save and start the game. Records
+  can be moved up and down their list, and pictures can be Aseprite sprite sheets.
+- The Content workspace finds anything with **Ctrl+K** (records, maps, sounds and commands), renames ids everywhere
+  they're used (map markers too), shows where each record is used, reorders records and list items by dragging, shows
+  problems on the fields themselves, plays sprite sheets in previews, and has resizable panels (remembered), icons for
+  collections (a collection's `"icon"`), and keys for new (Ctrl+N), copy (Ctrl+D) and walking the list.
+- Bowl Editor's **Paint** workspace is a pixel-art studio: layers (visibility, locks, opacity, merge, flatten), a
+  selection (boxes and a magic wand, added to and taken from), move, copy and paste with flips and turns, lines that
+  snap to 45 degrees and the 2:1 iso slope, boxes, iso diamonds, ellipses, gradients, shading along swatches, round or
+  square dithered brushes with mirroring, pixel-perfect strokes, fills with tolerance, hue, saturation, brightness,
+  replace, outline and make solid, canvas size from an anchor, crop, trim and flip, new pictures, a color square with
+  kept swatches, and a history to jump through. Layers are kept in `art-layers/`. The pixel work is `bowl_paint`
+  (`editor/paint`), tested in `tests/test_paint.cpp`.
+- Bowl Editor shows only the tabs a project uses (Content and Paint; Level with `.world` files; Game while one runs),
+  searches everything from anywhere (Ctrl+K), and saves everything at once. Its Maps draw a schema's `"objects"`
+  (trees, rocks) and paint them one a cell, make an exit's way back on both maps, rename maps with every reference to
+  them, delete them to the Trash, and show the whole world with its exits. **Breaking** for muscle memory: the
+  workspace keys follow the tabs (Ctrl+1 Content, Ctrl+2 Paint, Ctrl+3 Level, Ctrl+4 Game, Ctrl+5 the data files as
+  text).
+- `serial::to_json` and `from_json` save `std::set` (as a list) and `std::map` with string keys (as an object).
+
+### Changed
+- The Content workspace's records list can be made taller or shorter by dragging the bar between it and the
+  collections (double-click: back as it was); the collections scroll when squeezed. Remembered between runs.
+
+### Fixed
+- A texture destroyed while a frame was being drawn (the editor replacing the Paint canvas, a picture reloaded from
+  the dev tools) no longer crashes the renderer: draws keep the GPU texture itself, and the device holds destroyed
+  textures until the frame is submitted.
+
 ## [0.3.0] - 2026-10-17
 
 ### Added

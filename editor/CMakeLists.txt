@@ -3,16 +3,21 @@
 
 add_executable(bowl-editor
     src/main.cpp
+    src/content.cpp
+    src/content_maps.cpp
+    src/content_tools.cpp
+    src/content_world.cpp
     src/document.cpp
     src/editor.cpp
     src/data.cpp
     src/game.cpp
     src/paint.cpp
+    src/paint_studio.cpp
     src/panels.cpp
     src/regions.cpp
     src/ui.cpp)
 bowl_add_game(bowl-editor)
-target_link_libraries(bowl-editor PRIVATE bowl_stb) # stb_image, to read pictures for painting
+target_link_libraries(bowl-editor PRIVATE bowl_stb bowl_paint) # stb_image, to read pictures for painting
 set_target_properties(bowl-editor PROPERTIES FOLDER tools)
 # The editor loads games' code libraries (--game) to learn their component types. Those libraries call into the
 # engine, so the editor exports it.
