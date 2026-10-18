@@ -6,6 +6,14 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Bowl Editor's Paint workspace takes tools from Aseprite, LibreSprite, Piskel and Paintbrush: a lasso (dragged or
+  clicked corner by corner) and ellipse selection, a dither pen, a spray can, recolor-all-of-a-color (in every layer
+  and frame), blur and jumble, curves bent by the mouse, rounded boxes, polygons and freehand contours, and text in a
+  3 x 5 pixel font; lock alpha, the selection as a brush (Ctrl+B), tiled mode, a tile grid, scaling without smoothing,
+  and color ramps. Pictures have animation frames, with onion skin, per-frame times, tags and a looping preview, and
+  save as sprite sheets with Aseprite's JSON (which the engine's sprite sheets read); Aseprite sheets open as frames.
+  `bowl::paint` adds `rounded_box`, `polygon`, `curve`, `spray`, `text`, `blurred`, `jumbled`, `scaled`, `ramp`, and
+  frames, tags and sheets on `Document`.
 - Bowl Editor's **Content** workspace (Ctrl+5, or `--content [collection [id]]`): a game's content (items, people,
   shops, events, anything) edited as forms instead of JSON. Schema files in the assets (`*.schema.json`) say which
   data files hold which records and what each field is: text, numbers, switches, choices, times of day, days of the

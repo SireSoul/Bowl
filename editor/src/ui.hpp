@@ -30,7 +30,8 @@ enum class Icon {
     // The Content workspace's collections, and its tools
     Person, Bag, Shop, Bolt, Map, Note, Gear, Search, ArrowUp, ArrowDown, Play, Link,
     // Paint tools
-    Wand, Bucket, Pipette, Line, Rect, Circle, Gradient, Shade, Eraser
+    Wand, Bucket, Pipette, Line, Rect, Circle, Gradient, Shade, Eraser, Lasso, Recolor, Dither, Spray, Blur, Polygon, Curve,
+    Text, Onion, Tiles, Frames
 };
 
 void apply_theme();

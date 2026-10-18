@@ -329,46 +329,69 @@ only you can read.
 
 <p align="center"><img src="../images/editor-paint.png" width="80%" alt="The Paint workspace with a picture, tools and its palette"></p>
 
-A pixel-art studio (**Ctrl+2**). The picture menu at the top left opens any picture (or makes a **new** one, at any
-size); the search finds pictures too. Tools are down the left; the picked tool's settings and the menus across the
-top; color, swatches, layers and history on the right. The left button paints the first color, the right the
-second; **X** swaps them.
+A pixel-art studio (**Ctrl+2**) with the tools of Aseprite, LibreSprite, Piskel and Paintbrush. The picture menu at
+the top left opens any picture (or makes a **new** one, at any size); the search finds pictures too. Tools are down the
+left, two to a row; the picked tool's settings and the menus across the top; color, swatches, a looping preview,
+layers and history on the right; the animation's frames along the bottom. The left button paints the first color,
+the right the second; **X** swaps them.
 
 | Tool | Key | |
 | --- | --- | --- |
 | Move | V | Lifts the selection (or the whole layer) and drags it. Arrows nudge (Shift: 8 pixels); Shift+H and Shift+V flip, Shift+R turns a quarter. Enter puts it down, Esc puts it back |
-| Select | M | A box. Shift adds to the selection, Alt takes away. Every tool paints only inside it |
+| Select | M | A box or an ellipse. Shift adds to the selection, Alt takes away. Every tool paints only inside it |
+| Lasso | Q | Drag around what to select, or click corner by corner (Enter, a double-click or the first corner closes it; Esc cancels). Shift adds, Alt takes away |
 | Magic wand | W | An area of one color (tolerance, contiguous or everywhere, this layer or all of them). Shift adds, Alt takes away |
 | Pencil | B | Pixel perfect (on by default) takes out the L-shaped corners of one-pixel strokes. Shift+click: a line from the last stroke |
 | Eraser | E | |
+| Dither | N | Piskel's dithering pen: a checkerboard of the two colors (the right button swaps which goes where), lined up across strokes |
+| Spray | Y | Paintbrush's spray can: scatters pixels within its radius while held, **flow** of them a frame |
 | Fill | G | An area of one color, with the same settings as the wand |
+| Recolor | A | Piskel's paint-all-of-a-color: every pixel of the clicked color becomes the first color (with a tolerance), on this layer or **every layer**, in this frame or **every frame** (or hold Shift) |
 | Pick | I, or Alt with any painting tool | The left button picks the first color, the right the second |
-| Line | L | Shift keeps it flat, upright, at 45 degrees, or on the 2:1 iso slope, as even two-pixel stairs |
-| Box | R | An outline or filled; **Iso diamond** draws a floor tile in the box. Shift: square (2:1 for diamonds) |
-| Ellipse | O | Clean one-pixel outlines at any size, or filled. Shift: circle |
-| Gradient | D | From the first color to the second, over the selection or the layer, dithered or smooth |
 | Shade | S | The left button lightens, the right darkens, a step each stroke: along your swatches when the color is one of them, otherwise light leaning warm and shadow leaning violet |
+| Blur | U | Softens what the brush passes over; with **Jumble** (Aseprite's), scatters pixels among their neighbors for a rough texture |
+| Gradient | D | From the first color to the second, over the selection or the layer, dithered or smooth |
+| Line | L | Shift keeps it flat, upright, at 45 degrees, or on the 2:1 iso slope, as even two-pixel stairs |
+| Curve | C | Drag a line, then move the mouse to bend it through that point and click (Enter puts it down too, Esc cancels) |
+| Box | R | An outline or filled, with rounded **corners**; **Iso diamond** draws a floor tile in the box. Shift: square (2:1 for diamonds) |
+| Ellipse | O | Clean one-pixel outlines at any size, or filled. Shift: circle |
+| Polygon | P | Click corner by corner (Enter or a double-click finishes), or drag a freehand shape (Aseprite's contour); an outline or filled |
+| Text | T | Type it in the bar above, then click where it goes: it's lifted, ready to drag into place. A 3 x 5 pixel font (capitals, digits, punctuation), at 1 to 6 times |
 
 - **Brush:** size 1 to 64 (**[** and **]**), round or square, a **density** (a 4 x 4 dither: 16 paints every pixel),
-  and **mirror** painting about the middle, across and down.
+  and **mirror** painting about the middle, across and down. **Lock alpha** paints only over what's painted already,
+  so shading stays inside a shape. **Ctrl+B** makes the selection (or what's copied) the brush, stamping its own
+  colors (the right button: in the second color; the eraser erases its shape); **Ctrl+Shift+B** goes back.
 - **Color:** a saturation and brightness square, a hue strip, see-through, and the hex. **Keep** adds the color to
   your swatches (remembered between sessions). **Swatches** shows the picture's own colors and yours: left-click for
-  the first color, right for the second, Alt+right removes one of yours.
+  the first color, right for the second, Alt+right removes one of yours. **Ramp** adds 3 to 12 colors stepping from
+  the first color to the second, the hue going the short way round, for shading.
+- **Frames** (Piskel's and Aseprite's animation): every layer has a picture in every frame. Along the bottom: a new
+  frame, a copy of this one, delete, move earlier or later, each frame's time in milliseconds (Shift+click a frame
+  to give them all this one's), and **,** and **.** to step through them. **Onion skin** shows the frame before in red
+  and the one after in blue, faint, behind this one. **Tags** name runs of frames as animations (`walk_down`,
+  `idle_right`), each forward, reversed or ping-pong, drawn over the frames they cover. The **Preview** on the right
+  loops the animation at its own times while you paint.
 - **Layers:** new, duplicate, up, down, merge down, flatten, delete; each with an eye, a padlock, a name (the active
   one's is typed in) and an opacity.
 - **History:** every step by name; click one to go back to it, or forward again.
 - **Edit:** undo and redo (Ctrl+Z, Ctrl+Shift+Z), cut, copy and paste (Ctrl+X, C, V; between pictures too), delete.
   **Select:** all (Ctrl+A), none (Ctrl+D), invert (Ctrl+Shift+I), everything painted on the layer, crop to the
-  selection. **Image:** canvas size (keeping a side or corner put: the foot by default), trim to what's painted, flip.
-  **Adjust** (the selection or the layer): hue, saturation and brightness (live), replace the first color with the
-  second, lighter, darker, an outline in the first color (with or without corners), make solid.
+  selection. **Image:** canvas size (keeping a side or corner put: the foot by default), **scale** (without smoothing:
+  x2, x3, half, or any size), trim to what's painted, flip, **tiled mode**. **Frame:** the frame commands, onion skin
+  and tags. **Adjust** (the selection or the layer): hue, saturation and brightness (live), replace the first color
+  with the second, lighter, darker, an outline in the first color (with or without corners), make solid.
 - **View:** the wheel zooms toward the mouse, Space-drag or the middle button moves, **0** fits, **1** is one to one,
-  **K** the pixel grid.
+  **K** the pixel grid. A **tile grid** draws brighter lines every 8 to 64 pixels; **tiled mode** (Aseprite's) shows
+  the picture repeated around itself and wraps strokes round its edges, for tiles that join up.
 
-**Ctrl+S** writes the flat PNG the game reads; every stroke already shows in a level and on the game's texture. A
-picture with more than one layer keeps them in `art-layers/` beside the assets folder (never shipped), with a
-fingerprint of its PNG: if the PNG is repainted in another program, it opens as one layer instead. Switching pictures
-or closing the editor saves unsaved paint.
+**Ctrl+S** writes the PNG the game reads; every stroke already shows in a level and on the game's texture. An
+animation saves as a **sprite sheet**: its frames side by side, with Aseprite's JSON beside it (`hero.png` and
+`hero.json`: frames, times and tags), which the engine's sprite sheets read, so a character drawn here walks in the
+game. Opening a PNG with such a JSON beside it (from Aseprite too) opens its frames and tags; anything else in that
+JSON (slices, a pivot for the feet) is kept when it's saved. A picture with more than one layer keeps them (and its
+frames) in `art-layers/` beside the assets folder (never shipped), with a fingerprint of its PNG: if the PNG is
+repainted in another program, it opens as it is instead. Switching pictures or closing the editor saves unsaved paint.
 
 ## Saving and safety
 

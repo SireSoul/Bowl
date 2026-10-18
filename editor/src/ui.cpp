@@ -327,6 +327,70 @@ void draw_icon(ImDrawList* l, Icon icon, ImVec2 c, float size, ImU32 col) {
         l->PathArcTo(c, h * 0.72f, 1.5708f, 4.7124f, 16);
         l->PathFillConvex(col);
         break;
+    case Icon::Lasso: { // a loop with a tail
+        l->AddEllipse(P(0.05f, -0.25f), ImVec2{h * 0.75f, h * 0.5f}, col, 0, 20, t);
+        l->AddBezierCubic(P(-0.45f, 0.1f), P(-0.6f, 0.45f), P(-0.2f, 0.55f), P(-0.45f, 0.9f), col, t, 10);
+        break;
+    }
+    case Icon::Recolor: { // a drop over two swatches, one taking the other's color
+        box(-0.8f, 0.2f, -0.1f, 0.85f);
+        l->AddRectFilled(P(0.1f, 0.2f), P(0.8f, 0.85f), col, 2);
+        ImVec2 drop[] = {P(0, -0.9f), P(0.3f, -0.4f), P(0, -0.15f), P(-0.3f, -0.4f)};
+        l->AddConvexPolyFilled(drop, 4, col);
+        break;
+    }
+    case Icon::Dither: // a checkerboard
+        for (int y = 0; y < 4; ++y)
+            for (int x = 0; x < 4; ++x)
+                if ((x + y) % 2 == 0) l->AddRectFilled(P(-0.8f + x * 0.4f, -0.8f + y * 0.4f), P(-0.4f + x * 0.4f, -0.4f + y * 0.4f), col);
+        break;
+    case Icon::Spray: { // a can and its mist
+        box(-0.75f, -0.15f, -0.15f, 0.85f);
+        line(-0.55f, -0.15f, -0.55f, -0.4f);
+        line(-0.55f, -0.4f, -0.3f, -0.4f);
+        for (ImVec2 d : {ImVec2{0.2f, -0.55f}, ImVec2{0.5f, -0.75f}, ImVec2{0.55f, -0.35f}, ImVec2{0.8f, -0.55f}, ImVec2{0.35f, -0.1f},
+                         ImVec2{0.75f, -0.15f}})
+            l->AddCircleFilled(P(d.x, d.y), h * 0.09f, col);
+        break;
+    }
+    case Icon::Blur: // a drop with soft rings
+        l->AddCircleFilled(c, h * 0.3f, col);
+        l->AddCircle(c, h * 0.55f, (col & 0x00ffffff) | 0xa0000000, 20, t);
+        l->AddCircle(c, h * 0.82f, (col & 0x00ffffff) | 0x50000000, 24, t);
+        break;
+    case Icon::Polygon: { // a five-sided shape
+        ImVec2 pts[] = {P(0, -0.85f), P(0.8f, -0.25f), P(0.5f, 0.75f), P(-0.5f, 0.75f), P(-0.8f, -0.25f)};
+        l->AddPolyline(pts, 5, col, ImDrawFlags_Closed, t);
+        break;
+    }
+    case Icon::Curve:
+        l->AddBezierCubic(P(-0.8f, 0.7f), P(-0.6f, -0.9f), P(0.6f, 0.9f), P(0.8f, -0.7f), col, t, 16);
+        l->AddCircleFilled(P(-0.8f, 0.7f), h * 0.14f, col);
+        l->AddCircleFilled(P(0.8f, -0.7f), h * 0.14f, col);
+        break;
+    case Icon::Text: // a serif T
+        line(-0.7f, -0.75f, 0.7f, -0.75f);
+        line(0, -0.75f, 0, 0.8f);
+        line(-0.3f, 0.8f, 0.3f, 0.8f);
+        line(-0.7f, -0.75f, -0.7f, -0.5f);
+        line(0.7f, -0.75f, 0.7f, -0.5f);
+        break;
+    case Icon::Onion: // frames before and after, faint, behind this one
+        l->AddRect(P(-0.85f, -0.55f), P(0.15f, 0.45f), (col & 0x00ffffff) | 0x60000000, 2, 0, t);
+        l->AddRect(P(-0.15f, -0.45f), P(0.85f, 0.55f), (col & 0x00ffffff) | 0x60000000, 2, 0, t);
+        l->AddRectFilled(P(-0.5f, -0.5f), P(0.5f, 0.5f), col, 2);
+        break;
+    case Icon::Tiles: // the picture repeated
+        box(-0.85f, -0.85f, -0.05f, -0.05f);
+        box(0.05f, -0.85f, 0.85f, -0.05f);
+        box(-0.85f, 0.05f, -0.05f, 0.85f);
+        box(0.05f, 0.05f, 0.85f, 0.85f);
+        break;
+    case Icon::Frames: // a strip of film
+        box(-0.85f, -0.55f, 0.85f, 0.55f);
+        line(-0.28f, -0.55f, -0.28f, 0.55f);
+        line(0.28f, -0.55f, 0.28f, 0.55f);
+        break;
     case Icon::Eraser: {
         ImVec2 pts[] = {P(-0.75f, 0.25f), P(0.05f, -0.55f), P(0.65f, 0.05f), P(-0.15f, 0.85f)};
         l->AddPolyline(pts, 4, col, ImDrawFlags_Closed, t);

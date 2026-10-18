@@ -38,6 +38,54 @@ f32 lean(f32 h, f32 target, f32 step) {
     return std::fmod(h + std::clamp(d, -step, step) + 360.0f, 360.0f);
 }
 
+// Pseudo-random numbers that tests can repeat (xorshift32).
+u32 next(u32& seed) {
+    if (!seed) seed = 2463534242u;
+    seed ^= seed << 13;
+    seed ^= seed >> 17;
+    seed ^= seed << 5;
+    return seed;
+}
+
+// The 3 x 5 font: five rows of three bits each, the top row in the high bits.
+struct Glyph {
+    char c;
+    u16 rows;
+};
+constexpr u16 g(u16 a, u16 b, u16 c, u16 d, u16 e) { return static_cast<u16>(a << 12 | b << 9 | c << 6 | d << 3 | e); }
+constexpr Glyph font[] = {
+    {'A', g(2, 5, 7, 5, 5)}, {'B', g(6, 5, 6, 5, 6)}, {'C', g(3, 4, 4, 4, 3)}, {'D', g(6, 5, 5, 5, 6)}, {'E', g(7, 4, 6, 4, 7)},
+    {'F', g(7, 4, 6, 4, 4)}, {'G', g(3, 4, 5, 5, 3)}, {'H', g(5, 5, 7, 5, 5)}, {'I', g(7, 2, 2, 2, 7)}, {'J', g(1, 1, 1, 5, 2)},
+    {'K', g(5, 5, 6, 5, 5)}, {'L', g(4, 4, 4, 4, 7)}, {'M', g(5, 7, 7, 5, 5)}, {'N', g(6, 5, 5, 5, 5)}, {'O', g(2, 5, 5, 5, 2)},
+    {'P', g(6, 5, 6, 4, 4)}, {'Q', g(2, 5, 5, 6, 3)}, {'R', g(6, 5, 6, 5, 5)}, {'S', g(3, 4, 2, 1, 6)}, {'T', g(7, 2, 2, 2, 2)},
+    {'U', g(5, 5, 5, 5, 7)}, {'V', g(5, 5, 5, 5, 2)}, {'W', g(5, 5, 7, 7, 5)}, {'X', g(5, 5, 2, 5, 5)}, {'Y', g(5, 5, 2, 2, 2)},
+    {'Z', g(7, 1, 2, 4, 7)}, {'0', g(7, 5, 5, 5, 7)}, {'1', g(2, 6, 2, 2, 7)}, {'2', g(6, 1, 2, 4, 7)}, {'3', g(6, 1, 2, 1, 6)},
+    {'4', g(5, 5, 7, 1, 1)}, {'5', g(7, 4, 6, 1, 6)}, {'6', g(3, 4, 6, 5, 2)}, {'7', g(7, 1, 2, 2, 2)}, {'8', g(2, 5, 2, 5, 2)},
+    {'9', g(2, 5, 3, 1, 6)}, {'.', g(0, 0, 0, 0, 2)}, {',', g(0, 0, 0, 2, 4)}, {'!', g(2, 2, 2, 0, 2)}, {'?', g(6, 1, 2, 0, 2)},
+    {':', g(0, 2, 0, 2, 0)}, {';', g(0, 2, 0, 2, 4)}, {'\'', g(2, 2, 0, 0, 0)}, {'"', g(5, 5, 0, 0, 0)}, {'-', g(0, 0, 7, 0, 0)},
+    {'+', g(0, 2, 7, 2, 0)}, {'=', g(0, 7, 0, 7, 0)}, {'/', g(1, 1, 2, 4, 4)}, {'(', g(1, 2, 2, 2, 1)}, {')', g(4, 2, 2, 2, 4)},
+    {'%', g(5, 1, 2, 4, 5)}, {'_', g(0, 0, 0, 0, 7)}, {'<', g(1, 2, 4, 2, 1)}, {'>', g(4, 2, 1, 2, 4)}, {'*', g(0, 5, 2, 5, 0)},
+    {'#', g(5, 7, 5, 7, 5)}, {'[', g(3, 2, 2, 2, 3)}, {']', g(6, 2, 2, 2, 6)}, {'&', g(2, 5, 2, 5, 3)}, {'$', g(3, 6, 2, 3, 6)},
+    {'@', g(2, 5, 7, 4, 3)}, {'^', g(2, 5, 0, 0, 0)}, {'~', g(0, 3, 6, 0, 0)}, {'|', g(2, 2, 2, 2, 2)},
+};
+// A glyph's rows (a box for characters the font lacks, nothing for a space), and the columns it uses.
+u16 glyph_rows(char c) {
+    if (c == ' ') return 0;
+    if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
+    for (const Glyph& gl : font)
+        if (gl.c == c) return gl.rows;
+    return g(7, 5, 5, 5, 7);
+}
+// The first and last columns with any pixel (narrow punctuation takes less room); a space is two columns.
+std::pair<i32, i32> glyph_columns(u16 rows) {
+    if (!rows) return {0, 1};
+    i32 first = 3, last = -1;
+    for (i32 r = 0; r < 5; ++r)
+        for (i32 c = 0; c < 3; ++c)
+            if (rows >> ((4 - r) * 3 + (2 - c)) & 1) first = std::min(first, c), last = std::max(last, c);
+    return {first, last};
+}
+
 } // namespace
 
 Pixel blend(Pixel under, Pixel over, f32 opacity) {
@@ -229,6 +277,116 @@ void ellipse(Point a, Point b, bool filled, const Put& put) {
             for (i64 x = span.first; x <= span.second; ++x) put(static_cast<i32>(x), static_cast<i32>(y));
 }
 
+void rounded_box(Point a, Point b, i32 radius, bool filled, const Put& put) {
+    i32 x0 = std::min(a.x, b.x), x1 = std::max(a.x, b.x), y0 = std::min(a.y, b.y), y1 = std::max(a.y, b.y);
+    i32 r = std::clamp(radius, 0, std::min(x1 - x0, y1 - y0) / 2);
+    // How far in each row starts: none in the middle, more toward the corners (a quarter circle).
+    auto inset = [&](i32 y) {
+        i32 d = std::min(y - y0, y1 - y); // rows from the nearest edge
+        if (d >= r) return 0;
+        f32 dy = static_cast<f32>(r - d) - 0.5f;
+        return r - static_cast<i32>(std::lround(std::sqrt(std::max(0.0f, static_cast<f32>(r * r) - dy * dy))));
+    };
+    auto in = [&](i32 x, i32 y) { return y >= y0 && y <= y1 && x >= x0 + inset(y) && x <= x1 - inset(y); };
+    for (i32 y = y0; y <= y1; ++y)
+        for (i32 x = x0 + inset(y); x <= x1 - inset(y); ++x)
+            if (filled || !in(x - 1, y) || !in(x + 1, y) || !in(x, y - 1) || !in(x, y + 1)) put(x, y);
+}
+
+void polygon(const std::vector<Point>& points, bool filled, const Put& put) {
+    if (points.empty()) return;
+    if (filled && points.size() >= 3) {
+        // Every pixel whose middle is inside (even-odd), row by row.
+        i32 y0 = points[0].y, y1 = points[0].y;
+        for (Point p : points) y0 = std::min(y0, p.y), y1 = std::max(y1, p.y);
+        std::vector<f32> xs;
+        for (i32 y = y0; y <= y1; ++y) {
+            xs.clear();
+            f32 cy = static_cast<f32>(y) + 0.5f;
+            for (usize i = 0; i < points.size(); ++i) {
+                Point p = points[i], q = points[(i + 1) % points.size()];
+                f32 py = static_cast<f32>(p.y) + 0.5f, qy = static_cast<f32>(q.y) + 0.5f;
+                if ((py <= cy) == (qy <= cy)) continue;
+                xs.push_back(static_cast<f32>(p.x) + 0.5f + (cy - py) / (qy - py) * static_cast<f32>(q.x - p.x));
+            }
+            std::sort(xs.begin(), xs.end());
+            for (usize k = 0; k + 1 < xs.size(); k += 2)
+                for (i32 x = static_cast<i32>(std::ceil(xs[k] - 0.5f)); static_cast<f32>(x) + 0.5f <= xs[k + 1]; ++x) put(x, y);
+        }
+    }
+    // The outline closes the shape (and fills it out to its edges).
+    for (usize i = 0; i < points.size(); ++i) line(points[i], points[(i + 1) % points.size()], put);
+}
+
+void curve(Point a, Point control, Point b, const Put& put) {
+    // Enough steps that each moves less than a pixel, joined by lines so nothing's missed.
+    f32 len = static_cast<f32>(std::abs(control.x - a.x) + std::abs(control.y - a.y) + std::abs(b.x - control.x) + std::abs(b.y - control.y));
+    i32 steps = std::max(1, static_cast<i32>(len));
+    Point prev = a;
+    std::vector<Point> seen;
+    auto once = [&](i32 x, i32 y) {
+        if (!seen.empty() && seen.back() == Point{x, y}) return;
+        seen.push_back({x, y});
+        put(x, y);
+    };
+    for (i32 i = 1; i <= steps; ++i) {
+        f32 t = static_cast<f32>(i) / static_cast<f32>(steps), u = 1 - t;
+        Point p{static_cast<i32>(std::lround(u * u * a.x + 2 * u * t * control.x + t * t * b.x)),
+                static_cast<i32>(std::lround(u * u * a.y + 2 * u * t * control.y + t * t * b.y))};
+        if (i == 1) once(a.x, a.y);
+        if (!(p == prev)) line(prev, p, [&](i32 x, i32 y) {
+            if (!(Point{x, y} == prev)) once(x, y);
+        });
+        prev = p;
+    }
+}
+
+Point control_through(Point a, Point b, Point through) {
+    return {2 * through.x - (a.x + b.x) / 2, 2 * through.y - (a.y + b.y) / 2};
+}
+
+void spray(Point at, i32 radius, i32 count, u32& seed, const Put& put) {
+    i32 r = std::max(1, radius);
+    for (i32 n = 0; n < count;) {
+        i32 dx = static_cast<i32>(next(seed) % static_cast<u32>(2 * r + 1)) - r, dy = static_cast<i32>(next(seed) % static_cast<u32>(2 * r + 1)) - r;
+        if (dx * dx + dy * dy > r * r) continue; // within the circle, evenly
+        put(at.x + dx, at.y + dy);
+        ++n;
+    }
+}
+
+void text(std::string_view s, Point at, i32 scale, const Put& put) {
+    i32 k = std::max(1, scale), x = at.x, y = at.y;
+    for (char c : s) {
+        if (c == '\n') {
+            x = at.x, y += 6 * k;
+            continue;
+        }
+        u16 rows = glyph_rows(c);
+        auto [first, last] = glyph_columns(rows);
+        for (i32 r = 0; r < 5; ++r)
+            for (i32 col = first; col <= last; ++col)
+                if (rows >> ((4 - r) * 3 + (2 - col)) & 1)
+                    for (i32 py = 0; py < k; ++py)
+                        for (i32 px = 0; px < k; ++px) put(x + (col - first) * k + px, y + r * k + py);
+        x += (last - first + 2) * k;
+    }
+}
+
+Point text_size(std::string_view s, i32 scale) {
+    i32 k = std::max(1, scale), w = 0, line_w = 0, lines = 1;
+    for (char c : s) {
+        if (c == '\n') {
+            w = std::max(w, line_w), line_w = 0, ++lines;
+            continue;
+        }
+        auto [first, last] = glyph_columns(glyph_rows(c));
+        line_w += (last - first + 2) * k;
+    }
+    w = std::max(w, line_w);
+    return {std::max(0, w - k), lines * 6 * k - k}; // no space after the last letter or below the last line
+}
+
 std::vector<Point> pixel_perfect(const std::vector<Point>& points) {
     std::vector<Point> out;
     for (Point c : points) {
@@ -362,6 +520,53 @@ void opaque(Image& img, const Mask& area) {
         }
 }
 
+Pixel blurred(const Image& img, i32 x, i32 y) {
+    f32 r = 0, gr = 0, b = 0, a = 0, n = 0;
+    for (i32 dy = -1; dy <= 1; ++dy)
+        for (i32 dx = -1; dx <= 1; ++dx) {
+            if (!img.inside(x + dx, y + dy)) continue;
+            Pixel p = img.get(x + dx, y + dy);
+            f32 w = alpha(p) / 255.0f;
+            r += red(p) * w, gr += green(p) * w, b += blue(p) * w, a += w, n += 1;
+        }
+    if (a <= 0) return clear;
+    return rgba(static_cast<u8>(std::lround(r / a)), static_cast<u8>(std::lround(gr / a)), static_cast<u8>(std::lround(b / a)),
+                static_cast<u8>(std::lround(a / n * 255)));
+}
+
+Pixel jumbled(const Image& img, i32 x, i32 y, u32& seed) {
+    i32 dx = static_cast<i32>(next(seed) % 3) - 1, dy = static_cast<i32>(next(seed) % 3) - 1;
+    return img.inside(x + dx, y + dy) ? img.get(x + dx, y + dy) : img.get(x, y);
+}
+
+Image scaled(const Image& img, i32 w, i32 h) {
+    Image out(std::max(1, w), std::max(1, h));
+    if (img.width() <= 0 || img.height() <= 0) return out;
+    for (i32 y = 0; y < out.height(); ++y)
+        for (i32 x = 0; x < out.width(); ++x)
+            out.set(x, y, img.get(static_cast<i32>(static_cast<i64>(x) * img.width() / out.width()),
+                                  static_cast<i32>(static_cast<i64>(y) * img.height() / out.height())));
+    return out;
+}
+
+std::vector<Pixel> ramp(Pixel a, Pixel b, i32 steps) {
+    std::vector<Pixel> out;
+    i32 n = std::max(2, steps);
+    Hsv ha = to_hsv(a), hb = to_hsv(b);
+    // A grey has no hue of its own: it takes the other color's.
+    if (ha.s < 0.01f) ha.h = hb.h;
+    if (hb.s < 0.01f) hb.h = ha.h;
+    f32 dh = std::fmod(hb.h - ha.h + 540.0f, 360.0f) - 180.0f;
+    for (i32 i = 0; i < n; ++i) {
+        f32 t = static_cast<f32>(i) / static_cast<f32>(n - 1);
+        if (i == 0) out.push_back(a);
+        else if (i == n - 1) out.push_back(b);
+        else out.push_back(from_hsv({ha.h + dh * t, ha.s + (hb.s - ha.s) * t, ha.v + (hb.v - ha.v) * t},
+                                    static_cast<u8>(std::lround(alpha(a) + (alpha(b) - alpha(a)) * t))));
+    }
+    return out;
+}
+
 Image flipped(const Image& img, bool across) {
     Image out(img.width(), img.height());
     for (i32 y = 0; y < img.height(); ++y)
@@ -402,22 +607,184 @@ std::vector<Pixel> colors_of(const Image& img, usize most) {
 
 Document::Document(Image picture) : w_(picture.width()), h_(picture.height()) {
     layers.push_back({"Layer 1", std::move(picture)});
+    layers[0].frames.resize(1);
     selection = Mask(w_, h_);
     history_ = {state("Opened")};
 }
 
 Document::Document(i32 w, i32 h) : Document(Image(w, h)) { history_[0].label = "New picture"; }
 
-Image Document::composite() const {
+Image Document::composite() const { return composite(frame_); }
+
+Image Document::composite(usize frame) const {
     Image out(w_, h_);
     for (usize li = 0; li < layers.size(); ++li) {
         const Layer& l = layers[li];
         if (!l.visible) continue;
-        Image src = l.image;
-        if (li == active && floating) src.paste(floating->image, floating->x, floating->y, true);
-        for (usize i = 0; i < out.pixels().size(); ++i) out.pixels()[i] = blend(out.pixels()[i], src.pixels()[i], l.opacity);
+        const Image& cel_image = cel(li, frame);
+        if (cel_image.width() != w_ || cel_image.height() != h_) continue;
+        if (li == active && floating && frame == frame_) {
+            Image src = cel_image;
+            src.paste(floating->image, floating->x, floating->y, true);
+            for (usize i = 0; i < out.pixels().size(); ++i) out.pixels()[i] = blend(out.pixels()[i], src.pixels()[i], l.opacity);
+        } else {
+            for (usize i = 0; i < out.pixels().size(); ++i) out.pixels()[i] = blend(out.pixels()[i], cel_image.pixels()[i], l.opacity);
+        }
     }
     return out;
+}
+
+const Image& Document::cel(usize layer, usize frame) const {
+    const Layer& l = layers[layer];
+    if (frame == frame_ || frame >= l.frames.size()) return l.image;
+    return l.frames[frame];
+}
+
+void Document::sync() {
+    for (Layer& l : layers) {
+        l.frames.resize(frame_count());
+        l.frames[frame_] = l.image;
+    }
+}
+
+void Document::load_frame() {
+    for (Layer& l : layers) l.image = l.frames[frame_];
+}
+
+void Document::each_cel(const std::function<void(Image&)>& f) {
+    sync();
+    for (Layer& l : layers)
+        for (Image& img : l.frames) f(img);
+    load_frame();
+}
+
+void Document::show_frame(usize f) {
+    if (f >= frame_count() || f == frame_) return;
+    put_down();
+    sync();
+    frame_ = f;
+    load_frame();
+}
+
+void Document::add_frame(bool copy) {
+    put_down();
+    sync();
+    for (Layer& l : layers)
+        l.frames.insert(l.frames.begin() + static_cast<std::ptrdiff_t>(frame_ + 1), copy ? l.frames[frame_] : Image(w_, h_));
+    durations_.insert(durations_.begin() + static_cast<std::ptrdiff_t>(frame_ + 1), durations_[frame_]);
+    // Tags after it move along; a tag it's inside of grows.
+    for (Tag& t : tags) {
+        if (t.from > frame_) ++t.from;
+        if (t.to >= frame_) ++t.to;
+    }
+    ++frame_;
+    load_frame();
+    commit(copy ? "Duplicate frame" : "New frame");
+}
+
+void Document::remove_frame() {
+    if (frame_count() <= 1) return;
+    put_down();
+    sync();
+    for (Layer& l : layers) l.frames.erase(l.frames.begin() + static_cast<std::ptrdiff_t>(frame_));
+    durations_.erase(durations_.begin() + static_cast<std::ptrdiff_t>(frame_));
+    for (Tag& t : tags) {
+        if (t.from > frame_) --t.from;
+        if (t.to >= frame_ && t.to > 0) --t.to;
+    }
+    std::erase_if(tags, [&](const Tag& t) { return t.from > t.to || t.from >= frame_count(); });
+    if (frame_ >= frame_count()) frame_ = frame_count() - 1;
+    load_frame();
+    commit("Delete frame");
+}
+
+void Document::move_frame(i32 by) {
+    i64 to = static_cast<i64>(frame_) + by;
+    if (to < 0 || to >= static_cast<i64>(frame_count())) return;
+    put_down();
+    sync();
+    for (Layer& l : layers) std::swap(l.frames[frame_], l.frames[static_cast<usize>(to)]);
+    std::swap(durations_[frame_], durations_[static_cast<usize>(to)]);
+    frame_ = static_cast<usize>(to);
+    load_frame();
+    commit(by > 0 ? "Move frame later" : "Move frame earlier");
+}
+
+void Document::set_duration(usize f, i32 ms) {
+    if (f >= frame_count()) return;
+    durations_[f] = std::clamp(ms, 1, 60000);
+    commit("Frame duration");
+}
+
+Image Document::sheet(i32 columns) const {
+    i32 n = static_cast<i32>(frame_count()), cols = columns > 0 ? std::min(columns, n) : n, rows = (n + cols - 1) / cols;
+    Image out(w_ * cols, h_ * rows);
+    for (i32 f = 0; f < n; ++f) out.paste(composite(static_cast<usize>(f)), (f % cols) * w_, (f / cols) * h_);
+    return out;
+}
+
+json::Value Document::sheet_json(std::string_view image, i32 columns) const {
+    i32 n = static_cast<i32>(frame_count()), cols = columns > 0 ? std::min(columns, n) : n, rows = (n + cols - 1) / cols;
+    std::string base(image);
+    if (auto slash = base.find_last_of('/'); slash != std::string::npos) base = base.substr(slash + 1);
+    if (auto dot = base.find_last_of('.'); dot != std::string::npos) base = base.substr(0, dot);
+    json::Value frames;
+    frames.make_array();
+    auto rect = [](i32 x, i32 y, i32 w, i32 h) {
+        json::Value r;
+        r.set("x", x), r.set("y", y), r.set("w", w), r.set("h", h);
+        return r;
+    };
+    for (i32 f = 0; f < n; ++f) {
+        json::Value o;
+        o.set("filename", base + " " + std::to_string(f) + ".aseprite");
+        o.set("frame", rect((f % cols) * w_, (f / cols) * h_, w_, h_));
+        o.set("rotated", false);
+        o.set("trimmed", false);
+        o.set("spriteSourceSize", rect(0, 0, w_, h_));
+        json::Value size;
+        size.set("w", w_), size.set("h", h_);
+        o.set("sourceSize", std::move(size));
+        o.set("duration", duration(static_cast<usize>(f)));
+        frames.push(std::move(o));
+    }
+    json::Value meta;
+    meta.set("app", "Bowl Editor");
+    meta.set("image", std::string(image));
+    meta.set("format", "RGBA8888");
+    json::Value size;
+    size.set("w", w_ * cols), size.set("h", h_ * rows);
+    meta.set("size", std::move(size));
+    meta.set("scale", "1");
+    json::Value tag_list;
+    tag_list.make_array();
+    for (const Tag& t : tags) {
+        json::Value o;
+        o.set("name", t.name);
+        o.set("from", static_cast<f64>(t.from));
+        o.set("to", static_cast<f64>(t.to));
+        o.set("direction", t.direction);
+        tag_list.push(std::move(o));
+    }
+    meta.set("frameTags", std::move(tag_list));
+    json::Value doc;
+    doc.set("frames", std::move(frames));
+    doc.set("meta", std::move(meta));
+    return doc;
+}
+
+Document Document::from_frames(std::vector<Image> frames, std::vector<i32> durations, std::vector<Tag> tags) {
+    if (frames.empty()) return Document(1, 1);
+    Document d(frames[0]);
+    d.layers[0].frames = std::move(frames);
+    d.durations_ = std::move(durations);
+    d.durations_.resize(d.layers[0].frames.size(), 100);
+    for (i32& ms : d.durations_) ms = std::clamp(ms, 1, 60000);
+    d.tags = std::move(tags);
+    d.frame_ = 0;
+    d.load_frame();
+    d.history_ = {d.state("Opened")};
+    return d;
 }
 
 bool Document::editable(i32 x, i32 y) const {
@@ -425,11 +792,16 @@ bool Document::editable(i32 x, i32 y) const {
     return !selection_any_ || selection.test(x, y);
 }
 
-Document::State Document::state(std::string label) const { return {std::move(label), w_, h_, layers, active, selection}; }
+Document::State Document::state(std::string label) const {
+    return {std::move(label), w_, h_, layers, active, selection, frame_, durations_, tags};
+}
 
 void Document::restore(const State& s) {
     w_ = s.w, h_ = s.h;
     layers = s.layers;
+    frame_ = s.frame;
+    durations_ = s.durations;
+    tags = s.tags;
     active = std::min(s.active, layers.empty() ? 0 : layers.size() - 1);
     selection = s.selection;
     floating.reset();
@@ -443,7 +815,10 @@ void Document::commit(std::string label) {
     history_.resize(cursor_ + 1);
     history_.push_back(state(std::move(label)));
     if (saved_ > cursor_) saved_ = static_cast<usize>(-1); // the saved state can't come back
-    if (history_.size() > 200) { // pictures are small, but not that small
+    // Pictures are small, but not that small: up to 200 steps, fewer for big animations (about 256 MB at most).
+    usize pixels = static_cast<usize>(w_) * static_cast<usize>(h_) * std::max<usize>(1, layers.size()) * frame_count();
+    usize most = std::clamp<usize>((usize{64} << 20) / std::max<usize>(1, pixels), 20, 200);
+    while (history_.size() > most) {
         history_.erase(history_.begin());
         if (saved_ != static_cast<usize>(-1)) saved_ = saved_ > 0 ? saved_ - 1 : static_cast<usize>(-1);
     }
@@ -479,7 +854,9 @@ void Document::go_to(usize step) {
 }
 
 void Document::add_layer(std::string name) {
-    layers.insert(layers.begin() + static_cast<std::ptrdiff_t>(layers.empty() ? 0 : active + 1), Layer{std::move(name), Image(w_, h_)});
+    Layer l{std::move(name), Image(w_, h_)};
+    l.frames.assign(frame_count(), Image(w_, h_));
+    layers.insert(layers.begin() + static_cast<std::ptrdiff_t>(layers.empty() ? 0 : active + 1), std::move(l));
     active = layers.size() == 1 ? 0 : active + 1;
     commit("New layer");
 }
@@ -509,10 +886,14 @@ void Document::move_layer(i32 by) {
 
 void Document::merge_down() {
     if (active == 0) return;
+    put_down();
+    sync();
     Layer& below = layers[active - 1];
     const Layer& top = layers[active];
-    for (usize i = 0; i < below.image.pixels().size(); ++i)
-        below.image.pixels()[i] = blend(below.image.pixels()[i], top.visible ? top.image.pixels()[i] : clear, top.opacity);
+    for (usize f = 0; f < frame_count(); ++f)
+        for (usize i = 0; i < below.frames[f].pixels().size(); ++i)
+            below.frames[f].pixels()[i] = blend(below.frames[f].pixels()[i], top.visible ? top.frames[f].pixels()[i] : clear, top.opacity);
+    below.image = below.frames[frame_];
     layers.erase(layers.begin() + static_cast<std::ptrdiff_t>(active));
     --active;
     commit("Merge down");
@@ -520,8 +901,9 @@ void Document::merge_down() {
 
 void Document::flatten() {
     put_down();
-    Image all = composite();
-    layers = {Layer{"Layer 1", std::move(all)}};
+    Layer all{"Layer 1", composite()};
+    for (usize f = 0; f < frame_count(); ++f) all.frames.push_back(composite(f));
+    layers = {std::move(all)};
     active = 0;
     commit("Flatten");
 }
@@ -531,11 +913,11 @@ void Document::resize(i32 w, i32 h, f32 anchor_x, f32 anchor_y) {
     put_down();
     i32 dx = static_cast<i32>(std::lround(static_cast<f32>(w - w_) * anchor_x));
     i32 dy = static_cast<i32>(std::lround(static_cast<f32>(h - h_) * anchor_y));
-    for (Layer& l : layers) {
+    each_cel([&](Image& img) {
         Image n(w, h);
-        n.paste(l.image, dx, dy);
-        l.image = std::move(n);
-    }
+        n.paste(img, dx, dy);
+        img = std::move(n);
+    });
     w_ = w, h_ = h;
     selection = Mask(w, h);
     commit("Canvas size");
@@ -544,14 +926,22 @@ void Document::resize(i32 w, i32 h, f32 anchor_x, f32 anchor_y) {
 void Document::crop(Box b) {
     if (b.empty()) return;
     put_down();
-    for (Layer& l : layers) l.image = l.image.cut(b);
+    each_cel([&](Image& img) { img = img.cut(b); });
     w_ = b.w, h_ = b.h;
     selection = Mask(w_, h_);
     commit("Crop");
 }
 
 Box Document::trim() {
-    Box b = painted_bounds(composite());
+    // What's painted in any frame.
+    Box b;
+    for (usize f = 0; f < frame_count(); ++f) {
+        Box fb = painted_bounds(composite(f));
+        if (fb.empty()) continue;
+        if (b.empty()) b = fb;
+        i32 x1 = std::max(b.x + b.w, fb.x + fb.w), y1 = std::max(b.y + b.h, fb.y + fb.h);
+        b.x = std::min(b.x, fb.x), b.y = std::min(b.y, fb.y), b.w = x1 - b.x, b.h = y1 - b.y;
+    }
     if (b.empty() || (b.w == w_ && b.h == h_)) return b;
     crop(b);
     history_[cursor_].label = "Trim";
@@ -560,8 +950,17 @@ Box Document::trim() {
 
 void Document::flip(bool across) {
     put_down();
-    for (Layer& l : layers) l.image = flipped(l.image, across);
+    each_cel([&](Image& img) { img = flipped(img, across); });
     commit(across ? "Flip across" : "Flip upside down");
+}
+
+void Document::scale(i32 w, i32 h) {
+    if (w <= 0 || h <= 0 || (w == w_ && h == h_)) return;
+    put_down();
+    each_cel([&](Image& img) { img = scaled(img, w, h); });
+    w_ = w, h_ = h;
+    selection = Mask(w, h);
+    commit("Scale");
 }
 
 void Document::select_all() {
@@ -688,20 +1087,50 @@ json::Value Document::to_json() const {
     doc.set("width", w_);
     doc.set("height", h_);
     doc.set("active", static_cast<f64>(active));
+    doc.set("frame", static_cast<f64>(frame_));
+    auto encode = [](const Image& img) {
+        std::vector<u8> bytes(img.pixels().size() * 4);
+        std::memcpy(bytes.data(), img.pixels().data(), bytes.size());
+        return base64(bytes);
+    };
     json::Value list;
     list.make_array();
-    for (const Layer& l : layers) {
-        std::vector<u8> bytes(l.image.pixels().size() * 4);
-        std::memcpy(bytes.data(), l.image.pixels().data(), bytes.size());
+    for (usize li = 0; li < layers.size(); ++li) {
+        const Layer& l = layers[li];
         json::Value o;
         o.set("name", l.name);
         o.set("visible", l.visible);
         o.set("locked", l.locked);
         o.set("opacity", l.opacity);
-        o.set("rgba", base64(bytes));
+        o.set("rgba", encode(l.image));
+        if (frame_count() > 1) {
+            json::Value cels;
+            cels.make_array();
+            for (usize f = 0; f < frame_count(); ++f) cels.push(encode(cel(li, f)));
+            o.set("frames", std::move(cels));
+        }
         list.push(std::move(o));
     }
     doc.set("layers", std::move(list));
+    if (frame_count() > 1 || durations_[0] != 100) {
+        json::Value ms;
+        ms.make_array();
+        for (i32 d : durations_) ms.push(d);
+        doc.set("durations", std::move(ms));
+    }
+    if (!tags.empty()) {
+        json::Value tag_list;
+        tag_list.make_array();
+        for (const Tag& t : tags) {
+            json::Value o;
+            o.set("name", t.name);
+            o.set("from", static_cast<f64>(t.from));
+            o.set("to", static_cast<f64>(t.to));
+            o.set("direction", t.direction);
+            tag_list.push(std::move(o));
+        }
+        doc.set("tags", std::move(tag_list));
+    }
     return doc;
 }
 
@@ -710,14 +1139,37 @@ std::optional<Document> Document::from_json(const json::Value& v) {
     if (w <= 0 || h <= 0 || w > 8192 || h > 8192 || !v["layers"].is_array() || v["layers"].size() == 0) return std::nullopt;
     Document d(w, h);
     d.layers.clear();
+    if (v["durations"].is_array() && v["durations"].size() > 0) {
+        d.durations_.clear();
+        for (const json::Value& ms : v["durations"].array()) d.durations_.push_back(std::clamp(static_cast<i32>(ms.as_int(100)), 1, 60000));
+    }
+    usize frames = d.frame_count();
+    auto decode = [&](std::string_view text, Image& out) {
+        std::vector<u8> bytes = unbase64(text);
+        if (bytes.size() != static_cast<usize>(w) * static_cast<usize>(h) * 4) return false;
+        out = Image(w, h);
+        std::memcpy(out.pixels().data(), bytes.data(), bytes.size());
+        return true;
+    };
     for (const json::Value& o : v["layers"].array()) {
-        std::vector<u8> bytes = unbase64(o["rgba"].as_string());
-        if (bytes.size() != static_cast<usize>(w) * static_cast<usize>(h) * 4) return std::nullopt;
         Layer l{std::string(o["name"].as_string("Layer")), Image(w, h), o["visible"].as_bool(true), o["locked"].as_bool(false),
                 o["opacity"].as_float(1)};
-        std::memcpy(l.image.pixels().data(), bytes.data(), bytes.size());
+        if (!decode(o["rgba"].as_string(), l.image)) return std::nullopt;
+        l.frames.resize(frames, Image(w, h));
+        if (frames > 1) {
+            if (!o["frames"].is_array() || o["frames"].size() != frames) return std::nullopt;
+            for (usize f = 0; f < frames; ++f)
+                if (!decode(o["frames"][f].as_string(), l.frames[f])) return std::nullopt;
+        }
         d.layers.push_back(std::move(l));
     }
+    for (const json::Value& t : v["tags"].array()) {
+        Tag tag{std::string(t["name"].as_string()), static_cast<usize>(t["from"].as_int()), static_cast<usize>(t["to"].as_int()),
+                std::string(t["direction"].as_string("forward"))};
+        if (tag.from <= tag.to && tag.to < frames) d.tags.push_back(std::move(tag));
+    }
+    d.frame_ = std::min<usize>(static_cast<usize>(v["frame"].as_int()), frames - 1);
+    if (frames > 1) d.load_frame();
     d.active = std::min<usize>(static_cast<usize>(v["active"].as_int()), d.layers.size() - 1);
     d.history_ = {d.state("Opened")};
     d.cursor_ = d.saved_ = 0;

@@ -6,10 +6,12 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
-// Bowl Editor's pixel painting, without any windows: pictures in layers, a selection, the tools' shapes (brushes,
-// lines, boxes, ellipses, fills, gradients), adjustments, and an undo history. The Paint workspace draws and drives
+// Bowl Editor's pixel painting, without any windows: pictures in layers and animation frames, a selection, the
+// tools' shapes (brushes, lines, curves, boxes, ellipses, polygons, spray, text, fills, gradients), adjustments, and
+// an undo history. The Paint workspace draws and drives
 // it; tests/test_paint.cpp checks it.
 namespace bowl::paint {
 
@@ -109,6 +111,20 @@ Point snap_line(Point a, Point b);
 void box(Point a, Point b, bool filled, bool diamond, const Put& put);
 // The ellipse inside the box from one corner to the other: a clean one-pixel outline, or filled.
 void ellipse(Point a, Point b, bool filled, const Put& put);
+// A box with its corners rounded off by `radius` pixels (0: square corners).
+void rounded_box(Point a, Point b, i32 radius, bool filled, const Put& put);
+// A closed shape through the points, in order: its outline, or filled (the outline and everything inside it).
+void polygon(const std::vector<Point>& points, bool filled, const Put& put);
+// A curve from `a` to `b` bent toward `control` (a quadratic Bezier), one pixel thick with no gaps.
+void curve(Point a, Point control, Point b, const Put& put);
+// The control point that makes a curve from `a` to `b` pass through `through` halfway along.
+Point control_through(Point a, Point b, Point through);
+// `count` pixels at random within `radius` of `at`: a spray can. `seed` moves on, so each call sprays new pixels.
+void spray(Point at, i32 radius, i32 count, u32& seed, const Put& put);
+// Text in Bowl's 3 x 5 pixel font (letters, digits and common punctuation; lower case is drawn as upper case), its
+// top left at `at`, each font pixel `scale` pixels square. '\n' starts a new line. text_size: how big it comes out.
+void text(std::string_view s, Point at, i32 scale, const Put& put);
+Point text_size(std::string_view s, i32 scale);
 // A stroke's points with the L-shaped corners of one-pixel lines taken out (pixel-perfect drawing).
 std::vector<Point> pixel_perfect(const std::vector<Point>& points);
 
@@ -142,6 +158,14 @@ void adjust(Image& img, const Mask& area, f32 hue, f32 saturation, f32 brightnes
 void replace(Image& img, const Mask& area, Pixel from, Pixel to, i32 tolerance);
 // A one-pixel outline in `color` around what's painted (only in clear pixels next to it; `corners`: diagonally too).
 void outline(Image& img, const Mask& area, Pixel color, bool corners);
+// The pixel blurred with its neighbors (each weighted by how solid it is), for the Blur tool.
+Pixel blurred(const Image& img, i32 x, i32 y);
+// A neighbor's color, picked at random, for the Jumble tool (Aseprite's): scatters pixels like a rough brush.
+Pixel jumbled(const Image& img, i32 x, i32 y, u32& seed);
+// Resized without smoothing: every pixel stays a crisp block (or several become one).
+Image scaled(const Image& img, i32 w, i32 h);
+// `steps` colors from `a` to `b` (both included), with the hue going the short way round: a color ramp.
+std::vector<Pixel> ramp(Pixel a, Pixel b, i32 steps);
 // Every partly see-through pixel made solid.
 void opaque(Image& img, const Mask& area);
 Image flipped(const Image& img, bool across); // across: left and right swap; otherwise top and bottom
@@ -155,9 +179,20 @@ std::vector<Pixel> colors_of(const Image& img, usize most);
 
 struct Layer {
     std::string name;
-    Image image;
+    Image image; // the frame being shown
     bool visible = true, locked = false;
     f32 opacity = 1;
+    // Every frame's picture. The one for the frame being shown is out of date: `image` is it (Document::cel reads
+    // the right one).
+    std::vector<Image> frames;
+};
+
+// A named run of frames, an animation in a sprite sheet ("walk_down": frames 0 to 3), as Aseprite tags them.
+struct Tag {
+    std::string name;
+    usize from = 0, to = 0;
+    std::string direction = "forward"; // forward, reverse, pingpong
+    bool operator==(const Tag&) const = default;
 };
 
 // Pixels lifted off a layer by the Move tool or pasted: drawn over the layer at (x, y) until they're put down.
@@ -184,6 +219,27 @@ public:
 
     // Every visible layer blended, bottom first, with what's floating.
     Image composite() const;
+    // A frame's picture (the frame being shown has what's floating too).
+    Image composite(usize frame) const;
+
+    // Animation frames. Every layer has a picture in every frame; tools paint the one shown.
+    usize frame_count() const { return durations_.size(); }
+    usize frame() const { return frame_; }
+    void show_frame(usize f);              // not a history step, like picking a layer
+    void add_frame(bool copy);             // after the one shown, blank or a copy of it; shows it
+    void remove_frame();
+    void move_frame(i32 by);               // later (+1) or earlier
+    i32 duration(usize f) const { return f < durations_.size() ? durations_[f] : 100; } // in milliseconds
+    void set_duration(usize f, i32 ms);
+    const Image& cel(usize layer, usize frame) const;
+    std::vector<Tag> tags; // change them, then commit()
+
+    // The frames side by side in a grid of `columns` (0: one row), as a sprite sheet; and Aseprite's JSON for it (the
+    // "array" layout the engine reads), naming `image` as its picture.
+    Image sheet(i32 columns = 0) const;
+    json::Value sheet_json(std::string_view image, i32 columns = 0) const;
+    // A document of one layer from frames (all one size), with their durations and tags.
+    static Document from_frames(std::vector<Image> frames, std::vector<i32> durations, std::vector<Tag> tags);
     // Whether a tool may change this pixel: inside the selection (when there is one) and on an unlocked layer.
     bool editable(i32 x, i32 y) const;
 
@@ -216,6 +272,8 @@ public:
     // Crops to what's painted. Returns the box it kept (in the old picture), or an empty one if there was nothing.
     Box trim();
     void flip(bool across);
+    // Every layer and frame resized without smoothing.
+    void scale(i32 w, i32 h);
 
     // Selection
     void select_all();
@@ -246,15 +304,25 @@ private:
         std::vector<Layer> layers;
         usize active = 0;
         Mask selection;
+        usize frame = 0;
+        std::vector<i32> durations;
+        std::vector<Tag> tags;
     };
     State state(std::string label) const;
     void restore(const State& s);
+    // Changing every frame: sync() writes the shown frame's pictures into `frames`, then `f` changes each layer's
+    // picture in each frame, and the shown frame's come back into `image`.
+    void each_cel(const std::function<void(Image&)>& f);
+    void sync();
+    void load_frame();
 
     i32 w_ = 0, h_ = 0;
     bool selection_any_ = false; // selection.any(), kept so editable() is quick
     std::string floating_label_;
     std::vector<State> history_;
     usize cursor_ = 0, saved_ = 0;
+    usize frame_ = 0;
+    std::vector<i32> durations_{100};
 };
 
 std::string base64(const std::vector<u8>& bytes);
