@@ -9,6 +9,10 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 struct SDL_AudioStream;
@@ -125,6 +129,29 @@ struct Voice {
     explicit operator bool() const { return generation != 0; }
 };
 
+class SoundEvent; // bowl/audio/sound_event.hpp
+
+// How a sound event plays this time.
+struct EventParams {
+    std::optional<Vec2> position; // set: in the world, like play_at, with the event's attenuation
+    std::vector<std::pair<std::string, std::string>> switches; // {"surface", "grass"}: picks the clip list per value
+    f32 gain = 1;
+    std::string_view switch_value(std::string_view name) const;
+};
+
+// Handle to a playing sound event: all of its voices, including ones still waiting out a delay. Stale handles are
+// ignored safely.
+struct EventInstance {
+    u32 id = 0;
+    explicit operator bool() const { return id != 0; }
+};
+
+// What an event picked for one of its layers the last time it played (the F1 overlay shows it).
+struct EventPick {
+    std::string clip;
+    f32 gain = 1, pitch = 1, delay = 0;
+};
+
 // Software mixer on SDL's audio device. Every method is thread-safe; mixing happens on SDL's audio thread.
 class AudioEngine : NonCopyable {
 public:
@@ -180,6 +207,24 @@ public:
     f32 duck_level(Bus bus) const;
     u32 active_voices() const;
 
+    // Plays a sound event (see SoundEvent): picks its clips, gain and pitch, and keeps to its instance limit and
+    // cooldown. Empty if it can't play now (cooldown, at its limit with steal "none", no clips).
+    EventInstance play_event(const SoundEvent& event, const EventParams& params = {});
+    EventInstance play_event(const Asset<SoundEvent>& event, const EventParams& params = {});
+    void stop(EventInstance instance);
+    bool playing(EventInstance instance) const;
+    // Moves an event played at a position, with all its voices.
+    void set_position(EventInstance instance, Vec2 position);
+    // The voices it has started so far (delayed layers start later).
+    std::vector<Voice> voices(EventInstance instance) const;
+    // What it picked the last time it played, one per layer that played.
+    std::vector<EventPick> last_picks(const SoundEvent& event) const;
+    // Event choices come from this engine's own random numbers: the same seed makes the same choices.
+    void seed_random(u64 seed);
+    // Moves the clock event delays and cooldowns count on, and starts delayed voices that are due. The App calls it
+    // every frame with the real (unscaled) frame time.
+    void update(f32 dt);
+
     // Renders `frames` stereo frames into out (used by the device callback; public for offline rendering/tests).
     void mix(f32* out, u32 frames);
 
@@ -204,6 +249,38 @@ private:
     const VoiceState* find(Voice v) const;
     Voice start(const Sound& sound, const PlayParams& params); // with mutex_ held
 
+    // Sound events, all touched with mutex_ held (sound_event.cpp). The audio thread never reads them.
+    struct EventVoice {
+        Sound sound;
+        PlayParams params;
+        f64 start_at = 0; // on clock_
+    };
+    struct EventLive {
+        u32 id = 0;
+        std::string event; // its EventState key
+        std::vector<Voice> voices;
+        std::vector<EventVoice> waiting; // delayed, not started yet
+        f32 gain = 1;
+        bool spatial = false;
+        Vec2 position;
+        Attenuation attenuation;
+        f64 started = 0;
+    };
+    struct EventState {
+        f64 last_played = -1e300;
+        std::vector<std::pair<u64, u32>> last_clip; // (layer << 32 | list) -> index last picked
+        std::vector<EventPick> last_picks;
+    };
+    Voice start_event_voice(const EventVoice& voice, const EventLive& live);
+    void stop_live(EventLive& live);
+    bool live_alive(const EventLive& live) const;
+    f64 random(); // 0..1
+    std::unordered_map<std::string, EventState> events_;
+    std::vector<EventLive> live_events_;
+    f64 clock_ = 0;
+    u64 random_state_ = 0x853c49e6748fea9bull;
+    u32 next_instance_ = 1;
+
     mutable std::mutex mutex_;
     std::array<VoiceState, max_voices> voices_{};
     std::array<f32, bus_count> bus_gain_{1, 1, 1, 1, 1, 1};
@@ -220,7 +297,8 @@ private:
     std::vector<f32> stream_buffer_;
 };
 
-// Registers the Sound (WAV, OGG, Opus) and Music (OGG, Opus; streamed) loaders with the asset manager.
+// Registers the Sound (WAV, OGG, Opus), Music (OGG, Opus; streamed) and SoundEvent (.sound) loaders with the asset
+// manager.
 void register_asset_loaders(AssetManager& assets);
 
 } // namespace bowl::audio

@@ -669,7 +669,16 @@ Play it for each catch, with a little pitch variation so repeats don't sound mec
         }
 ```
 
-[guides/audio.md](guides/audio.md) covers music, buses and controlling playing sounds.
+The sample goes one step further with footsteps from a sound event: `assets/footsteps.sound` lists clips per surface,
+and `PlayScene` plays it every 0.3 s while the player moves, with the surface under them as a switch:
+
+```cpp
+        engine.audio().play_event(footsteps_, {.switches = {{"surface", me.value.x < 0 ? "grass" : "stone"}}});
+```
+
+Press F1 and open **Sound events** to play it and see what it picks.
+
+[guides/audio.md](guides/audio.md) covers music, buses, sound events and controlling playing sounds.
 
 ## 11. A title screen
 

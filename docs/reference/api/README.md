@@ -16,6 +16,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/app/main.hpp](app.md#bowlappmainhpp) | Include in exactly one .cpp of your game and write BOWL_MAIN(YourGame). |
 | [bowl/app/scene.hpp](app.md#bowlappscenehpp) | One screen of a game: title, gameplay, inventory, pause menu... Scenes stack: the top one gets input and updates; scenes below keep drawing if the ones above are transparent (a pause menu over the paused game). |
 | [bowl/audio/audio.hpp](audio.md#bowlaudioaudiohpp) | Decoded PCM: interleaved stereo float at the mixer rate. |
+| [bowl/audio/sound_event.hpp](audio.md#bowlaudiosound_eventhpp) | A sound the game asks for by what happened ("footstep", "door slam") rather than by file: which clip plays, how loud and at what pitch is picked each time, within limits the event's .sound file sets. |
 | [bowl/core/archive.hpp](core.md#bowlcorearchivehpp) | An asset archive (.bowlpak): many files in one, stored as they are, with an index at the front. |
 | [bowl/core/assert.hpp](core.md#bowlcoreasserthpp) | BOWL_ASSERT(cond[, "message"]): checked in debug and dev builds, compiled out when BOWL_ASSERTS is 0. |
 | [bowl/core/assets.hpp](core.md#bowlcoreassetshpp) | Shared handle to a loaded asset. |

@@ -1,5 +1,7 @@
 #include "bowl/audio/audio.hpp"
+#include "bowl/audio/sound_event.hpp"
 #include "bowl/core/file.hpp"
+#include "bowl/core/log.hpp"
 
 #include <doctest/doctest.h>
 
@@ -354,4 +356,292 @@ TEST_CASE("audio: music ducks under dialogue and comes back") {
     CHECK(audio.duck_level(Bus::Music) > 0.95f);
     audio.set_ducking(Bus::Music, std::nullopt);
     CHECK(audio.duck_level(Bus::Music) == 1.0f);
+}
+
+// Sound events
+
+namespace {
+
+// Clips that hold one level throughout, so one mixed frame says which played and how loud.
+std::shared_ptr<Sound> level(f32 value, u32 frames = 4800) { return std::make_shared<Sound>(std::vector<f32>(2 * frames, value)); }
+
+struct Clips {
+    AssetManager assets;
+    SoundEvent::Clip clip(std::string path, f32 value, f32 weight = 1) {
+        return {path, assets.add(path, std::make_unique<Sound>(*level(value))), weight};
+    }
+};
+
+f32 first_frame(AudioEngine& audio) {
+    std::vector<f32> out(2);
+    audio.mix(out.data(), 1);
+    return out[0];
+}
+
+} // namespace
+
+TEST_CASE("audio events: weighted clips hold their odds over many plays") {
+    Clips c;
+    SoundEvent event;
+    event.no_repeat = false;
+    event.layers.push_back({.clips = {c.clip("a", 0.1f, 1), c.clip("b", 0.3f, 3)}});
+    AudioEngine audio;
+    audio.seed_random(42);
+    int b = 0;
+    constexpr int plays = 4000;
+    for (int i = 0; i < plays; ++i) {
+        REQUIRE(audio.play_event(event));
+        f32 x = first_frame(audio);
+        CHECK((x == doctest::Approx(0.1f) || x == doctest::Approx(0.3f)));
+        b += x > 0.2f;
+        audio.stop_all();
+    }
+    CHECK(static_cast<f32>(b) / plays == doctest::Approx(0.75f).epsilon(0.04));
+}
+
+TEST_CASE("audio events: the same clip never plays twice in a row, unless asked") {
+    Clips c;
+    SoundEvent event;
+    event.layers.push_back({.clips = {c.clip("a", 0.1f), c.clip("b", 0.2f), c.clip("c", 0.3f)}});
+    AudioEngine audio;
+    audio.seed_random(7);
+    std::string last;
+    int repeats = 0;
+    for (int i = 0; i < 300; ++i) {
+        audio.play_event(event);
+        std::string clip = audio.last_picks(event).at(0).clip;
+        repeats += clip == last;
+        last = clip;
+    }
+    CHECK(repeats == 0);
+    event.no_repeat = false;
+    for (int i = 0; i < 300; ++i) {
+        audio.play_event(event);
+        std::string clip = audio.last_picks(event).at(0).clip;
+        repeats += clip == last;
+        last = clip;
+    }
+    CHECK(repeats > 50); // about a third
+    // A list of one plays that one every time.
+    SoundEvent single;
+    single.layers.push_back({.clips = {c.clip("solo", 0.1f)}});
+    CHECK(audio.play_event(single));
+    CHECK(audio.play_event(single));
+}
+
+TEST_CASE("audio events: gain, pitch and delay stay within their ranges") {
+    Clips c;
+    SoundEvent event;
+    event.layers.push_back({.clips = {c.clip("one", 1.0f)}, .gain = {0.5f, 1.0f}});
+    event.gain = {0.4f, 0.8f}; // with the layer's: 0.2 .. 0.8
+    event.pitch = {0.8f, 1.25f};
+    AudioEngine audio;
+    audio.seed_random(1);
+    f32 lowest = 1, highest = 0;
+    for (int i = 0; i < 500; ++i) {
+        audio.play_event(event, {.gain = 0.5f}); // and the caller's: 0.1 .. 0.4
+        EventPick p = audio.last_picks(event).at(0);
+        CHECK(p.pitch >= 0.8f);
+        CHECK(p.pitch <= 1.25f);
+        f32 x = first_frame(audio);
+        CHECK(x == doctest::Approx(p.gain));
+        lowest = std::min(lowest, x);
+        highest = std::max(highest, x);
+        audio.stop_all();
+    }
+    CHECK(lowest >= 0.1f - 1e-5f);
+    CHECK(highest <= 0.4f + 1e-5f);
+    CHECK(highest - lowest > 0.25f); // the whole range gets used
+
+    event.delay = {0.1f, 0.2f};
+    EventInstance late = audio.play_event(event);
+    CHECK(audio.playing(late));
+    CHECK(audio.voices(late).empty()); // waiting
+    CHECK(first_frame(audio) == 0.0f);
+    f32 delay = audio.last_picks(event).at(0).delay;
+    CHECK(delay >= 0.1f);
+    CHECK(delay <= 0.2f);
+    audio.update(0.09f);
+    CHECK(audio.voices(late).empty());
+    audio.update(0.12f);
+    CHECK(audio.voices(late).size() == 1);
+    CHECK(first_frame(audio) > 0.0f);
+    audio.stop(late);
+    CHECK_FALSE(audio.playing(late));
+    // Stopped while waiting: it never starts.
+    late = audio.play_event(event);
+    audio.stop(late);
+    audio.update(1.0f);
+    CHECK(audio.active_voices() == 0);
+}
+
+TEST_CASE("audio events: instance limits, stealing and cooldown") {
+    Clips c;
+    SoundEvent event;
+    event.loop = true;
+    event.layers.push_back({.clips = {c.clip("hum", 1.0f)}});
+    event.max_instances = 2;
+    AudioEngine audio;
+
+    SUBCASE("oldest") {
+        EventInstance a = audio.play_event(event), b = audio.play_event(event), d = audio.play_event(event);
+        CHECK_FALSE(audio.playing(a));
+        CHECK(audio.playing(b));
+        CHECK(audio.playing(d));
+        CHECK(audio.active_voices() == 2);
+    }
+    SUBCASE("quietest") {
+        event.steal = SoundEvent::Steal::Quietest;
+        EventInstance a = audio.play_event(event, {.gain = 0.5f}), b = audio.play_event(event, {.gain = 0.2f});
+        EventInstance d = audio.play_event(event, {.gain = 1.0f});
+        CHECK(audio.playing(a));
+        CHECK_FALSE(audio.playing(b));
+        CHECK(audio.playing(d));
+        // Distance counts: a loud one far away is quieter than a soft one close by.
+        event.attenuation = {.near = 10, .far = 100};
+        audio.stop_all();
+        EventInstance far = audio.play_event(event, {.position = Vec2{90, 0}, .gain = 1.0f});
+        EventInstance near = audio.play_event(event, {.position = Vec2{0, 0}, .gain = 0.3f});
+        audio.play_event(event, {.position = Vec2{0, 0}});
+        CHECK_FALSE(audio.playing(far));
+        CHECK(audio.playing(near));
+    }
+    SUBCASE("none") {
+        event.steal = SoundEvent::Steal::None;
+        EventInstance a = audio.play_event(event), b = audio.play_event(event);
+        CHECK_FALSE(audio.play_event(event));
+        CHECK(audio.playing(a));
+        CHECK(audio.playing(b));
+        audio.stop(a); // room again
+        CHECK(audio.play_event(event));
+    }
+    SUBCASE("finished instances don't count") {
+        event.loop = false;
+        event.steal = SoundEvent::Steal::None;
+        audio.play_event(event);
+        audio.play_event(event);
+        std::vector<f32> out(2 * 4801);
+        audio.mix(out.data(), 4801); // both play out
+        CHECK(audio.play_event(event));
+    }
+    SUBCASE("cooldown") {
+        event.max_instances = 0;
+        event.cooldown = 0.1f;
+        CHECK(audio.play_event(event));
+        CHECK_FALSE(audio.play_event(event));
+        audio.update(0.05f);
+        CHECK_FALSE(audio.play_event(event));
+        audio.update(0.06f);
+        CHECK(audio.play_event(event));
+    }
+}
+
+TEST_CASE("audio events: switches pick their list, and layers play together") {
+    Clips c;
+    SoundEvent event;
+    SoundEvent::Layer steps;
+    steps.switch_name = "surface";
+    steps.switch_values = {{"grass", {c.clip("grass1", 0.1f), c.clip("grass2", 0.1f)}},
+                           {"stone", {c.clip("stone1", 0.3f), c.clip("stone2", 0.3f)}}};
+    event.layers.push_back(steps);
+    AudioEngine audio;
+    for (int i = 0; i < 20; ++i) {
+        audio.play_event(event, {.switches = {{"surface", "stone"}}});
+        CHECK(audio.last_picks(event).at(0).clip.starts_with("stone"));
+        CHECK(first_frame(audio) == doctest::Approx(0.3f));
+        audio.stop_all();
+        audio.play_event(event, {.switches = {{"surface", "grass"}}});
+        CHECK(audio.last_picks(event).at(0).clip.starts_with("grass"));
+        audio.stop_all();
+    }
+    // An unlisted value (or none) uses the first value's list, unless the layer has clips of its own.
+    audio.play_event(event, {.switches = {{"surface", "lava"}}});
+    CHECK(audio.last_picks(event).at(0).clip.starts_with("grass"));
+    event.layers[0].clips = {c.clip("plain", 0.5f)};
+    audio.play_event(event);
+    CHECK(audio.last_picks(event).at(0).clip == "plain");
+    audio.stop_all();
+
+    event.layers.push_back({.clips = {c.clip("rustle", 0.05f)}});
+    EventInstance both = audio.play_event(event, {.switches = {{"surface", "stone"}}});
+    CHECK(audio.voices(both).size() == 2);
+    CHECK(audio.last_picks(event).size() == 2);
+    CHECK(first_frame(audio) == doctest::Approx(0.35f));
+}
+
+TEST_CASE("audio events: at a position they fade with distance and follow the instance") {
+    Clips c;
+    SoundEvent event;
+    event.loop = true;
+    event.layers.push_back({.clips = {c.clip("hum", 1.0f)}});
+    event.attenuation = {.near = 10, .far = 100};
+    AudioEngine audio;
+    EventInstance i = audio.play_event(event, {.position = Vec2{500, 0}});
+    CHECK(audio.playing(i));
+    CHECK(first_frame(audio) == 0.0f);
+    audio.set_position(i, {0, 0});
+    CHECK(first_frame(audio) == doctest::Approx(1.0f));
+}
+
+TEST_CASE("audio events: .sound files load, report mistakes and hot-reload") {
+    namespace fs = std::filesystem;
+    fs::path dir = fs::temp_directory_path() / "bowl_tests" / "sound_events";
+    fs::remove_all(dir);
+    fs::create_directories(dir / "sfx");
+    auto write = [&](std::string_view text) {
+        REQUIRE(write_file_bytes(dir / "sfx/steps.sound", text.data(), text.size()));
+    };
+    AssetManager assets;
+    assets.mount("", dir);
+    register_asset_loaders(assets);
+    assets.add("sfx/grass.wav", std::make_unique<Sound>(*level(0.1f)));
+    assets.add("sfx/stone.wav", std::make_unique<Sound>(*level(0.3f)));
+    assets.add("ui/click.wav", std::make_unique<Sound>(*level(0.5f)));
+
+    write(R"({ "switch": { "surface": { "grass": ["grass.wav"], "stone": [{"sound": "stone.wav", "weight": 2}] } },
+               "layers": [ { "clips": ["/ui/click.wav"], "delay": 0.05 } ],
+               "gain": [0.5, 0.75], "pitch": 1.1, "bus": "ui", "max_instances": 3, "steal": "quietest",
+               "cooldown": 0.02, "attenuation": { "near": 32, "far": 400 }, })");
+    Asset<SoundEvent> steps = assets.load<SoundEvent>("sfx/steps.sound");
+    REQUIRE(steps);
+    CHECK(steps->layers.size() == 2);
+    CHECK(steps->layers[0].switch_values[1].second[0].path == "sfx/stone.wav");
+    CHECK(steps->layers[0].switch_values[1].second[0].weight == 2.0f);
+    CHECK(steps->layers[1].clips[0].sound);
+    CHECK(steps->gain.min == 0.5f);
+    CHECK(steps->pitch.max == doctest::Approx(1.1f));
+    CHECK(steps->bus == Bus::Ui);
+    CHECK(steps->steal == SoundEvent::Steal::Quietest);
+    CHECK(steps->max_instances == 3);
+    CHECK(steps->attenuation.far == 400.0f);
+    AudioEngine audio;
+    EventInstance played = audio.play_event(steps, {.switches = {{"surface", "stone"}}});
+    CHECK(audio.voices(played).size() == 1); // the click waits out its delay
+
+    // Mistakes are logged with the file's name, and the last good version stays.
+    for (std::string_view bad : {R"({ "clips": ["grass.wav"], )", R"({ "clips": ["grass.wav"], "pich": 2 })",
+                                 R"({ "clips": ["grass.wav"], "gain": [1, 0.5] })", R"({ "clips": [] })",
+                                 R"({ "clips": ["grass.wav"], "steal": "newest" })", R"([1, 2])",
+                                 R"({ "clips": [{"weight": 1}] })", R"({ "clips": ["grass.wav"], "max_instances": 1.5 })",
+                                 R"({ "switch": { "a": [], "b": [] } })", R"({ "clips": ["grass.wav"], "pitch": 0 })"}) {
+        CAPTURE(bad);
+        write(bad);
+        CHECK_FALSE(assets.reload("sfx/steps.sound"));
+        CHECK(steps->layers.size() == 2);
+        auto log = logging::recent(1);
+        REQUIRE(log.size() == 1);
+        CHECK(log[0].text.find("sfx/steps.sound") != std::string::npos);
+    }
+    write(R"({ "clips": ["grass.wav"] })");
+    CHECK(assets.reload("sfx/steps.sound"));
+    CHECK(steps->layers.size() == 1);
+    CHECK(audio.play_event(steps));
+    CHECK_FALSE(assets.load<SoundEvent>("sfx/missing.sound"));
+
+    std::string error;
+    SoundEvent parsed;
+    auto none = [](std::string_view) { return Asset<Sound>{}; };
+    CHECK_FALSE(SoundEvent::parse(json::parse(R"({ "clips": ["a"], "bus": "loud" })").value, none, parsed, error));
+    CHECK(error.find("\"bus\" must be one of") != std::string::npos);
+    fs::remove_all(dir);
 }
