@@ -73,6 +73,7 @@ bool segment(const char* label, bool on, const char* tip_text, float width = 0) 
 
 void Editor::dev_ui(Engine& engine) {
     game_update(engine);
+    content_.update(engine);
     const ImGuiIO& io = ImGui::GetIO();
     free_area_ = {left_w, top_h, std::max(1.0f, io.DisplaySize.x - left_w - right_w),
                   std::max(1.0f, io.DisplaySize.y - top_h - status_h)};
@@ -81,6 +82,8 @@ void Editor::dev_ui(Engine& engine) {
         left_panel(engine);
         right_panel(engine);
         art_drop(engine);
+    } else if (workspace_ == Workspace::Content) {
+        content_.draw(engine, {0, top_h, io.DisplaySize.x, std::max(1.0f, io.DisplaySize.y - top_h - status_h)});
     } else if (workspace_ == Workspace::Data) {
         data_workspace(engine);
     } else if (workspace_ == Workspace::Game) {
@@ -108,6 +111,10 @@ void Editor::top_bar(Engine& engine) {
     ImGui::SameLine(0, 12);
     // The three workspaces.
     if (segment("Level", workspace_ == Workspace::Level, "Lay out the level|Ctrl+1")) workspace_ = Workspace::Level;
+    ImGui::SameLine(0, 2);
+    if (segment("Content", workspace_ == Workspace::Content,
+                "The game's items, people, shops, events and sounds, as forms|Ctrl+5"))
+        workspace_ = Workspace::Content;
     ImGui::SameLine(0, 2);
     if (segment("Data", workspace_ == Workspace::Data, "The game's data files, edited in place|Ctrl+2")) workspace_ = Workspace::Data;
     ImGui::SameLine(0, 2);
@@ -737,7 +744,9 @@ void Editor::status_bar(Engine& engine) {
     // What a click would do right now.
     ecs::World& world = engine.world();
     std::string what;
-    if (workspace_ == Workspace::Data)
+    if (workspace_ == Workspace::Content)
+        what = "Pick a collection and one of its records on the left, then change it on the right. Ctrl+S saves, Ctrl+Z undoes.";
+    else if (workspace_ == Workspace::Data)
         what = "Change values on the left or the text on the right; comments and layout stay. Ctrl+S saves, Ctrl+Z undoes.";
     else if (workspace_ == Workspace::Game)
         what = link_.connected() ? "Attached: changes here happen in the running game." : "Pick a running game on the left to attach.";
@@ -860,7 +869,7 @@ void Editor::help_window() {
         {"V / P / H", "Select, Place, Move the view"},
         {"B / R", "Brush (paint on art in the level), Region (drag out an area)"},
         {"C", "Show or hide collision shapes and regions"},
-        {"Ctrl+1 / 2 / 3 / 4", "Level, Data, Paint and Game workspaces"},
+        {"Ctrl+1 / 2 / 3 / 4 / 5", "Level, Data, Paint, Game and Content workspaces"},
         {"G / Shift+G", "Show the grid / snap to it"},
         {"Arrows (Shift)", "Nudge one unit (a grid step)"},
         {"Q / E (Shift)", "Turn 15 degrees (1 degree)"},

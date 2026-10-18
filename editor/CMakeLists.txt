@@ -3,6 +3,7 @@
 
 add_executable(bowl-editor
     src/main.cpp
+    src/content.cpp
     src/document.cpp
     src/editor.cpp
     src/data.cpp

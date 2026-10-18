@@ -19,6 +19,7 @@ The editor is built with the engine in dev builds (`build/dev/editor/bowl-editor
 | `--assets <folder>` | Where the art is. By default, the `assets` folder the level is in, or `./assets` |
 | `--game <library>` | The game's hot-reload code library, so the game's own components can be added and edited. On Windows, `<game>_editor_code.dll` |
 | `--data`, `--paint` | Start in the Data or Paint workspace with its first file open |
+| `--content [collection [id]]` | Start in the Content workspace, on that collection and record |
 | `--select <name>` | Select the thing with this name at startup |
 | `--resave` | Open the level, save it in the current format and quit |
 | `--attach [profiler\|systems\|entities]` | Start in the Game workspace, attached to the first game running on this computer, on that pane |
@@ -28,8 +29,9 @@ key; **F1** lists every key.
 
 ## The screen
 
-The editor has three workspaces, switched at the top left: **Level** (Ctrl+1) lays out levels, **Data** (Ctrl+2) edits
-the game's data files, **Paint** (Ctrl+3) paints its art. The rest of this section is the Level workspace.
+The editor has five workspaces, switched at the top left: **Level** (Ctrl+1) lays out levels, **Content** (Ctrl+5)
+edits the game's content as forms, **Data** (Ctrl+2) edits its data files as JSON, **Paint** (Ctrl+3) paints its art,
+and **Game** (Ctrl+4) looks inside a running game. The rest of this section is the Level workspace.
 
 - **Top bar:** new, open and save; the tools (Select, Place, Move the view, Brush, Region); undo and redo; the grid,
   snapping and the grid size; showing collision shapes; help.
@@ -143,6 +145,87 @@ Every `physics::Collider` in the level is drawn on it: triggers (regions) tinted
 The **Brush tool (B)** paints on a picture right in the level: click and drag on placed art, and the pixel under the
 mouse changes, through the thing's position, rotation, scale and art region. Every placed copy of that picture
 changes with it, and a running game sees it too. The colors and tools are the Paint workspace's.
+
+## The Content workspace
+
+The **Content** tab (**Ctrl+5**) edits a game's content as forms: its items, people, shops, events and sounds, or
+whatever the game keeps in data files. Collections are on the left with how many records each has; pick one, then a
+record below it, and its form is on the right.
+
+- **+**, **copy** and **bin** add a record (with a fresh id), copy the one picked, and remove it. The filter box finds
+  records by name or id.
+- Every field says what it's for when the mouse rests on its name. A field in a dimmer color isn't in the file yet:
+  its default shows, and changing it writes it.
+- **References** to other records (an event's person, a shop's stock) are menus of the ids there, and the arrow beside
+  one goes to it. **Pictures** show thumbnails; **sounds** have a play button, and **+** makes a new sound event from
+  an audio file (WAV or Ogg), copied into `sounds/clips/`. **Maps** and **spawn points** are menus read from the maps
+  themselves, and **On the map...** shows the map so a spot can be clicked.
+- **Lists** (lines of dialogue, schedule stops, actions) have up, down, copy and remove on each item; items with
+  kinds (an action that says something or gives an item) are added from a menu of kinds, and changing an item's
+  kind keeps the values that carry over.
+- **Problems** (repeated or missing ids, references to things that aren't there, pictures and sounds that aren't
+  there) are counted beside each collection and listed at the top of its form; click one to go to its record.
+- **Ctrl+S** saves every changed file, **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo. Like the Data workspace, edits
+  keep each file's comments and layout, and a running game reloads the file when it's saved. Changes not saved when
+  the editor closes are saved then. **F5** looks for new files and schemas.
+- Keys in a record that the schema doesn't know are kept, and shown at the bottom as JSON.
+
+**Sounds** are always there: every `.sound` file in the assets, its clips, loudness and pitch (one value or a range
+picked from each time), bus, looping and limits. **+** makes a new one in `sounds/`.
+
+### Schemas
+
+A schema is a JSON file in the assets whose name ends in `.schema.json`. It lists **collections** (where records are)
+and **types** (what a record holds):
+
+```json
+{
+  "collections": [
+    { "id": "items", "title": "Items", "file": "data/items.json", "list": "items", "type": "item",
+      "label": "name", "picture": "icon", "help": "Everything the player can carry." },
+    { "id": "settings", "title": "Game", "file": "data/game.json", "type": "settings" }
+  ],
+  "types": {
+    "item": { "fields": [
+      { "key": "id", "type": "id" },
+      { "key": "name", "type": "text" },
+      { "key": "icon", "type": "picture" },
+      { "key": "stack", "type": "int", "min": 1, "max": 999, "default": 99, "help": "Most in one slot." }
+    ] }
+  }
+}
+```
+
+A collection is the list under `list` in `file`, or, without `list`, the whole file as one record. `label` and
+`picture` name the fields shown in the list of records; the field named `id` (or `id_key`) is what references use.
+
+A field has a `key`, a `type`, and optionally a `label`, `help` and `default`. The types:
+
+| Type | Holds | Options |
+| --- | --- | --- |
+| `text` | text | `multiline`; `suggest`: a name shared by fields whose values are offered as suggestions (flags) |
+| `id` | the record's id | |
+| `int`, `number` | numbers | `min`, `max`, `step` |
+| `bool` | on or off | |
+| `choice` | one of `options` | `free`: any text too |
+| `choices` | a list of some of `options` | `free` |
+| `time` | minutes after midnight, shown as a time of day | past midnight is fine |
+| `ref` | the id of a record in the collection `to` | `optional`, `free` (any text too) |
+| `picture`, `sound` | an asset path | |
+| `audio` | an audio file, from the record file's folder (for sound events) | |
+| `map` | a map's name, from the `maps` folder (or `folder`) | |
+| `spawn` | the name of a spawn point on the map named by the field `area` beside it | |
+| `cell` | `[x, y]` in cells of the map named by the field `area` beside it | |
+| `color` | `"#rrggbb"` | |
+| `range` | a number, or `[min, max]` | `min`, `max`, `step` |
+| `list` | a list of `of` (a field without a key) | |
+| a type's name | an object with that type's fields | |
+
+A type is `{"fields": [...]}`. One with **variants** also has a `tag` (the key saying which variant it is) and
+`variants`, each with a `label` and its own `fields`; a field of type `variant` in `fields` says where the menu of
+variants goes, and the variant's fields follow it. `summary` lists the fields shown in the title of a list item. A
+type can also be an alias for a field with settings: `"days": {"base": "choices", "options": ["mon", ...]}` makes
+`{"type": "days"}` mean that.
 
 ## The Data workspace
 

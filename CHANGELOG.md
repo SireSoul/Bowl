@@ -5,6 +5,19 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 
 ## [Unreleased]
 
+### Added
+- Bowl Editor's **Content** workspace (Ctrl+5, or `--content [collection [id]]`): a game's content (items, people,
+  shops, events, anything) edited as forms instead of JSON. Schema files in the assets (`*.schema.json`) say which
+  data files hold which records and what each field is: text, numbers, switches, choices, times of day, days of the
+  week, references to other records (with a menu of their ids and a button to go to one), pictures with thumbnails,
+  sounds with a play button, maps, spawn points read from a map, a spot picked by clicking on the map itself, lists
+  with reordering, and records with variants (an event's trigger, an action's kind). Records can be added, copied and
+  removed; edits keep each file's comments and layout; problems (repeated ids, references to nothing, missing files)
+  are listed and lead to the record. Sound events (`.sound` files) are a collection of their own with no schema needed,
+  and a new sound can be made straight from an audio file, which is copied into `sounds/clips/`. See
+  [Bowl Editor](docs/guides/editor.md#the-content-workspace).
+- `serial::to_json` and `from_json` save `std::set` (as a list) and `std::map` with string keys (as an object).
+
 ## [0.3.0] - 2026-10-17
 
 ### Added

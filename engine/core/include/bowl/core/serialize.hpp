@@ -9,7 +9,9 @@
 #include <cstring>
 #include <format>
 #include <limits>
+#include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -27,7 +29,7 @@ struct Context {
 };
 
 // What can be saved: bool, numbers, enums (as numbers), std::string, Vec2/3/4, Color, Rect, std::vector, std::array,
-// std::optional, Asset<T> (as its path), reflected structs (as objects), and any type with ADL hooks
+// std::set (as a list), std::map with string keys (as an object), std::optional, Asset<T> (as its path), reflected structs (as objects), and any type with ADL hooks
 //     json::Value bowl_to_json(const T&, serial::Context&);
 //     bool bowl_from_json(const json::Value&, T&, serial::Context&);
 // Loading is tolerant: missing keys keep the current value, so adding fields never breaks old save files.
@@ -39,6 +41,10 @@ template <class T> struct is_vector : std::false_type {};
 template <class T, class A> struct is_vector<std::vector<T, A>> : std::true_type {};
 template <class T> struct is_array : std::false_type {};
 template <class T, usize N> struct is_array<std::array<T, N>> : std::true_type {};
+template <class T> struct is_set : std::false_type {};
+template <class T, class C, class A> struct is_set<std::set<T, C, A>> : std::true_type {};
+template <class T> struct is_string_map : std::false_type {};
+template <class T, class C, class A> struct is_string_map<std::map<std::string, T, C, A>> : std::true_type {};
 template <class T> struct is_optional : std::false_type {};
 template <class T> struct is_optional<std::optional<T>> : std::true_type {};
 template <class T> struct is_asset : std::false_type {};
@@ -55,7 +61,7 @@ concept Serializable = std::is_same_v<T, json::Value> || std::is_arithmetic_v<T>
                        std::is_same_v<T, std::string> ||
                        std::is_same_v<T, Vec2> || std::is_same_v<T, Vec3> || std::is_same_v<T, Vec4> ||
                        std::is_same_v<T, Color> || std::is_same_v<T, Rect> || is_vector<T>::value ||
-                       is_array<T>::value || is_optional<T>::value || is_asset<T>::value || reflect::Reflected<T> ||
+                       is_array<T>::value || is_set<T>::value || is_string_map<T>::value || is_optional<T>::value || is_asset<T>::value || reflect::Reflected<T> ||
                        HasHooks<T>;
 
 namespace detail {
@@ -76,6 +82,12 @@ template <class T> json::Value to_json(const T& v, Context& ctx) {
                                    "bowl_from_json hooks");
     if constexpr (HasHooks<T>) return bowl_to_json(v, ctx);
     else if constexpr (std::is_same_v<T, json::Value>) return v;
+    else if constexpr (is_string_map<T>::value) {
+        json::Value o;
+        o.make_object();
+        for (const auto& [key, item] : v) o.set(key, to_json(item, ctx));
+        return o;
+    }
     else if constexpr (std::is_same_v<T, bool>) return v;
     else if constexpr (std::is_enum_v<T>) return static_cast<i64>(v);
     else if constexpr (std::is_arithmetic_v<T>) return static_cast<f64>(v);
@@ -85,7 +97,7 @@ template <class T> json::Value to_json(const T& v, Context& ctx) {
     else if constexpr (std::is_same_v<T, Vec4>) return detail::floats<4>({v.x, v.y, v.z, v.w});
     else if constexpr (std::is_same_v<T, Color>) return detail::floats<4>({v.r, v.g, v.b, v.a});
     else if constexpr (std::is_same_v<T, Rect>) return detail::floats<4>({v.x, v.y, v.w, v.h});
-    else if constexpr (is_vector<T>::value || is_array<T>::value) {
+    else if constexpr (is_vector<T>::value || is_array<T>::value || is_set<T>::value) {
         json::Value a;
         a.make_array();
         for (const auto& item : v) a.push(to_json(item, ctx));
@@ -154,6 +166,26 @@ template <class T> bool from_json(const json::Value& j, T& v, Context& ctx) {
         v.resize(j.size());
         bool ok = true;
         for (usize i = 0; i < j.size(); ++i) ok = from_json(j[i], v[i], ctx) && ok;
+        return ok;
+    } else if constexpr (is_set<T>::value) {
+        if (!j.is_array()) return false;
+        v.clear();
+        bool ok = true;
+        for (const json::Value& item : j.array()) {
+            typename T::value_type x{};
+            if (from_json(item, x, ctx)) v.insert(std::move(x));
+            else ok = false;
+        }
+        return ok;
+    } else if constexpr (is_string_map<T>::value) {
+        if (!j.is_object()) return false;
+        v.clear();
+        bool ok = true;
+        for (const auto& [key, item] : j.object()) {
+            typename T::mapped_type x{};
+            if (from_json(item, x, ctx)) v.emplace(key, std::move(x));
+            else ok = false;
+        }
         return ok;
     } else if constexpr (is_array<T>::value) {
         if (!j.is_array()) return false;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "content.hpp"
 #include "document.hpp"
 #include "ui.hpp"
 
@@ -37,8 +38,8 @@ public:
     void shutdown(Engine& engine) override;
 
 private:
-    // The editor's three rooms: levels, the game's data files, and painting art.
-    enum class Workspace { Level, Data, Paint, Game };
+    // The editor's rooms: levels, the game's content as forms, its data files as JSON, painting art, and a running game.
+    enum class Workspace { Level, Content, Data, Paint, Game };
     enum class Tool { Select, Place, Pan, Brush, Region };
     enum class Drag { None, Move, Box, Pan };
 
@@ -191,6 +192,9 @@ private:
     ecs::Entity brush_target_;          // the sprite the Brush is painting on
     int region_handle_ = -1; // the resize handle being dragged
     Vec2 region_anchor_;
+
+    // content.cpp: the Content workspace, forms for the game's content from its schemas
+    ContentWorkspace content_;
 
     // game.cpp: the Game workspace, attached to a running game through its dev link
     void game_workspace(Engine& engine);

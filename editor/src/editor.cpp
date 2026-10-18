@@ -153,6 +153,9 @@ void Editor::init(Engine& engine) {
                 game_pane_ = pane == "systems" ? 1 : pane == "entities" ? 2 : 0;
             }
         }
+        else if (a == "--content") { // its collection and record are read below
+            for (int k = 0; k < 2 && i + 1 < args.size() && !args[i + 1].starts_with("--"); ++k) ++i;
+        }
         else if ((a == "--frames" || a == "--screenshot" || a == "--inspect" || a == "--driver" || a == "--lang") && has_value)
             ++i; // the engine's own flags
         else if (!a.starts_with("--")) file = a;
@@ -200,6 +203,15 @@ void Editor::init(Engine& engine) {
     engine.renderer().set_clear_color(Color::hex(0x1d1f24));
     scan_art();
     scan_data();
+    content_.init(engine, assets_dir_, [this](std::string m) { say(std::move(m)); });
+    // --content [collection [record id]]: start in the Content workspace there.
+    for (usize i = 0; i < args.size(); ++i)
+        if (args[i] == "--content") {
+            workspace_ = Workspace::Content;
+            std::string coll = i + 1 < args.size() && !args[i + 1].starts_with("--") ? args[i + 1] : "";
+            std::string rec = !coll.empty() && i + 2 < args.size() && !args[i + 2].starts_with("--") ? args[i + 2] : "";
+            if (!coll.empty()) content_.open(coll, rec);
+        }
     // --data / --paint: start in that workspace with its first file open.
     if (engine.has_arg("--data")) {
         workspace_ = Workspace::Data;
@@ -214,6 +226,7 @@ void Editor::init(Engine& engine) {
 void Editor::shutdown(Engine& engine) {
     if (!doc_ || resave_) return;
     doc_->write_autosave(); // unsaved work is offered back next time
+    if (content_.unsaved() && content_.save_all()) info("editor: saved the content changes on the way out");
     Settings& prefs = engine.settings();
     prefs.set("editor.grid", show_grid_);
     prefs.set("editor.snap", snap_);
@@ -252,7 +265,7 @@ void Editor::update(Engine& engine, f32) {
             select_name_.clear();
         }
     }
-    // Ctrl+1/2/3/4 switch workspaces from anywhere.
+    // Ctrl+1 to 5 switch workspaces from anywhere.
     {
         Input& in = engine.input();
         bool cmd = in.down(Key::LeftCtrl) || in.down(Key::RightCtrl) || in.down(Key::LeftSuper) || in.down(Key::RightSuper);
@@ -260,6 +273,7 @@ void Editor::update(Engine& engine, f32) {
         if (cmd && in.pressed(Key::Num2)) workspace_ = Workspace::Data;
         if (cmd && in.pressed(Key::Num3)) workspace_ = Workspace::Paint;
         if (cmd && in.pressed(Key::Num4)) workspace_ = Workspace::Game;
+        if (cmd && in.pressed(Key::Num5)) workspace_ = Workspace::Content;
     }
     if (workspace_ == Workspace::Level) {
         scene_mouse(engine);
@@ -583,7 +597,7 @@ void Editor::render(Engine& engine) {
         paint_render(engine);
         return;
     }
-    if (workspace_ == Workspace::Data || workspace_ == Workspace::Game) return;
+    if (workspace_ == Workspace::Data || workspace_ == Workspace::Game || workspace_ == Workspace::Content) return;
     ecs::World& world = engine.world();
     const gfx::Camera2D& cam = engine.camera();
     f32 px = 1.0f / cam.zoom;
