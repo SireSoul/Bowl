@@ -6,16 +6,27 @@
 #include <string_view>
 #include <type_traits>
 
+// The compiler's own description of T, from a function outside every namespace: GCC writes a type relative to the
+// namespace of the function it describes, so from inside namespace bowl it wrote "gfx::Map" for bowl::gfx::Map.
+template <class T> constexpr std::string_view bowl_detail_type_signature() {
+#if defined(_MSC_VER) && !defined(__clang__)
+    return __FUNCSIG__;
+#else
+    return __PRETTY_FUNCTION__;
+#endif
+}
+
 namespace bowl {
 
-// Compile-time type name, e.g. type_name<game::Health>() == "game::Health". Used for debugging and the inspector.
+// Compile-time type name, e.g. type_name<game::Health>() == "game::Health": the same on every compiler, so saved
+// worlds name types the same way everywhere. Used for saving, debugging and the inspector.
 template <class T> constexpr std::string_view type_name() {
 #if defined(_MSC_VER) && !defined(__clang__)
-    std::string_view s = __FUNCSIG__;
-    constexpr std::string_view open = "type_name<";
+    std::string_view s = bowl_detail_type_signature<T>();
+    constexpr std::string_view open = "bowl_detail_type_signature<";
     constexpr std::string_view close = ">(void)";
 #else
-    std::string_view s = __PRETTY_FUNCTION__;
+    std::string_view s = bowl_detail_type_signature<T>();
     constexpr std::string_view open = "T = ";
 #if defined(__clang__)
     constexpr std::string_view close = "]";

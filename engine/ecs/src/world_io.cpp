@@ -72,6 +72,8 @@ void load_components(World& world, Entity e, const json::Value& components, seri
                      std::set<std::string>& unknown) {
     for (const auto& [name, data] : components.object()) {
         auto id = find_component(name);
+        // Saved by a GCC build from before type names were the same everywhere: those left out "bowl::".
+        if (!id) id = find_component("bowl::" + name);
         if (!id) {
             if (unknown.insert(name).second)
                 ctx.warn(std::format("unknown component '{}' (register it with ecs::register_components<...>())", name));

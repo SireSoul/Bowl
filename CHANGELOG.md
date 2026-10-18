@@ -60,6 +60,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   than its size (or zlib/gzip data that inflates to more) fails to load instead of being padded with empty cells.
 
 ### Fixed
+- GCC builds named the engine's own types without `bowl::` (`ecs::Transform2D`, `gfx::Map`), since GCC writes a type
+  relative to the namespace of the function describing it. Levels saved on macOS or Windows lost those components on
+  Linux, and the other way round. `type_name` now gives the full name on every compiler, and a level saved by an older
+  GCC build still loads.
 - `BOWL_COMPONENT` types weren't registered by name at startup when built with GCC (Linux): the registration was an
   unused inline variable, which GCC never initializes, so a saved world naming a type no code had touched yet dropped
   it as unknown. The registration is now a static in each file. The engine also registers `gfx::Map` with its other

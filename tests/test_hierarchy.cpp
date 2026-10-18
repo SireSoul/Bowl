@@ -107,3 +107,19 @@ TEST_CASE("hierarchy: a cycle in loaded data doesn't hang anything") {
     CHECK_FALSE(w.alive(b));
     CHECK(w.alive(c));
 }
+
+TEST_CASE("world io: names are the same on every compiler, and GCC's old shorter ones still load") {
+    CHECK(type_name<Transform2D>() == "bowl::ecs::Transform2D");
+    // A GCC build used to write engine types without "bowl::".
+    auto doc = json::parse(R"({ "format": "Bowl.world", "version": 1, "entities": [
+        { "id": 0, "components": { "ecs::Transform2D": { "position": [3, 4] }, "ecs::Name": { "value": "old" } } } ] })");
+    REQUIRE(doc);
+    register_components<Transform2D, Name>();
+    World w;
+    serial::Context ctx;
+    auto made = load_entities(w, doc.value, ctx);
+    REQUIRE(made.size() == 1);
+    CHECK(w.get<Name>(made[0]).value == "old");
+    CHECK(w.get<Transform2D>(made[0]).position == Vec2{3, 4});
+    CHECK(ctx.warnings.empty());
+}
