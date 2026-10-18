@@ -25,6 +25,19 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   they're used (map markers too), shows where each record is used, reorders records and list items by dragging, shows
   problems on the fields themselves, plays sprite sheets in previews, and has resizable panels (remembered), icons for
   collections (a collection's `"icon"`), and keys for new (Ctrl+N), copy (Ctrl+D) and walking the list.
+- Bowl Editor's **Paint** workspace is a pixel-art studio: layers (visibility, locks, opacity, merge, flatten), a
+  selection (boxes and a magic wand, added to and taken from), move, copy and paste with flips and turns, lines that
+  snap to 45 degrees and the 2:1 iso slope, boxes, iso diamonds, ellipses, gradients, shading along swatches, round or
+  square dithered brushes with mirroring, pixel-perfect strokes, fills with tolerance, hue, saturation, brightness,
+  replace, outline and make solid, canvas size from an anchor, crop, trim and flip, new pictures, a color square with
+  kept swatches, and a history to jump through. Layers are kept in `art-layers/`. The pixel work is `bowl_paint`
+  (`editor/paint`), tested in `tests/test_paint.cpp`.
+- Bowl Editor shows only the tabs a project uses (Content and Paint; Level with `.world` files; Game while one runs),
+  searches everything from anywhere (Ctrl+K), and saves everything at once. Its Maps draw a schema's `"objects"`
+  (trees, rocks) and paint them one a cell, make an exit's way back on both maps, rename maps with every reference to
+  them, delete them to the Trash, and show the whole world with its exits. **Breaking** for muscle memory: the
+  workspace keys follow the tabs (Ctrl+1 Content, Ctrl+2 Paint, Ctrl+3 Level, Ctrl+4 Game, Ctrl+5 the data files as
+  text).
 - `serial::to_json` and `from_json` save `std::set` (as a list) and `std::map` with string keys (as an object).
 
 ## [0.3.0] - 2026-10-17

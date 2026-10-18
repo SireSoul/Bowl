@@ -1,7 +1,8 @@
 # Bowl Editor
 
-Bowl Editor lays out levels: it places art and markers in a `.world` file that the game loads. It draws with the
-game's own renderer, so what you see is what the game shows.
+Bowl Editor is where a game's content is made without code: its items, people, events and maps as forms (from a
+schema the game writes), its pixel art in a painting studio, and, for games that use them, levels (`.world` files).
+It draws with the game's own renderer, so what you see is what the game shows, and a running game picks up every save.
 
 <p align="center"><img src="../images/editor.png" width="90%" alt="Bowl Editor with a level open and a pillar selected"></p>
 
@@ -18,7 +19,8 @@ The editor is built with the engine in dev builds (`build/dev/editor/bowl-editor
 | `level.world` | The level to open. Without one, it starts with an empty, untitled level |
 | `--assets <folder>` | Where the art is. By default, the `assets` folder the level is in, or `./assets` |
 | `--game <library>` | The game's hot-reload code library, so the game's own components can be added and edited. On Windows, `<game>_editor_code.dll` |
-| `--data`, `--paint` | Start in the Data or Paint workspace with its first file open |
+| `--paint [picture]` | Start in the Paint workspace with that picture (an asset path) open, or the first |
+| `--data` | Start with the data files as text, the first one open |
 | `--content [collection [id]]` | Start in the Content workspace, on that collection and record |
 | `--select <name>` | Select the thing with this name at startup |
 | `--resave` | Open the level, save it in the current format and quit |
@@ -29,9 +31,15 @@ key; **F1** lists every key.
 
 ## The screen
 
-The editor has five workspaces, switched at the top left: **Level** (Ctrl+1) lays out levels, **Content** (Ctrl+5)
-edits the game's content as forms, **Data** (Ctrl+2) edits its data files as JSON, **Paint** (Ctrl+3) paints its art,
-and **Game** (Ctrl+4) looks inside a running game. The rest of this section is the Level workspace.
+The tabs at the top left are the workspaces a project uses: **Content** (Ctrl+1) and **Paint** (Ctrl+2) always,
+**Level** (Ctrl+3) when the assets have `.world` files (or one was opened), and **Game** (Ctrl+4) while a game is
+running. The data files as JSON text (Ctrl+5) open from a record's text button or the search. Without a level to open,
+the editor starts in Content.
+
+At the top right: **Search** (**Ctrl+K**, from any workspace) finds any record, picture, map or sound by name, and
+commands; **Save all** appears when anything, anywhere, is unsaved; and help (F1).
+
+The rest of this section is the Level workspace.
 
 - **Top bar:** new, open and save; the tools (Select, Place, Move the view, Brush, Region); undo and redo; the grid,
   snapping and the grid size; showing collision shapes; help.
@@ -148,12 +156,13 @@ changes with it, and a running game sees it too. The colors and tools are the Pa
 
 ## The Content workspace
 
-The **Content** tab (**Ctrl+5**) edits a game's content as forms: its items, people, shops, events and sounds, or
+The **Content** tab (**Ctrl+1**) edits a game's content as forms: its items, people, shops, events and sounds, or
 whatever the game keeps in data files. Collections are on the left with how many records each has; pick one, then a
 record below it, and its form is on the right.
 
-- **Find anything** (**Ctrl+K**, or the box at the top left) finds any record, map or sound by name, and commands
-  (save, play, a new item...): type a few letters, then Enter.
+- **Search** (**Ctrl+K**) finds any record, picture, map or sound by name, and commands (save, play, a new item...):
+  type a few letters, then Enter.
+- Beside a record's name: its file as **text** (JSON, for anything the forms don't cover), **save** and **play**.
 - **+**, **copy**, the **arrows** and the **bin** add a record (with a fresh id; Ctrl+N), copy the one picked
   (Ctrl+D), move it up or down (or drag it in the list), and remove it. **Up** and **Down** walk the list. The filter
   box narrows it.
@@ -175,7 +184,7 @@ record below it, and its form is on the right.
   item with a problem inside is red, and opens.
 - A record's picture shows large beside its name; a sprite sheet plays its `walk_down` animation. Lists of
   references show names rather than ids.
-- **Ctrl+S** saves every changed file, **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo. Like the Data workspace, edits
+- **Ctrl+S** saves every changed file, **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo. Like the data files as text, edits
   keep each file's comments and layout, and a running game reloads the file when it's saved. Changes not saved when
   the editor closes are saved then. **F5** looks for new files and schemas.
 - Keys in a record that the schema doesn't know are kept, and shown at the bottom as JSON.
@@ -187,9 +196,19 @@ picked from each time), bus, looping and limits. **+** makes a new one in `sound
 `markers` layer. **+ Add a marker** places one (pick its kind, click the map); click a marker to pick it, drag it to
 move it (Alt for off the grid), Delete removes it. On the right are its name, place, size and the properties its kind
 has, as a form: a shop's id is a menu of the shops, an exit's spawn point a menu of the spawn points on the map it
-goes to. Problems (a property naming nothing, two spawn points with one name) are listed. **+** in the list of maps
-makes a new map, a copy of the one picked without its markers. Tiles are still painted in Tiled; edits here keep the
-rest of the file as it was, and a running game reloads the map when it's saved.
+goes to. Problems (a property naming nothing, two spawn points with one name) are listed. Tiles are still painted in
+Tiled (**Map... > Open in Tiled**); edits here keep the rest of the file as it was, and a running game reloads the map
+when it's saved.
+
+- **Make the way back** (on an exit at a map's edge): on the map it leads to, a spawn point just inside the
+  matching edge and an exit home; on this map, a spawn point for coming back, and this exit arriving at the new one.
+- **Objects** (when the schema has `"objects"`): trees, rocks and the like, drawn with their own pictures. Pick a kind
+  on the right and drag on the map to place one a cell; Alt-drag removes.
+- **Map...**: rename it (every exit, area and schedule that names it changes too), open it in Tiled, or delete it (to
+  the Trash, after listing what still leads there). **+** in the list of maps makes a new one, a copy of the one
+  picked without its markers.
+- **World**: every map at once, as the game draws them, with an arrow from each exit to where it arrives. Click a map
+  to open it.
 
 **Play** (and **Play here** on a map) saves and starts the game, when the schema says how (`"play"`, below).
 
@@ -261,15 +280,21 @@ Two more keys at the top of a schema:
 }
 ```
 
+`objects` names the object layer where a game puts things one a cell (trees, rocks) and the data file listing their
+kinds, each with a name (the object's type), a picture and the point of it standing on the cell:
+`"objects": {"layer": "features", "file": "data/features.json", "list": "kinds"}` (`name`, `picture` and `origin` name
+those keys, if they're called something else).
+
 `play` is the game to start, from the schema's folder (`.exe` is added on Windows), with `--area <map>` added for
 Play here. `markers` are the kinds of map markers besides Bowl's own `spawn` and `exit` (which a schema can redefine):
 an `area` one covers cells, the others are points in the middle of a cell, and `fields` are its Tiled properties.
 
-## The Data workspace
+## The data files as text
 
-<p align="center"><img src="../images/editor-data.png" width="80%" alt="The Data workspace: a JSON file as a tree and as text"></p>
+<p align="center"><img src="../images/editor-data.png" width="80%" alt="The data files as text: a JSON file as a tree and as text"></p>
 
-Every `.json` and `.prefab` file in the assets folder, on the left. The open file shows twice: as a tree of values
+**Ctrl+5**, a record's text button, or the search opens it: every `.json` and `.prefab` file in the assets folder, on
+the left. The open file shows twice: as a tree of values
 you can change, and as its text.
 
 - Numbers drag or take typing, text is a text field, on/off is a checkbox. Lists have **+** to add an item (a copy of
@@ -303,18 +328,47 @@ only you can read.
 
 <p align="center"><img src="../images/editor-paint.png" width="80%" alt="The Paint workspace with a picture, tools and its palette"></p>
 
-Pick a picture on the left to paint it on a big canvas with a pixel grid.
+A pixel-art studio (**Ctrl+2**). The picture menu at the top left opens any picture (or makes a **new** one, at any
+size); the search finds pictures too. Tools are down the left; the picked tool's settings and the menus across the
+top; color, swatches, layers and history on the right. The left button paints the first color, the right the
+second; **X** swaps them.
 
 | Tool | Key | |
 | --- | --- | --- |
-| Pencil | B | Paints pixels; fast strokes have no gaps |
-| Eraser | E | Makes pixels transparent |
-| Fill | F | Fills the area of one color |
-| Pick | I, or hold Alt | Takes a color from the picture |
+| Move | V | Lifts the selection (or the whole layer) and drags it. Arrows nudge (Shift: 8 pixels); Shift+H and Shift+V flip, Shift+R turns a quarter. Enter puts it down, Esc puts it back |
+| Select | M | A box. Shift adds to the selection, Alt takes away. Every tool paints only inside it |
+| Magic wand | W | An area of one color (tolerance, contiguous or everywhere, this layer or all of them). Shift adds, Alt takes away |
+| Pencil | B | Pixel perfect (on by default) takes out the L-shaped corners of one-pixel strokes. Shift+click: a line from the last stroke |
+| Eraser | E | |
+| Fill | G | An area of one color, with the same settings as the wand |
+| Pick | I, or Alt with any painting tool | The left button picks the first color, the right the second |
+| Line | L | Shift keeps it flat, upright, at 45 degrees, or on the 2:1 iso slope, as even two-pixel stairs |
+| Box | R | An outline or filled; **Iso diamond** draws a floor tile in the box. Shift: square (2:1 for diamonds) |
+| Ellipse | O | Clean one-pixel outlines at any size, or filled. Shift: circle |
+| Gradient | D | From the first color to the second, over the selection or the layer, dithered or smooth |
+| Shade | S | The left button lightens, the right darkens, a step each stroke: along your swatches when the color is one of them, otherwise light leaning warm and shadow leaning violet |
 
-The palette starts with the colors already in the picture, most used first. The wheel zooms toward the mouse,
-right-drag moves. **Ctrl+Z** / **Ctrl+Shift+Z** undo and redo strokes, **Ctrl+S** writes the PNG. Every stroke shows in
-the level (and a running game) at once; switching pictures saves the one you were painting.
+- **Brush:** size 1 to 64 (**[** and **]**), round or square, a **density** (a 4 x 4 dither: 16 paints every pixel),
+  and **mirror** painting about the middle, across and down.
+- **Color:** a saturation and brightness square, a hue strip, see-through, and the hex. **Keep** adds the color to
+  your swatches (remembered between sessions). **Swatches** shows the picture's own colors and yours: left-click for
+  the first color, right for the second, Alt+right removes one of yours.
+- **Layers:** new, duplicate, up, down, merge down, flatten, delete; each with an eye, a padlock, a name (the active
+  one's is typed in) and an opacity.
+- **History:** every step by name; click one to go back to it, or forward again.
+- **Edit:** undo and redo (Ctrl+Z, Ctrl+Shift+Z), cut, copy and paste (Ctrl+X, C, V; between pictures too), delete.
+  **Select:** all (Ctrl+A), none (Ctrl+D), invert (Ctrl+Shift+I), everything painted on the layer, crop to the
+  selection. **Image:** canvas size (keeping a side or corner put: the foot by default), trim to what's painted, flip.
+  **Adjust** (the selection or the layer): hue, saturation and brightness (live), replace the first color with the
+  second, lighter, darker, an outline in the first color (with or without corners), make solid.
+- **View:** the wheel zooms toward the mouse, Space-drag or the middle button moves, **0** fits, **1** is one to one,
+  **K** the pixel grid.
+
+**Ctrl+S** writes the flat PNG the game reads; every stroke already shows in a level and on the game's texture. A
+picture with more than one layer keeps them in `art-layers/` beside the assets folder (never shipped), with a
+fingerprint of its PNG: if the PNG is repainted in another program, it opens as one layer instead. Switching pictures
+or closing the editor saves unsaved paint.
+
 ## Saving and safety
 
 - **Ctrl+S** saves, **Ctrl+Shift+S** saves under a new name. A running game picks the level up by itself (it's an
