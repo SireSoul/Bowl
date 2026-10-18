@@ -30,7 +30,7 @@ The engine handles graphics, audio, input, physics, saving, and other core syste
 - Keyboard, mouse, touch, and controller support.
 - Menus, buttons, dialogue boxes, and other UI elements.
 - Scene management and smooth transitions.
-- Audio, music, and positional sound.
+- Audio, music, and positional sound, with sound events that pick clips, volume and pitch for you.
 - Save files, player settings, and world persistence.
 - Optional multiplayer and networking support.
 - Localization for multiple languages.
@@ -40,8 +40,10 @@ The engine handles graphics, audio, input, physics, saving, and other core syste
 - **Game code hot reload:** Update C++ code while keeping the current world loaded.
 - **In-game developer overlay:** Inspect objects, monitor performance, view logs, and control game execution.
 - **Bowl Editor:** Create levels, edit game data, and work with pixel art.
+- **Attach to a running game:** Bowl Editor's Game tab shows its profiler, which systems read and write what, and its
+  entities, whose components change as you edit them.
 - **Built-in profiling:** Find performance problems and monitor how the engine runs.
-- **Release packaging:** Tools for preparing builds for Windows, macOS, and Linux.
+- **Release packaging:** Tools for preparing builds for Windows, macOS, and Linux, with assets cooked for faster loading.
 
 ### Built for Expandability
 
