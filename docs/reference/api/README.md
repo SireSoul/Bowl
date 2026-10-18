@@ -35,7 +35,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/core/settings.hpp](core.md#bowlcoresettingshpp) | Player preferences that outlive the game: volume, language, window mode, controls. |
 | [bowl/core/shader_bundle.hpp](core.md#bowlcoreshader_bundlehpp) | Hlsl is source (Shader Model 5.1, SDL's register layout); on Windows it's compiled to Dxbc when the D3D12 backend runs, since the HLSL compiler ships with Windows but not with other build hosts. |
 | [bowl/core/time.hpp](core.md#bowlcoretimehpp) | Seconds since the process started, from a monotonic clock. |
-| [bowl/core/type_id.hpp](core.md#bowlcoretype_idhpp) | Compile-time type name, e.g. type_name&lt;game::Health>() == "game::Health". |
+| [bowl/core/type_id.hpp](core.md#bowlcoretype_idhpp) | The compiler's own description of T, from a function outside every namespace: GCC writes a type relative to the namespace of the function it describes, so from inside namespace bowl it wrote "gfx::Map" for bowl::gfx::Map. |
 | [bowl/core/types.hpp](core.md#bowlcoretypeshpp) | Non-copyable, non-movable base for objects with identity (devices, worlds, windows). |
 | [bowl/core/utf8.hpp](core.md#bowlcoreutf8hpp) | Decodes the code point at s[i] and advances i past it. |
 | [bowl/core/xml.hpp](core.md#bowlcorexmlhpp) | One element of an XML document. |

@@ -1497,7 +1497,15 @@ f64 milliseconds() const;
 
 `#include "bowl/core/type_id.hpp"` · namespace `bowl`
 
-Compile-time type name, e.g. type_name&lt;game::Health>() == "game::Health". Used for debugging and the inspector.
+The compiler's own description of T, from a function outside every namespace: GCC writes a type relative to the
+namespace of the function it describes, so from inside namespace bowl it wrote "gfx::Map" for bowl::gfx::Map.
+
+```cpp
+template <class T> constexpr std::string_view bowl_detail_type_signature();
+```
+
+Compile-time type name, e.g. type_name&lt;game::Health>() == "game::Health": the same on every compiler, so saved
+worlds name types the same way everywhere. Used for saving, debugging and the inspector.
 
 ```cpp
 template <class T> constexpr std::string_view type_name();
