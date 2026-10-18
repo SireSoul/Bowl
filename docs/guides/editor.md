@@ -168,7 +168,8 @@ record below it, and its form is on the right.
   box narrows it.
 - **Ids are safe to change**: type the new one and press Enter, and every place that names it changes too, map
   markers included. Under a record's name, **Used in N places** lists them, each a click away.
-- The panels' edges drag to resize them, and their sizes are remembered.
+- The panels' edges drag to resize them, and so does the bar between the collections and the records list (double-click
+  it to put it back); their sizes are remembered.
 - Every field says what it's for when the mouse rests on its name. A field in a dimmer color isn't in the file yet:
   its default shows, and changing it writes it.
 - **References** to other records (an event's person, a shop's stock) are menus of the ids there, and the arrow beside

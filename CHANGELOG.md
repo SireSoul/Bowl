@@ -40,6 +40,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   text).
 - `serial::to_json` and `from_json` save `std::set` (as a list) and `std::map` with string keys (as an object).
 
+### Changed
+- The Content workspace's records list can be made taller or shorter by dragging the bar between it and the
+  collections (double-click: back as it was); the collections scroll when squeezed. Remembered between runs.
+
 ## [0.3.0] - 2026-10-17
 
 ### Added

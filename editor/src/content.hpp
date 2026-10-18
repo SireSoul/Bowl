@@ -323,6 +323,7 @@ private:
     char filter_[96] = {};
     Engine* engine_ = nullptr;
     f32 left_w_ = 300, side_w_ = 340; // panel widths, remembered in the editor's settings
+    f32 records_h_ = 360;             // the height of the records list under the collections, remembered too
     bool palette_open_ = false;
     std::string palette_query_;
     usize palette_pick_ = 0;

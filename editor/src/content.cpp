@@ -325,6 +325,7 @@ void ContentWorkspace::init(Engine& engine, fs::path assets_dir, std::function<v
     say_ = std::move(say);
     left_w_ = engine.settings().get("editor.content.left_w", left_w_);
     side_w_ = engine.settings().get("editor.content.side_w", side_w_);
+    records_h_ = engine.settings().get("editor.content.records_h", records_h_);
     scan();
 }
 
@@ -726,6 +727,14 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
                  "(see the editor guide). Sound events work without one.");
     for (const std::string& p : schema_.problems) ImGui::TextColored(danger, "%s", p.c_str());
 
+    // The collections above, the picked one's records below, and a bar between them to drag up and down. The
+    // collections scroll when there's less room than they need.
+    bool records = collection_ < schema_.collections.size() &&
+                   (schema_.collections[collection_].files() || !schema_.collections[collection_].list.empty());
+    constexpr f32 bar_h = 9, least = 90;
+    f32 avail = ImGui::GetContentRegionAvail().y;
+    f32 below = std::clamp(records_h_, least, std::max(least, avail - least - bar_h));
+    ImGui::BeginChild("collections", {0, records ? avail - below - bar_h : 0});
     ImGui::Spacing();
     ui::section("Content");
 
@@ -764,7 +773,22 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
         ImGui::PopID();
     }
     ImGui::Spacing();
-    ui::rule();
+    ImGui::EndChild();
+    if (records) {
+        ImGui::InvisibleButton("##split_records", {ImGui::GetContentRegionAvail().x, bar_h});
+        bool hot = ImGui::IsItemHovered() || ImGui::IsItemActive();
+        if (hot) ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+        ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        f32 y = std::floor((a.y + b.y) * 0.5f);
+        ImGui::GetWindowDrawList()->AddLine({a.x, y}, {b.x, y}, hot ? ui::color::accent : ui::color::line, hot ? 2.0f : 1.0f);
+        if (ImGui::IsItemActive()) records_h_ = std::clamp(below - ImGui::GetIO().MouseDelta.y, least, std::max(least, avail - least - bar_h));
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) records_h_ = 360; // back to how it was
+        if (ImGui::IsItemDeactivated() || (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)))
+            engine.settings().set("editor.content.records_h", records_h_);
+        if (ImGui::IsItemHovered() && !ImGui::IsItemActive()) ui::tip("Drag to resize (double-click: as it was)");
+    } else {
+        ui::rule();
+    }
     if (collection_ >= schema_.collections.size()) {
         ImGui::End();
         return;
