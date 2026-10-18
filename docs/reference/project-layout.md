@@ -33,6 +33,7 @@ tools/
   atlas/                  bowl-atlas: packs pictures into an atlas with sprite-sheet JSON
   icon/                   bowl-icon: application icons from one picture
   pack/                   bowl-pack: asset archives (.bowlpak)
+  cook/                   bowl-cook: cooks asset folders for shipping builds
   apidoc/                 bowl-apidoc: the API reference from the headers
   rendezvous/             bowl-rendezvous: the server players meet through for rooms
 editor/                   Bowl Editor

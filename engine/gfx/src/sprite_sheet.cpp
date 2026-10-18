@@ -296,16 +296,19 @@ void draw_nine_slice(SpriteBatch& batch, const SpriteSheet& sheet, std::string_v
 
 void register_sprite_sheet_loader(AssetManager& assets) {
     assets.register_loader<SpriteSheet>([](AssetLoadContext& ctx) -> std::unique_ptr<SpriteSheet> {
-        auto text = ctx.read_text(ctx.path());
-        if (!text) {
+        auto bytes = ctx.read(ctx.path());
+        if (!bytes) {
             log_asset_error(ctx.path(), "SpriteSheet", "file not found in any mount");
             return nullptr;
         }
-        auto parsed = json::parse(*text);
+        auto parsed = json::parse_any(*bytes); // text, or binary JSON
         if (!parsed) {
             log_asset_error(ctx.path(), "SpriteSheet",
-                            std::format("JSON error at {}:{}: {}", parsed.error->line, parsed.error->column,
-                                        parsed.error->message));
+                            json::is_binary(*bytes)
+                                ? std::format("binary JSON error at byte {}: {}", parsed.error->column,
+                                              parsed.error->message)
+                                : std::format("JSON error at {}:{}: {}", parsed.error->line, parsed.error->column,
+                                              parsed.error->message));
             return nullptr;
         }
         auto sheet = std::make_unique<SpriteSheet>();

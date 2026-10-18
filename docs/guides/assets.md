@@ -84,7 +84,9 @@ bowl-pack assets -o assets.bowlpak
 bowl-pack --list assets.bowlpak
 ```
 
-Files are stored as they are, without compression; pictures and sounds are compressed already. Archives are read
+Before packing, the build cooks the folders (binary JSON, self-contained maps, BWTX pictures; see
+[Cooking assets](packaging.md#cooking-assets)). Files are stored without compression; pictures and sounds are
+compressed already. Archives are read
 only and never hot-reload. In code, `bowl::Archive` (`bowl/core/archive.hpp`) opens one and `bowl::write_archive` makes
 one.
 

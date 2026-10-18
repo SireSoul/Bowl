@@ -10,6 +10,7 @@ option(BOWL_FETCH_SDL     "Build SDL3 from source even if an installed SDL3 is f
 option(BOWL_WARNINGS_AS_ERRORS "Treat engine warnings as errors"                     OFF)
 option(BOWL_MACOS_BUNDLES "Build macOS games as .app bundles"                          OFF)
 option(BOWL_PACK_ASSETS   "Pack each game's engine and asset folders into archives (.bowlpak)" OFF)
+option(BOWL_COOK_ASSETS   "Cook asset folders (bowl-cook) before packing them; only with BOWL_PACK_ASSETS"  ON)
 option(BOWL_TRACY         "Send profiler zones to the Tracy profiler"                  OFF)
 option(BOWL_BOX2D         "Rigid-body physics through Box2D (physics/rigid_bodies.hpp)" OFF)
 option(BOWL_OPUS          "Ogg Opus sounds and music (fetches libogg, libopus, opusfile)" OFF)
@@ -18,9 +19,10 @@ option(BOWL_BUILD_EDITOR "Build Bowl Editor (needs BOWL_DEV_TOOLS)"             
 option(BOWL_FUZZ          "Build the fuzzers in tests/fuzz (Clang with libFuzzer; adds AddressSanitizer and UBSan)" OFF)
 set(BOWL_SHADERC_EXECUTABLE "" CACHE FILEPATH
     "Prebuilt host bowl-shaderc to use when cross-compiling (iOS, Android, consoles)")
-# Cross-compiling: the build runs bowl-shaderc, bowl-icon and bowl-pack, so they come from a build for this machine (the
-# host-tools preset puts them in build/host-tools/bin) instead of being built for the target.
-set(BOWL_HOST_TOOLS "" CACHE PATH "Folder with bowl-shaderc, bowl-icon and bowl-pack built for this machine, for cross-compiling")
+# Cross-compiling: the build runs bowl-shaderc, bowl-icon, bowl-cook and bowl-pack, so they come from a build for this
+# machine (the host-tools preset puts them in build/host-tools/bin) instead of being built for the target.
+set(BOWL_HOST_TOOLS "" CACHE PATH
+    "Folder with bowl-shaderc, bowl-icon, bowl-cook and bowl-pack built for this machine, for cross-compiling")
 if(BOWL_HOST_TOOLS AND NOT BOWL_SHADERC_EXECUTABLE)
     set(BOWL_SHADERC_EXECUTABLE "${BOWL_HOST_TOOLS}/bowl-shaderc${CMAKE_HOST_EXECUTABLE_SUFFIX}"
         CACHE FILEPATH "" FORCE)
@@ -52,6 +54,7 @@ if(NOT BOWL_HOST_TOOLS) # built for this machine; a cross build uses the host's 
     add_subdirectory(tools/atlas)
     add_subdirectory(tools/icon)
     add_subdirectory(tools/pack)
+    add_subdirectory(tools/cook)
     add_subdirectory(tools/apidoc)
     if(NOT IOS)
         add_subdirectory(tools/rendezvous)

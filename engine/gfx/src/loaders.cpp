@@ -11,6 +11,7 @@
 #include <stb_image_write.h>
 
 #include "bowl/core/file.hpp"
+#include "bowl/gfx/bwtx.hpp"
 #include "bowl/gfx/renderer.hpp"
 #include "bowl/gfx/sprite_sheet.hpp"
 #include "bowl/gfx/text.hpp"
@@ -75,15 +76,27 @@ std::unique_ptr<ComputeShader> load_compute_shader(AssetLoadContext& ctx, GpuDev
 // A picture decoded to RGBA (on the loading thread, for background loads).
 struct DecodedImage {
     int w = 0, h = 0;
-    stbi_uc* pixels = nullptr;
+    u8* pixels = nullptr; // stb's, or into `cooked`
+    std::vector<u8> cooked;
     const char* error = nullptr;
     ~DecodedImage() {
-        if (pixels) stbi_image_free(pixels);
+        if (pixels && cooked.empty()) stbi_image_free(pixels);
     }
 };
 
 std::shared_ptr<DecodedImage> decode_image(std::span<const u8> bytes) {
     auto image = std::make_shared<DecodedImage>();
+    if (is_bwtx(bytes)) { // cooked by bowl-cook
+        u32 w = 0, h = 0;
+        if (decode_bwtx(bytes, w, h, image->cooked)) {
+            image->w = static_cast<int>(w);
+            image->h = static_cast<int>(h);
+            image->pixels = image->cooked.data();
+        } else {
+            image->error = "a broken BWTX picture";
+        }
+        return image;
+    }
     int channels = 0;
     if (bytes.size() > INT_MAX) { // stb counts bytes in an int
         image->error = "the file is too big";

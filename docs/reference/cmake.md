@@ -23,6 +23,7 @@ Set them on the configure line (`-DBOWL_DEV_TOOLS=OFF`) or in your own presets.
 | `BOWL_WARNINGS_AS_ERRORS` | `OFF` | Treat warnings in engine, tool, test and game code as errors (CI turns this on for Linux and macOS) |
 | `BOWL_MACOS_BUNDLES` | `OFF` | Build macOS games as `.app` bundles |
 | `BOWL_PACK_ASSETS` | `OFF` | Pack each game's `engine/` and `assets/` folders into `.bowlpak` archives ([assets](../guides/assets.md#archives)) |
+| `BOWL_COOK_ASSETS` | `ON` | With `BOWL_PACK_ASSETS`: cook each folder with `bowl-cook` before packing ([packaging](../guides/packaging.md#cooking-assets)) |
 | `BOWL_MACOS_SIGN_IDENTITY` | `-` | codesign identity for installed `.app` bundles: `-` signs ad hoc, `Developer ID Application: ...` for shipping, empty skips ([packaging](../guides/packaging.md#signing-and-notarization)) |
 | `BOWL_MACOS_ENTITLEMENTS` | empty | An entitlements file for codesign |
 | `BOWL_WINDOWS_SIGN_COMMAND` | empty | A command (a CMake list) run on each installed `.exe` to sign it, such as `signtool;sign;/fd;SHA256;/a` |
@@ -33,7 +34,7 @@ Set them on the configure line (`-DBOWL_DEV_TOOLS=OFF`) or in your own presets.
 | `BOWL_OPUS` | `OFF` | Ogg Opus sounds and music; fetches libogg, libopus and opusfile ([audio.md](../guides/audio.md#opus)) |
 | `BOWL_HARFBUZZ` | `OFF` | Shape text with HarfBuzz: joined Arabic, Indic scripts, ligatures ([text.md](../guides/text.md#right-to-left-text-and-shaping)) |
 | `BOWL_FUZZ` | `OFF` | Build the fuzzers in `tests/fuzz` and everything with AddressSanitizer and UBSan; needs Clang with libFuzzer ([CONTRIBUTING](../../CONTRIBUTING.md#fuzzing)) |
-| `BOWL_HOST_TOOLS` | empty | Cross-compiling: a folder with `bowl-shaderc`, `bowl-icon` and `bowl-pack` built for this machine (the `host-tools` preset makes `build/host-tools/bin`); the build uses them instead of building its own |
+| `BOWL_HOST_TOOLS` | empty | Cross-compiling: a folder with `bowl-shaderc`, `bowl-icon`, `bowl-cook` and `bowl-pack` built for this machine (the `host-tools` preset makes `build/host-tools/bin`); the build uses them instead of building its own |
 | `BOWL_SHADERC_EXECUTABLE` | empty | A prebuilt host `bowl-shaderc` for cross-compiling; when set, the shader compiler isn't built (`BOWL_HOST_TOOLS` sets it) |
 | `BOWL_IOS_TEAM` | empty | iOS: the Apple development team that signs apps for devices; empty signs ad hoc, for the simulator |
 | `BOWL_ECS_MAX_COMPONENTS` | 256 | (A preprocessor define, not a CMake option.) Maximum component types; a multiple of 64 |
@@ -47,12 +48,12 @@ From `CMakePresets.json`. Each configure preset has a matching build preset; `de
 | `dev` | `RelWithDebInfo` | `BOWL_DEV_TOOLS=ON` |
 | `debug` | `Debug` | `BOWL_DEV_TOOLS=ON` |
 | `release` | `Release` | `BOWL_DEV_TOOLS=OFF`, `BOWL_FETCH_SDL=ON`, `BOWL_MACOS_BUNDLES=ON`, `BOWL_PACK_ASSETS=ON` |
-| `host-tools` | `Release` | Only the tools cross builds run; its build preset makes `bowl-shaderc`, `bowl-icon` and `bowl-pack` |
+| `host-tools` | `Release` | Only the tools cross builds run; its build preset makes `bowl-shaderc`, `bowl-icon`, `bowl-cook` and `bowl-pack` |
 | `fuzz` | `RelWithDebInfo` | `BOWL_FUZZ=ON`, Clang, no samples or editor; `ctest --preset fuzz` runs the tests and each fuzzer's seeds under the sanitizers |
 | `ios` | (Xcode) | The Xcode generator, `CMAKE_SYSTEM_NAME=iOS`, iOS 17, `BOWL_PACK_ASSETS=ON`, `BOWL_HOST_TOOLS=build/host-tools/bin`. Build presets `ios-simulator` and `ios-device` |
 
 All presets build into `build/<preset>` and export `compile_commands.json`. The tools a build makes (`bowl-shaderc`,
-`bowl-icon`, `bowl-pack`, `bowl-atlas`, `bowl-apidoc`) go in its `bin` folder.
+`bowl-icon`, `bowl-cook`, `bowl-pack`, `bowl-atlas`, `bowl-apidoc`) go in its `bin` folder.
 
 ## Targets
 
@@ -64,6 +65,7 @@ All presets build into `build/<preset>` and export `compile_commands.json`. The 
 | `bowl_shaderc` | The shader compiler as a library |
 | `bowl-icon` | Makes application icons (`.icns`, `.ico`, PNGs) from one picture; `bowl_add_game(... ICON)` runs it |
 | `bowl-pack` | Packs a folder into an asset archive (`.bowlpak`), or lists one |
+| `bowl-cook`, `bowl_cook` | Cooks an asset folder for shipping (binary JSON, self-contained maps, BWTX pictures); `BOWL_COOK_ASSETS` runs it |
 | `bowl-apidoc`, `bowl_api_docs` | Writes the [API reference](api/README.md) from the headers; `bowl_api_docs` runs it into `docs/reference/api` |
 | `bowl_engine_assets` | Compiles the engine's shaders |
 | `bowl_tests`, `bowl_bench_ecs` | Tests and benchmark |

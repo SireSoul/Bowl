@@ -157,6 +157,13 @@ public:
     static bool parse_tmx(std::string_view text, std::string_view base_dir,
                           const std::function<std::optional<std::string>(const std::string& path)>& read_file,
                           Tilemap& out, std::string& error);
+    // The map at `path` (a .tmj or .tmx, by its extension) as one .tmj document that needs no other file, for shipping:
+    // external tilesets and object templates put in place (their image paths moved to read from the map's folder), and
+    // layer data as plain arrays of gids. bowl-cook stores it as binary JSON, which parse() and the loader read. The
+    // tileset and template files it read are added to `files_read`.
+    static std::optional<json::Value> flatten(std::string_view text, std::string_view path,
+                                              const std::function<std::optional<std::string>(const std::string& path)>& read_file,
+                                              std::vector<std::string>& files_read, std::string& error);
 
     const MapLayer* layer(std::string_view name) const;
     // The tileset owning a gid (flip flags ignored), or null.
