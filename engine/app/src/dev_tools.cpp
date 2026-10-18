@@ -5,6 +5,7 @@
 #if BOWL_DEV_TOOLS
 
 #include "bowl/app/inspector.hpp"
+#include "bowl/audio/sound_event.hpp"
 #include "bowl/core/file.hpp"
 #include "bowl/core/profiler.hpp"
 #include "bowl/ecs/hierarchy.hpp"
@@ -137,6 +138,7 @@ void DevTools::draw_main() {
     }
     if (ImGui::CollapsingHeader("Entities")) draw_entities();
     if (ImGui::CollapsingHeader("Assets")) draw_assets();
+    if (ImGui::CollapsingHeader("Sound events")) draw_sound_events();
     if (ImGui::CollapsingHeader("Log")) draw_log();
     ImGui::End();
 }
@@ -375,6 +377,55 @@ void DevTools::draw_assets() {
         else ImGui::TextColored({1, 0.4f, 0.4f, 1}, "%s  FAILED", a.path.c_str());
         ImGui::PopID();
     }
+}
+
+void DevTools::draw_sound_events() {
+    auto& assets = engine_.assets();
+    auto& audio = engine_.audio();
+    bool any = false;
+    for (const auto& a : assets.list()) {
+        if (a.type != type_name<audio::SoundEvent>()) continue;
+        any = true;
+        ImGui::PushID(a.path.c_str());
+        Asset<audio::SoundEvent> event = assets.find<audio::SoundEvent>(a.path);
+        EventPreview& preview = event_previews_[a.path];
+        ImGui::BeginDisabled(!event);
+        if (ImGui::SmallButton("play")) preview.instance = audio.play_event(event, preview.params);
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        bool playing = audio.playing(preview.instance);
+        ImGui::BeginDisabled(!playing);
+        if (ImGui::SmallButton("stop")) audio.stop(preview.instance);
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        if (!event) {
+            ImGui::TextColored({1, 0.4f, 0.4f, 1}, "%s  FAILED", a.path.c_str());
+            ImGui::PopID();
+            continue;
+        }
+        ImGui::Text("%s%s", a.path.c_str(), playing ? "  (playing)" : "");
+        // A combo per switch, starting on its first value.
+        for (const auto& layer : event->layers) {
+            if (layer.switch_name.empty() || layer.switch_values.empty()) continue;
+            auto it = std::find_if(preview.params.switches.begin(), preview.params.switches.end(),
+                                   [&](const auto& s) { return s.first == layer.switch_name; });
+            if (it == preview.params.switches.end()) {
+                preview.params.switches.emplace_back(layer.switch_name, layer.switch_values.front().first);
+                it = preview.params.switches.end() - 1;
+            }
+            ImGui::SetNextItemWidth(160);
+            if (ImGui::BeginCombo(layer.switch_name.c_str(), it->second.c_str())) {
+                for (const auto& [value, clips] : layer.switch_values)
+                    if (ImGui::Selectable(value.c_str(), value == it->second)) it->second = value;
+                ImGui::EndCombo();
+            }
+        }
+        for (const audio::EventPick& p : audio.last_picks(*event))
+            ImGui::TextDisabled("  %s  gain %.2f  pitch %.2f%s", p.clip.c_str(), p.gain, p.pitch,
+                                p.delay > 0 ? std::format("  after {:.2f}s", p.delay).c_str() : "");
+        ImGui::PopID();
+    }
+    if (!any) ImGui::TextDisabled("(no .sound files loaded)");
 }
 
 void DevTools::draw_log() {

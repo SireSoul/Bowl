@@ -179,6 +179,74 @@ Between `near` and `far` the volume falls off quickly at first and then gently. 
 audio plays, so moving the listener or the sound needs nothing more. `audio::spatialize(source, listener,
 attenuation)` returns the same gain and pan, for sounds you start with `play`.
 
+## Sound events
+
+A sound event is a sound the game asks for by what happened (a footstep, a door slamming) instead of by file. Its
+`.sound` file says which clips it can pick from and how much each play may vary, so sound design can change without
+touching code. `.sound` files are assets, and they hot-reload.
+
+```json
+// assets/sfx/footsteps.sound
+{
+    "switch": {
+        "surface": {
+            "grass": ["grass_1.wav", "grass_2.wav", {"sound": "grass_3.wav", "weight": 0.5}],
+            "stone": ["stone_1.wav", "stone_2.wav"]
+        }
+    },
+    "gain": [0.7, 0.9],
+    "pitch": [0.95, 1.05],
+    "max_instances": 4,
+    "steal": "oldest",
+    "cooldown": 0.08
+}
+```
+
+```cpp
+#include "bowl/audio/sound_event.hpp"
+
+Asset<audio::SoundEvent> steps = engine.assets().load<audio::SoundEvent>("sfx/footsteps.sound");
+
+engine.audio().play_event(steps, {.switches = {{"surface", "stone"}}});
+engine.audio().play_event(steps, {.position = enemy_position});   // in the world, like play_at
+
+audio::EventInstance alarm = engine.audio().play_event(siren);
+engine.audio().set_position(alarm, truck_position);               // moves all of its voices
+if (engine.audio().playing(alarm)) engine.audio().stop(alarm);
+```
+
+| Key | Default | |
+| --- | --- | --- |
+| `clips` | | Clip list: paths, or `{"sound": path, "weight": n}`. One clip is picked per play, weighted |
+| `switch` | | `{"name": {"value": [clips], ...}}`: the list for the value in `EventParams::switches` |
+| `layers` | | Lists of objects with their own `clips`, `switch`, `gain`, `pitch` and `delay`: each layer plays a clip, all at once |
+| `gain`, `pitch` | 1 | A number, or `[min, max]` to pick from each time. A layer's own multiply the event's |
+| `delay` | 0 | Seconds before it starts: a number or `[min, max]`. A layer's own add to the event's |
+| `no_repeat` | `true` | Never the same clip twice in a row (when a list has more than one) |
+| `bus` | `"effects"` | `master`, `music`, `effects`, `ambience`, `voice` or `ui` |
+| `loop` | `false` | Repeat until stopped |
+| `low_pass`, `high_pass` | 0 (off) | Filters in Hz |
+| `attenuation` | | `{"near", "far", "pan_distance"}` for events played at a position |
+| `max_instances` | 0 (any) | How many may play at once |
+| `steal` | `"oldest"` | At the limit: stop the `oldest`, or the `quietest` (counting distance), or play nothing (`none`) |
+| `cooldown` | 0 | Seconds after a play before the next one can play |
+
+Clip paths are relative to the `.sound` file's folder; a leading `/` starts from the top of the assets. A switch
+value that isn't listed (or none) uses the layer's `clips`, or else the first value's list. Unknown keys and values
+out of range are errors, logged with the file's name; a broken edit keeps the last good version playing.
+
+`play_event` returns an empty `EventInstance` when the event can't play now: during its cooldown, at its limit with
+`"steal": "none"`, or with nothing to pick. `EventParams::gain` scales everything it plays.
+
+Delays and cooldowns count on the engine's clock, which the App moves every frame with `AudioEngine::update`; call
+it yourself if you use `AudioEngine` without the App. The choices come from the engine's own random numbers:
+`seed_random(n)` makes them repeat, which the tests use. Events are built from ordinary voices, so they count
+toward the 128-voice limit like any other sound.
+
+The F1 overlay's **Sound events** section lists every loaded event, with play and stop buttons, a picker for each
+switch, and the clip, gain and pitch it picked last. The tutorial's footsteps (`samples/tutorial/assets`) are an
+example.
+
 ## Opus
 
 Opus sounds better than Vorbis at the same size, especially for voices and at low bitrates. Configure with
@@ -194,5 +262,5 @@ buffer directly, which the tests use.
 
 ## Hot reload
 
-Sound and music assets reload when their files change. A voice already playing keeps the data it started with, and
+Sound, music and sound event assets reload when their files change. A voice already playing keeps the data it started with, and
 the next `play` uses the new version.

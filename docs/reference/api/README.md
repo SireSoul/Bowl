@@ -16,6 +16,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/app/main.hpp](app.md#bowlappmainhpp) | Include in exactly one .cpp of your game and write BOWL_MAIN(YourGame). |
 | [bowl/app/scene.hpp](app.md#bowlappscenehpp) | One screen of a game: title, gameplay, inventory, pause menu... Scenes stack: the top one gets input and updates; scenes below keep drawing if the ones above are transparent (a pause menu over the paused game). |
 | [bowl/audio/audio.hpp](audio.md#bowlaudioaudiohpp) | Decoded PCM: interleaved stereo float at the mixer rate. |
+| [bowl/audio/sound_event.hpp](audio.md#bowlaudiosound_eventhpp) | A sound the game asks for by what happened ("footstep", "door slam") rather than by file: which clip plays, how loud and at what pitch is picked each time, within limits the event's .sound file sets. |
 | [bowl/core/archive.hpp](core.md#bowlcorearchivehpp) | An asset archive (.bowlpak): many files in one, stored as they are, with an index at the front. |
 | [bowl/core/assert.hpp](core.md#bowlcoreasserthpp) | BOWL_ASSERT(cond[, "message"]): checked in debug and dev builds, compiled out when BOWL_ASSERTS is 0. |
 | [bowl/core/assets.hpp](core.md#bowlcoreassetshpp) | Shared handle to a loaded asset. |
@@ -34,7 +35,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/core/settings.hpp](core.md#bowlcoresettingshpp) | Player preferences that outlive the game: volume, language, window mode, controls. |
 | [bowl/core/shader_bundle.hpp](core.md#bowlcoreshader_bundlehpp) | Hlsl is source (Shader Model 5.1, SDL's register layout); on Windows it's compiled to Dxbc when the D3D12 backend runs, since the HLSL compiler ships with Windows but not with other build hosts. |
 | [bowl/core/time.hpp](core.md#bowlcoretimehpp) | Seconds since the process started, from a monotonic clock. |
-| [bowl/core/type_id.hpp](core.md#bowlcoretype_idhpp) | Compile-time type name, e.g. type_name&lt;game::Health>() == "game::Health". |
+| [bowl/core/type_id.hpp](core.md#bowlcoretype_idhpp) | The compiler's own description of T, from a function outside every namespace: GCC writes a type relative to the namespace of the function it describes, so from inside namespace bowl it wrote "gfx::Map" for bowl::gfx::Map. |
 | [bowl/core/types.hpp](core.md#bowlcoretypeshpp) | Non-copyable, non-movable base for objects with identity (devices, worlds, windows). |
 | [bowl/core/utf8.hpp](core.md#bowlcoreutf8hpp) | Decodes the code point at s[i] and advances i past it. |
 | [bowl/core/xml.hpp](core.md#bowlcorexmlhpp) | One element of an XML document. |
@@ -47,6 +48,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/ecs/world.hpp](ecs.md#bowlecsworldhpp) | Extra include/exclude terms for a query, for components you filter on but don't read. |
 | [bowl/ecs/world_io.hpp](ecs.md#bowlecsworld_iohpp) | Saving and loading entities as JSON, for save games, scenes, prefabs and copy/paste in tools. |
 | [bowl/gfx/bidi.hpp](gfx.md#bowlgfxbidihpp) | Embedding levels for one paragraph's characters: even runs left to right, odd right to left. |
+| [bowl/gfx/bwtx.hpp](gfx.md#bowlgfxbwtxhpp) | BWTX: the picture format bowl-cook turns PNG and JPEG files into. |
 | [bowl/gfx/device.hpp](gfx.md#bowlgfxdevicehpp) | A rectangle of whole pixels in a texture, top-left origin. |
 | [bowl/gfx/gpu_particles.hpp](gfx.md#bowlgfxgpu_particleshpp) | How a GpuParticles emitter behaves. |
 | [bowl/gfx/particles.hpp](gfx.md#bowlgfxparticleshpp) | What an emitter spawns. |

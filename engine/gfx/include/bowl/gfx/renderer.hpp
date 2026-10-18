@@ -256,7 +256,8 @@ private:
 
 // Encodes RGBA8 pixels as a PNG file.
 bool write_png(const std::filesystem::path& path, u32 width, u32 height, std::span<const u8> rgba);
-// Decodes a PNG (or JPEG, BMP, TGA) in memory to RGBA8 pixels. False if it isn't a picture.
+// Decodes a PNG (or JPEG, BMP, TGA, or a BWTX picture bowl-cook made) in memory to RGBA8 pixels. False if it isn't a
+// picture.
 bool decode_png(std::span<const u8> bytes, u32& width, u32& height, std::vector<u8>& rgba);
 
 } // namespace bowl::gfx

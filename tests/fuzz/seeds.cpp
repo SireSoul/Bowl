@@ -11,6 +11,8 @@
 #include "bowl/core/archive.hpp"
 #include "bowl/core/file.hpp"
 #include "bowl/core/json.hpp"
+#include "bowl/gfx/bwtx.hpp"
+#include "bowl/gfx/renderer.hpp"
 #include "bowl/net/socket.hpp"
 
 #if defined(__clang__) || defined(__GNUC__)
@@ -404,6 +406,29 @@ void png_seeds() {
     seed("png", jpg);
 }
 
+// Cooked pictures (tests/test_cook.cpp): every kind of step the format has, and a real picture. The texture loader
+// reads them too, so they also seed the png fuzzer.
+void bwtx_seeds() {
+    auto both = [](const std::vector<u8>& bytes) {
+        seed("bwtx", bytes);
+        seed("png", bytes);
+    };
+    both(gfx::encode_bwtx(1, 1, std::vector<u8>{255, 0, 0, 255}));
+    std::vector<u8> steps;
+    for (int i = 0; i < 100; ++i) steps.insert(steps.end(), {10, 20, 30, 255}); // a run longer than 62
+    for (int i = 0; i < 64; ++i) // small and medium changes, wrapping past 255
+        steps.insert(steps.end(), {static_cast<u8>(250 + i), static_cast<u8>(i * 3), static_cast<u8>(i * 7), 255});
+    for (int i = 0; i < 16; ++i) { // colours seen before, big jumps, alpha changing
+        steps.insert(steps.end(), {255, 0, 0, 255});
+        steps.insert(steps.end(), {static_cast<u8>(i * 97), static_cast<u8>(i * 31), 200, static_cast<u8>(i * 16)});
+    }
+    both(gfx::encode_bwtx(14, 14, steps));
+    u32 w = 0, h = 0;
+    std::vector<u8> rgba;
+    if (gfx::decode_png(*read_file_bytes(fs::path(BOWL_SAMPLES_DIR) / "icon.png"), w, h, rgba))
+        both(gfx::encode_bwtx(w, h, rgba));
+}
+
 // Network packets (tests/test_net.cpp); see fuzz_host.cpp and fuzz_rendezvous.cpp for the steps
 
 void put16(std::vector<u8>& out, u16 v) { out.push_back(static_cast<u8>(v)), out.push_back(static_cast<u8>(v >> 8)); }
@@ -531,6 +556,18 @@ void net_seeds() {
 
 } // namespace
 
+// Sound events (tests/test_audio.cpp, samples/tutorial)
+void sound_event_seeds() {
+    if (auto footsteps = read_file_text(fs::path(BOWL_SAMPLES_DIR) / "tutorial/assets/footsteps.sound"))
+        seed("sound_event", *footsteps);
+    seed("sound_event", R"({ "switch": { "surface": { "grass": ["grass.wav"], "stone": [{"sound": "stone.wav", "weight": 2}] } },
+        "layers": [ { "clips": ["/ui/click.wav"], "delay": [0.05, 0.1], "gain": 0.5 } ],
+        "gain": [0.5, 0.75], "pitch": 1.1, "bus": "ui", "max_instances": 3, "steal": "quietest",
+        "cooldown": 0.02, "attenuation": { "near": 32, "far": 400, "pan_distance": 100 } })");
+    seed("sound_event", R"({ "clips": ["a.wav", "b.wav", "c.wav"], "no_repeat": false, "loop": true, "low_pass": 800,
+        "high_pass": 100, "max_instances": 2, "steal": "none" })");
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::fprintf(stderr, "usage: bowl_fuzz_seeds <folder>\n");
@@ -540,10 +577,12 @@ int main(int argc, char** argv) {
     json_seeds();
     tilemap_seeds();
     sprite_sheet_seeds();
+    sound_event_seeds();
     world_seeds();
     archive_seeds();
     font_seeds();
     png_seeds();
+    bwtx_seeds();
     net_seeds();
     return 0;
 }

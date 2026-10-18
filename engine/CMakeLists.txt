@@ -4,7 +4,7 @@
 #   bowl_ecs       entities, components, queries, commands, parallel schedules     (core)
 #   bowl_platform  window and input                                               (core, SDL3)
 #   bowl_gfx       GPU device, textures, shaders, sprite batching, renderer        (core, ecs, SDL3, stb)
-#   bowl_audio     mixer, sounds, streamed music                                   (core, SDL3, stb)
+#   bowl_audio     mixer, sounds, streamed music, sound events                    (core, SDL3, stb)
 #   bowl_physics   collision shapes, sweeps, raycasts, spatial hash, move_and_slide, colliders and triggers (core, ecs)
 #   bowl_ui        immediate-mode game UI: panels, widgets, focus navigation, dialogue (gfx, platform)
 #   bowl_net       UDP sockets, connections with reliable messages, lockstep and rollback   (core)
@@ -65,6 +65,7 @@ bowl_module(platform
 bowl_module(gfx
     SOURCES
         gfx/src/bidi.cpp
+        gfx/src/bwtx.cpp
         gfx/src/color_glyphs.cpp
         gfx/src/device.cpp
         gfx/src/gpu_particles.cpp
@@ -102,6 +103,7 @@ bowl_module(audio
     SOURCES
         audio/src/audio.cpp
         audio/src/opus.cpp
+        audio/src/sound_event.cpp
         audio/src/vorbis.cpp
     PUBLIC_DEPS bowl_core SDL3::SDL3
     PRIVATE_DEPS bowl_stb)

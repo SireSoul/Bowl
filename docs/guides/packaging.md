@@ -23,7 +23,7 @@ What it changes from `dev`:
 | Assertions | on | off |
 | SDL | installed copy if present, else static | always built from source and linked statically |
 | macOS | plain executables | `.app` bundles |
-| Assets read from | your source folders first | next to the executable only, packed into `.bowlpak` archives (`BOWL_PACK_ASSETS`) |
+| Assets read from | your source folders first | next to the executable only, [cooked](#cooking-assets) and packed into `.bowlpak` archives (`BOWL_PACK_ASSETS`) |
 
 Static SDL means the game has no SDL library to ship alongside it.
 
@@ -42,7 +42,7 @@ dist/
   my_game/
     my_game(.exe)
     engine.bowlpak   engine shaders and the default font
-    assets.bowlpak   your assets, with compiled shaders
+    assets.bowlpak   your assets, cooked, with compiled shaders
     bowl-LICENSE.txt Bowl's license and notice, which every copy of the game carries
     bowl-NOTICE.txt
 ```
@@ -73,6 +73,40 @@ copy.
 
 Zip the folder (or the `.app`) and it runs on another machine of the same OS and architecture. Or let
 [`bowl_package`](#installers) make installers.
+
+## Cooking assets
+
+Before packing, the build cooks each folder with `bowl-cook`: files the engine loads are turned into forms it reads
+faster, at the same paths, so the game loads them with the same calls.
+
+| Files | Cooked into |
+| --- | --- |
+| `.world`, `.prefab` | binary JSON (`json::encode_binary`) |
+| `lang/*.json` | binary JSON |
+| Tiled maps (`.tmj`, `.tmx`) | one binary-JSON map holding its external tilesets (`.tsj`, `.tsx`) and object templates (`.tj`, `.tx`), with layer data as plain arrays of tile ids; the tilesets and templates it took in are left out of the archive |
+| `.png`, `.jpg`, `.jpeg` | BWTX pictures (`bowl/gfx/bwtx.hpp`): RGBA pixels in a QOI stream, about PNG-sized, decoding several times faster |
+| everything else | copied as it is (your own `.json`, sprite sheets, sounds, fonts, shaders) |
+
+Cooking is deterministic: the same folder always gives the same bytes, and cooking a cooked folder changes nothing.
+A file the engine couldn't load either (a map with a missing tileset, a world that isn't JSON, a `.png` that isn't a
+picture) fails the build, with the file and the reason.
+
+Turn it off with `-DBOWL_COOK_ASSETS=OFF` (it only runs with `BOWL_PACK_ASSETS`). Do that if your game reads asset files
+itself instead of through the engine's loaders: a cooked `.png` is no longer a PNG, though `gfx::decode_png` still reads
+it. A JPEG's pixels, kept without loss, take more room than the JPEG did.
+
+Run it by hand to see what a folder becomes; the second folder may be the first, to cook in place:
+
+```bash
+build/release/bin/bowl-cook assets cooked
+```
+
+```bash
+build/release/bin/bowl-pack --list build/release/samples/sprites/sprites.app/Contents/Resources/assets.bowlpak
+```
+
+In code, `bowl::cook::cook_file` and `cook_folder` (`tools/cook`) do the same, and `gfx::Tilemap::flatten` makes the
+self-contained map document.
 
 ## The icon
 

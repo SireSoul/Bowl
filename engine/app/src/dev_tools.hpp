@@ -3,6 +3,7 @@
 #include "bowl/app/engine.hpp"
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 union SDL_Event;
@@ -38,6 +39,7 @@ private:
     void draw_entities();
     void draw_inspector();
     void draw_assets();
+    void draw_sound_events();
     void draw_log();
     bool frame_open_ = false;
     ecs::Entity selected_;
@@ -51,6 +53,12 @@ private:
     std::vector<ZoneRow> zone_rows_, zone_totals_;
     u32 zone_frames_ = 0;
     u64 zone_window_start_ns_ = 0;
+    // Sound events played from the overlay, and the switch values picked for each, by asset path.
+    struct EventPreview {
+        audio::EventInstance instance;
+        audio::EventParams params;
+    };
+    std::unordered_map<std::string, EventPreview> event_previews_;
 #endif
     [[maybe_unused]] Engine& engine_;
     bool visible_ = false;

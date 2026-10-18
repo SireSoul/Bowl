@@ -23,8 +23,8 @@ function(_bowl_quote out_var)
     set(${out_var} "${quoted}" PARENT_SCOPE)
 endfunction()
 
-# bowl_host_tool(<out_var> <name>): the command for a build tool (bowl-icon, bowl-pack): the host's copy when
-# cross-compiling (BOWL_HOST_TOOLS), otherwise the one this build makes.
+# bowl_host_tool(<out_var> <name>): the command for a build tool (bowl-icon, bowl-cook, bowl-pack): the host's copy
+# when cross-compiling (BOWL_HOST_TOOLS), otherwise the one this build makes.
 function(bowl_host_tool out_var name)
     if(BOWL_HOST_TOOLS)
         set(${out_var} "${BOWL_HOST_TOOLS}/${name}${CMAKE_HOST_EXECUTABLE_SUFFIX}" PARENT_SCOPE)
