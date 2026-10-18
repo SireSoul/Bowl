@@ -75,6 +75,7 @@ struct Collection {
     std::string type;            // the records' type
     std::string label, picture;  // fields shown in the list of records
     std::string id_key = "id";
+    std::string icon; // person, item, shop, event, map, sound, settings, area: the picture beside it in the list
     bool files() const { return !extension.empty(); }
 };
 
@@ -157,7 +158,20 @@ private:
         std::string collection;
         usize record = 0;
         std::string text;
+        std::string doc; // where the value is, so its field shows the problem too
+        Path path;
     };
+    // Somewhere one record names another (a shop's stock naming an item).
+    struct Ref {
+        std::string doc;
+        Path path; // the value naming it
+        std::string collection; // the record it's in
+        usize record = 0;
+        std::string where; // "General Store · Stock 2 · Item"
+    };
+    // Calls `fn` for every field's value in a record, with its path.
+    using Visit = std::function<void(const schema::Field& f, const json::Value* v, const Path& path, const json::Value* parent)>;
+    void walk(const schema::Field& raw, const json::Value* v, const Path& path, const json::Value* parent, const Visit& fn);
     struct MapInfo {
         Asset<gfx::Tilemap> map;
         std::vector<std::pair<std::string, Vec2>> spawns; // name, cell
@@ -198,7 +212,7 @@ private:
 
     // Pickers
     bool picture_picker(const char* id, std::string& path);
-    void thumbnail(const std::string& path, f32 box);
+    void thumbnail(const std::string& path, f32 box, bool animate = false);
     bool path_combo(const char* id, std::string& value, const std::vector<std::string>& options, bool allow_empty);
     void sound_buttons(Engine& engine, const std::string& path, bool audio);
     void map_spot_window(Engine& engine);
@@ -232,7 +246,22 @@ private:
     std::vector<Problem> problems(const schema::Collection& c);
     // `parent`: the object holding the value, for fields that look beside them (a spawn point's map).
     void check(const schema::Field& f, const json::Value* v, const std::string& where, const schema::Collection& c,
-               usize record, std::vector<Problem>& out, const json::Value* parent = nullptr);
+               usize record, std::vector<Problem>& out, const json::Value* parent = nullptr, const std::string& doc = {},
+               const Path& path = {});
+
+    // content_tools.cpp: finding, renaming, panels
+    std::vector<Ref> find_refs(std::string_view collection, std::string_view id);
+    // Changes a record's id, and every reference to it everywhere (including map markers).
+    usize rename_id(const schema::Collection& c, usize record, const std::string& from, const std::string& to);
+    void used_by(const schema::Collection& c, usize record);
+    void palette(Engine& engine);
+    // A bar between two panels that drags `value` (a width) between lo and hi; `sign` -1 when the panel is to its right.
+    void splitter(const char* id, Rect bar, f32& value, f32 lo, f32 hi, f32 sign);
+    // Moves item `from` of the list at `path` to `to`, the others shifting along.
+    void move_item(const std::string& doc, const Path& path, const json::Value& list, usize from, usize to);
+    static std::string path_key(const std::string& doc, const Path& path);
+    void collection_icon(const schema::Collection& c, ImVec2 center, f32 size, ImU32 color);
+    void select(usize collection, usize record);
 
     std::filesystem::path assets_dir_;
     AssetManager* assets_ = nullptr;
@@ -247,6 +276,14 @@ private:
     usize collection_ = 0;
     usize record_ = 0;
     char filter_[96] = {};
+    Engine* engine_ = nullptr;
+    f32 left_w_ = 300, side_w_ = 340; // panel widths, remembered in the editor's settings
+    bool palette_open_ = false;
+    std::string palette_query_;
+    usize palette_pick_ = 0;
+    std::map<std::string, std::string> field_problems_; // path_key -> the problem, for the record on show
+    std::string id_editing_;                            // path_key of the id field being typed in, and its text
+    std::string id_text_;
     std::string jump_to_; // set by a reference's "go to" button: collection id + "\n" + record id
     std::string new_file_name_;
     bool new_file_popup_ = false;

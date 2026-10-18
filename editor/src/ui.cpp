@@ -1,5 +1,6 @@
 #include "ui.hpp"
 
+#include <cctype>
 #include <cmath>
 #include <string>
 
@@ -220,6 +221,77 @@ void draw_icon(ImDrawList* l, Icon icon, ImVec2 c, float size, ImU32 col) {
         line(0.42f, -0.2f, 0.42f, 0.05f);
         l->AddRectFilled(P(-0.62f, 0.05f), P(0.62f, 0.8f), col, 2);
         break;
+    case Icon::Person: // a head and shoulders
+        l->AddCircle(P(0, -0.4f), h * 0.32f, col, 16, t);
+        l->PathArcTo(P(0, 0.75f), h * 0.65f, 3.1416f, 6.2832f, 16);
+        l->PathStroke(col, 0, t);
+        break;
+    case Icon::Bag: // a satchel: a body, a flap and a strap
+        l->AddRect(P(-0.75f, -0.3f), P(0.75f, 0.75f), col, h * 0.2f, 0, t);
+        line(-0.75f, 0.05f, 0.75f, 0.05f);
+        line(-0.15f, 0.05f, -0.15f, 0.3f);
+        line(0.15f, 0.05f, 0.15f, 0.3f);
+        l->PathArcTo(P(0, -0.3f), h * 0.4f, 3.1416f, 6.2832f, 10);
+        l->PathStroke(col, 0, t);
+        break;
+    case Icon::Shop: // an awning over a counter
+        line(-0.8f, -0.35f, 0.8f, -0.35f);
+        line(-0.65f, -0.75f, 0.65f, -0.75f);
+        line(-0.8f, -0.35f, -0.65f, -0.75f);
+        line(0.8f, -0.35f, 0.65f, -0.75f);
+        box(-0.65f, -0.35f, 0.65f, 0.75f);
+        box(-0.2f, 0.2f, 0.2f, 0.75f);
+        break;
+    case Icon::Bolt: { // something happening
+        ImVec2 pts[] = {P(0.2f, -0.85f), P(-0.45f, 0.1f), P(0.0f, 0.1f), P(-0.2f, 0.85f), P(0.45f, -0.15f), P(0.0f, -0.15f)};
+        l->AddPolyline(pts, 6, col, ImDrawFlags_Closed, t);
+        break;
+    }
+    case Icon::Map: // a folded map
+        line(-0.75f, -0.55f, -0.25f, -0.75f);
+        line(-0.25f, -0.75f, 0.25f, -0.55f);
+        line(0.25f, -0.55f, 0.75f, -0.75f);
+        line(-0.75f, 0.75f, -0.25f, 0.55f);
+        line(-0.25f, 0.55f, 0.25f, 0.75f);
+        line(0.25f, 0.75f, 0.75f, 0.55f);
+        line(-0.75f, -0.55f, -0.75f, 0.75f);
+        line(-0.25f, -0.75f, -0.25f, 0.55f);
+        line(0.25f, -0.55f, 0.25f, 0.75f);
+        line(0.75f, -0.75f, 0.75f, 0.55f);
+        break;
+    case Icon::Note: // a musical note
+        l->AddCircleFilled(P(-0.3f, 0.5f), h * 0.25f, col);
+        line(-0.07f, 0.5f, -0.07f, -0.75f);
+        line(-0.07f, -0.75f, 0.55f, -0.45f);
+        break;
+    case Icon::Gear:
+        l->AddCircle(c, h * 0.42f, col, 16, t);
+        for (int k = 0; k < 8; ++k) {
+            float a = k * 0.7854f, ca = std::cos(a), sa = std::sin(a);
+            line(ca * 0.55f, sa * 0.55f, ca * 0.85f, sa * 0.85f);
+        }
+        break;
+    case Icon::Search:
+        l->AddCircle(P(-0.15f, -0.15f), h * 0.5f, col, 16, t);
+        line(0.22f, 0.22f, 0.75f, 0.75f);
+        break;
+    case Icon::ArrowUp:
+    case Icon::ArrowDown: {
+        float s = icon == Icon::ArrowUp ? 1.0f : -1.0f;
+        line(0, -0.7f * s, 0, 0.7f * s);
+        line(0, -0.7f * s, -0.45f, -0.25f * s);
+        line(0, -0.7f * s, 0.45f, -0.25f * s);
+        break;
+    }
+    case Icon::Play: {
+        ImVec2 pts[] = {P(-0.45f, -0.7f), P(0.7f, 0), P(-0.45f, 0.7f)};
+        l->AddConvexPolyFilled(pts, 3, col);
+        break;
+    }
+    case Icon::Link: // two links of a chain
+        l->AddRect(P(-0.85f, -0.3f), P(0.15f, 0.3f), col, h * 0.3f, 0, t);
+        l->AddRect(P(-0.15f, -0.3f), P(0.85f, 0.3f), col, h * 0.3f, 0, t);
+        break;
     case Icon::Region: // a dashed area
         for (float s = -0.75f; s < 0.7f; s += 0.5f) {
             line(s, -0.75f, s + 0.25f, -0.75f);
@@ -252,6 +324,16 @@ bool tool_button(const char* id, Icon icon, bool on, const char* tip_text, float
     }
     ImGui::PopID();
     return pressed && enabled;
+}
+
+void section(std::string_view title) {
+    std::string upper(title);
+    for (char& ch : upper) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    ImGui::PushStyleColor(ImGuiCol_Text, color::muted);
+    ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 0.82f);
+    ImGui::TextUnformatted(upper.c_str());
+    ImGui::PopFont();
+    ImGui::PopStyleColor();
 }
 
 void tip(std::string_view text, std::string_view keys) {

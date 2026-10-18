@@ -21,6 +21,10 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   marker a schema lists (`"markers"`), checked for references to nothing and spawn points that aren't there. New maps
   start as copies. A schema's `"play"` adds **Play** and **Play here** buttons that save and start the game. Records
   can be moved up and down their list, and pictures can be Aseprite sprite sheets.
+- The Content workspace finds anything with **Ctrl+K** (records, maps, sounds and commands), renames ids everywhere
+  they're used (map markers too), shows where each record is used, reorders records and list items by dragging, shows
+  problems on the fields themselves, plays sprite sheets in previews, and has resizable panels (remembered), icons for
+  collections (a collection's `"icon"`), and keys for new (Ctrl+N), copy (Ctrl+D) and walking the list.
 - `serial::to_json` and `from_json` save `std::set` (as a list) and `std::map` with string keys (as an object).
 
 ## [0.3.0] - 2026-10-17

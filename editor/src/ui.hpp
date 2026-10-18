@@ -26,7 +26,9 @@ inline constexpr ImU32 danger = IM_COL32(224, 108, 100, 255);
 
 enum class Icon {
     Select, Place, Pan, Grid, Snap, Undo, Redo, Save, Open, New, Help, Plus, Trash, Copy, Group, Reload, Eye, Cross,
-    AlignLeft, AlignCenterX, AlignRight, AlignTop, AlignCenterY, AlignBottom, Folder, Entity, Image, Brush, Region, Lock
+    AlignLeft, AlignCenterX, AlignRight, AlignTop, AlignCenterY, AlignBottom, Folder, Entity, Image, Brush, Region, Lock,
+    // The Content workspace's collections, and its tools
+    Person, Bag, Shop, Bolt, Map, Note, Gear, Search, ArrowUp, ArrowDown, Play, Link
 };
 
 void apply_theme();
@@ -45,5 +47,7 @@ void end_card();
 void hint(std::string_view text);
 // A thin line across the current window.
 void rule();
+// A small, dim, upper-case heading over a part of a panel ("RECORDS"), with room for buttons on its right.
+void section(std::string_view title);
 
 } // namespace bowl::editor::ui

@@ -152,8 +152,14 @@ The **Content** tab (**Ctrl+5**) edits a game's content as forms: its items, peo
 whatever the game keeps in data files. Collections are on the left with how many records each has; pick one, then a
 record below it, and its form is on the right.
 
-- **+**, **copy** and **bin** add a record (with a fresh id), copy the one picked, and remove it. The filter box finds
-  records by name or id.
+- **Find anything** (**Ctrl+K**, or the box at the top left) finds any record, map or sound by name, and commands
+  (save, play, a new item...): type a few letters, then Enter.
+- **+**, **copy**, the **arrows** and the **bin** add a record (with a fresh id; Ctrl+N), copy the one picked
+  (Ctrl+D), move it up or down (or drag it in the list), and remove it. **Up** and **Down** walk the list. The filter
+  box narrows it.
+- **Ids are safe to change**: type the new one and press Enter, and every place that names it changes too, map
+  markers included. Under a record's name, **Used in N places** lists them, each a click away.
+- The panels' edges drag to resize them, and their sizes are remembered.
 - Every field says what it's for when the mouse rests on its name. A field in a dimmer color isn't in the file yet:
   its default shows, and changing it writes it.
 - **References** to other records (an event's person, a shop's stock) are menus of the ids there, and the arrow beside
@@ -164,7 +170,11 @@ record below it, and its form is on the right.
   kinds (an action that says something or gives an item) are added from a menu of kinds, and changing an item's
   kind keeps the values that carry over.
 - **Problems** (repeated or missing ids, references to things that aren't there, pictures and sounds that aren't
-  there) are counted beside each collection and listed at the top of its form; click one to go to its record.
+  there, spawn points a map doesn't have) are counted in red beside each collection, listed at the top of its form
+  (click one to go to its record), and shown on the field itself: outlined in red, with what's wrong under it. A list
+  item with a problem inside is red, and opens.
+- A record's picture shows large beside its name; a sprite sheet plays its `walk_down` animation. Lists of
+  references show names rather than ids.
 - **Ctrl+S** saves every changed file, **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo. Like the Data workspace, edits
   keep each file's comments and layout, and a running game reloads the file when it's saved. Changes not saved when
   the editor closes are saved then. **F5** looks for new files and schemas.

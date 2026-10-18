@@ -223,6 +223,7 @@ void Schema::add(const Value& doc, std::string_view source) {
             c.label = o["label"].as_string();
             c.picture = o["picture"].as_string();
             c.id_key = o["id_key"].as_string("id");
+            c.icon = o["icon"].as_string();
             if (c.id.empty() || c.type.empty() || (c.file.empty() && c.extension.empty())) {
                 problems.push_back(std::format("{}: a collection needs an id, a type, and a file or an extension", source));
                 continue;
@@ -310,7 +311,10 @@ Value default_record(const Schema& s, const Type& t) {
 void ContentWorkspace::init(Engine& engine, fs::path assets_dir, std::function<void(std::string)> say) {
     assets_dir_ = std::move(assets_dir);
     assets_ = &engine.assets();
+    engine_ = &engine;
     say_ = std::move(say);
+    left_w_ = engine.settings().get("editor.content.left_w", left_w_);
+    side_w_ = engine.settings().get("editor.content.side_w", side_w_);
     scan();
 }
 
@@ -439,7 +443,25 @@ void ContentWorkspace::shortcuts(Engine& engine) {
     bool cmd = in.down(Key::LeftCtrl) || in.down(Key::RightCtrl) || in.down(Key::LeftSuper) || in.down(Key::RightSuper);
     bool shift = in.down(Key::LeftShift) || in.down(Key::RightShift);
     if (in.pressed(Key::F5)) scan();
+    bool typing = ImGui::GetIO().WantTextInput || palette_open_ || ImGui::IsAnyItemActive();
+    // Up and down walk the records.
+    if (!typing && collection_ < schema_.collections.size()) {
+        const schema::Collection& c = schema_.collections[collection_];
+        usize n = record_count(c);
+        if (in.pressed(Key::Down) && record_ + 1 < n) ++record_;
+        if (in.pressed(Key::Up) && record_ > 0) --record_;
+    }
     if (!cmd) return;
+    if (in.pressed(Key::K) || in.pressed(Key::P)) {
+        palette_open_ = true;
+        palette_query_.clear();
+        palette_pick_ = 0;
+    }
+    if (!typing && collection_ < schema_.collections.size()) {
+        const schema::Collection& c = schema_.collections[collection_];
+        if (in.pressed(Key::N) && (c.files() || !c.list.empty())) new_record(c);
+        if (in.pressed(Key::D) && !c.files() && !c.list.empty()) duplicate_record(c, record_);
+    }
     if (in.pressed(Key::S)) save_all();
     if (!ImGui::GetIO().WantTextInput) {
         if (in.pressed(Key::Z)) undo(shift ? 1 : -1);
@@ -667,16 +689,20 @@ void ContentWorkspace::draw(Engine& engine, Rect area) {
                 filter_[0] = 0;
             }
     }
-    constexpr float left = 300;
+    f32 left = std::clamp(left_w_, 220.0f, std::max(220.0f, area.w * 0.45f));
     collections_panel(engine, {area.x, area.y, left, area.h});
     Rect right{area.x + left, area.y, area.w - left, area.h};
-    if (collection_ < schema_.collections.size() && schema_.collections[collection_].id == "bowl.maps") {
-        std::string file = record_id(schema_.collections[collection_], record_);
-        maps_view(engine, right, file);
-    } else {
-        form_panel(engine, right);
+    bool maps = collection_ < schema_.collections.size() && schema_.collections[collection_].id == "bowl.maps";
+    if (maps) maps_view(engine, right, record_id(schema_.collections[collection_], record_));
+    else form_panel(engine, right);
+    splitter("##split_left", {right.x - 3, area.y, 6, area.h}, left_w_, 220, std::max(220.0f, area.w * 0.45f), 1);
+    if (maps) {
+        side_w_ = std::clamp(side_w_, 240.0f, std::max(240.0f, right.w * 0.5f));
+        splitter("##split_side", {right.right() - side_w_ - 18, area.y + 60, 6, area.h - 60}, side_w_, 240,
+                 std::max(240.0f, right.w * 0.5f), -1);
     }
     map_spot_window(engine);
+    palette(engine);
     apply_edits();
     track_history();
     shortcuts(engine);
@@ -694,26 +720,61 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
                  "(see the editor guide). Sound events work without one.");
     for (const std::string& p : schema_.problems) ImGui::TextColored(danger, "%s", p.c_str());
 
-    // The collections.
+    // Find anything.
+    {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        f32 w = ImGui::GetContentRegionAvail().x, h = ImGui::GetFrameHeight();
+        if (ImGui::InvisibleButton("##find", {w, h})) {
+            palette_open_ = true;
+            palette_query_.clear();
+            palette_pick_ = 0;
+        }
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(p, {p.x + w, p.y + h}, ImGui::IsItemHovered() ? ui::color::hover : ui::color::field, 6);
+        ui::draw_icon(dl, ui::Icon::Search, {p.x + 14, p.y + h * 0.5f}, 13, ui::color::muted);
+        dl->AddText({p.x + 28, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f}, ui::color::muted, "Find anything");
+        const char* keys = "Ctrl+K";
+        dl->AddText({p.x + w - ImGui::CalcTextSize(keys).x - 10, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f}, ui::color::muted, keys);
+        ui::tip("Any item, person, event or map by name, and commands", "Ctrl+K");
+    }
+    ImGui::Spacing();
+    ui::section("Content");
+
+    // The collections: an icon, the name, how many, and a red count of problems.
     for (usize i = 0; i < schema_.collections.size(); ++i) {
         const schema::Collection& c = schema_.collections[i];
         usize n = record_count(c), bad = problems(c).size();
         bool dirty = c.files() ? false : doc(c.file) && doc(c.file)->modified();
-        std::string label = c.list.empty() && !c.files() ? c.title : std::format("{}  {}", c.title, n);
-        if (dirty) label += " *";
         ImGui::PushID(static_cast<int>(i));
-        if (ImGui::Selectable(label.c_str(), collection_ == i)) {
+        ImVec2 p = ImGui::GetCursorScreenPos();
+        f32 w = ImGui::GetContentRegionAvail().x, h = 28;
+        if (ImGui::Selectable("##c", collection_ == i, 0, {0, h})) {
             if (collection_ != i) record_ = 0;
             collection_ = i;
+            filter_[0] = 0;
         }
         if (!c.help.empty()) ui::tip(c.help);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        f32 ty = p.y + (h - ImGui::GetTextLineHeight()) * 0.5f;
+        bool on = collection_ == i;
+        collection_icon(c, {p.x + 13, p.y + h * 0.5f}, 16, on ? ui::color::accent : ui::color::text);
+        std::string title = dirty ? c.title + "  \xe2\x80\xa2" : c.title; // a dot: unsaved changes
+        dl->AddText({p.x + 32, ty}, on ? ui::color::accent : ui::color::text, title.c_str());
+        f32 right = p.x + w - 6;
         if (bad) {
-            ImGui::SameLine(area.w - 50);
-            ImGui::TextColored(danger, "%zu !", bad);
-            ui::tip(std::format("{} problem{}: see the top of the form", bad, bad == 1 ? "" : "s"));
+            std::string b = std::to_string(bad);
+            f32 bw = ImGui::CalcTextSize(b.c_str()).x + 12;
+            dl->AddRectFilled({right - bw, p.y + 5}, {right, p.y + h - 5}, IM_COL32(150, 60, 56, 255), 9);
+            dl->AddText({right - bw + 6, ty}, IM_COL32(255, 235, 230, 255), b.c_str());
+            right -= bw + 6;
+        }
+        if (!c.list.empty() || c.files()) {
+            std::string count = std::to_string(n);
+            dl->AddText({right - ImGui::CalcTextSize(count.c_str()).x, ty}, ui::color::muted, count.c_str());
         }
         ImGui::PopID();
     }
+    ImGui::Spacing();
     ui::rule();
     if (collection_ >= schema_.collections.size()) {
         ImGui::End();
@@ -722,25 +783,26 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
     const schema::Collection& c = schema_.collections[collection_];
     bool single = !c.files() && c.list.empty();
     if (!single) {
-        // The records, with a filter and the buttons to add, copy and remove.
-        if (ui::tool_button("new", ui::Icon::Plus, false, c.files() ? "A new file" : "A new one, at the end")) new_record(c);
-        ImGui::SameLine();
-        if (ui::tool_button("dup", ui::Icon::Copy, false, "A copy of the one picked", 30, !c.files()))
-            duplicate_record(c, record_);
-        ImGui::SameLine();
-        if (ui::tool_button("del", ui::Icon::Trash, false, "Remove the one picked")) confirm_delete_ = record_;
-        if (!c.files()) {
-            ImGui::SameLine();
-            if (ui::tool_button("up", ui::Icon::AlignTop, false, "Move it up the list (for events: the first that applies wins)", 30,
-                                record_ > 0))
-                move_record(c, record_, -1);
-            ImGui::SameLine();
-            if (ui::tool_button("down", ui::Icon::AlignBottom, false, "Move it down the list", 30, record_ + 1 < record_count(c)))
-                move_record(c, record_, 1);
-        }
-        ImGui::SameLine();
+        // The records: a heading with the buttons to add, copy, move and remove, a filter, and the list.
+        ui::section(c.title);
+        f32 bw = 26;
+        ImGui::SameLine(ImGui::GetContentRegionMax().x - bw * 5 - 16);
+        if (ui::tool_button("new", ui::Icon::Plus, false, c.files() ? "A new file|Ctrl+N" : "A new one, at the end|Ctrl+N", bw))
+            new_record(c);
+        ImGui::SameLine(0, 2);
+        if (ui::tool_button("dup", ui::Icon::Copy, false, "A copy of the one picked|Ctrl+D", bw, !c.files() || c.id == "bowl.maps"))
+            c.files() ? new_record(c) : duplicate_record(c, record_);
+        ImGui::SameLine(0, 2);
+        if (ui::tool_button("up", ui::Icon::ArrowUp, false, "Move it up (for events: the first that applies wins). Or drag it.", bw,
+                            !c.files() && record_ > 0))
+            move_record(c, record_, -1);
+        ImGui::SameLine(0, 2);
+        if (ui::tool_button("down", ui::Icon::ArrowDown, false, "Move it down. Or drag it.", bw, !c.files() && record_ + 1 < record_count(c)))
+            move_record(c, record_, 1);
+        ImGui::SameLine(0, 2);
+        if (ui::tool_button("del", ui::Icon::Trash, false, "Remove the one picked", bw)) confirm_delete_ = record_;
         ImGui::SetNextItemWidth(-1);
-        ImGui::InputTextWithHint("##filter", "filter", filter_, sizeof filter_);
+        ImGui::InputTextWithHint("##filter", "Filter", filter_, sizeof filter_);
         ImGui::BeginChild("records");
         usize n = record_count(c);
         std::string_view filter = filter_;
@@ -753,13 +815,37 @@ void ContentWorkspace::collections_panel(Engine& engine, Rect area) {
                 if (a.find(b) == std::string::npos) continue;
             }
             ImGui::PushID(static_cast<int>(i));
-            // A thumbnail when the records have a picture.
+            ImVec2 p = ImGui::GetCursorScreenPos();
+            f32 h = c.picture.empty() ? 24.0f : 30.0f;
+            if (ImGui::Selectable("##r", record_ == i, 0, {0, h})) record_ = i;
+            if (record_ == i && ImGui::IsWindowAppearing()) ImGui::SetScrollHereY();
+            // Drag a record onto another to move it there.
+            if (!c.files() && !c.list.empty()) {
+                if (ImGui::BeginDragDropSource()) {
+                    ImGui::SetDragDropPayload("bowl.record", &i, sizeof i);
+                    ImGui::TextUnformatted(label.c_str());
+                    ImGui::EndDragDropSource();
+                }
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("bowl.record")) {
+                        usize from = *static_cast<const usize*>(pl->Data);
+                        if (Doc* d = doc(c.file); d && d->text.valid()) move_item(c.file, {c.list}, d->text.value()[c.list], from, i);
+                        record_ = i;
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+            }
+            f32 x = p.x + 6;
             if (!c.picture.empty())
                 if (const Value* r = record(c, i, nullptr, nullptr)) {
-                    thumbnail(std::string((*r)[c.picture].as_string()), 22);
-                    ImGui::SameLine();
+                    ImGui::SetCursorScreenPos({p.x + 4, p.y + 3});
+                    thumbnail(std::string((*r)[c.picture].as_string()), 24);
+                    x = p.x + 34;
                 }
-            if (ImGui::Selectable(label.c_str(), record_ == i)) record_ = i;
+            ImGui::GetWindowDrawList()->AddText({x, p.y + (h - ImGui::GetTextLineHeight()) * 0.5f},
+                                                record_ == i ? ui::color::accent : ui::color::text, label.c_str());
+            ImGui::SetCursorScreenPos({p.x, p.y + h + ImGui::GetStyle().ItemSpacing.y * 0.5f});
+            ImGui::Dummy({0, 0});
             ImGui::PopID();
         }
         if (n == 0) ui::hint(c.files() ? "None yet: + makes one." : "None yet: + adds one.");
@@ -905,30 +991,42 @@ void ContentWorkspace::form_panel(Engine& engine, Rect area) {
     Path path;
     const Value* r = n ? record(c, record_, &file, &path) : nullptr;
 
-    // Header: what's open, and saving.
-    ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 1.3f);
+    // Header: the record's picture, big and moving; where it is; its name; save and play on the right; where it's used.
+    std::vector<Problem> all_problems = problems(c);
+    field_problems_.clear();
+    for (const Problem& p : all_problems)
+        if (p.record == record_ && !p.doc.empty()) field_problems_.emplace(path_key(p.doc, p.path), p.text);
+    ImGui::BeginGroup();
+    if (r && !c.picture.empty()) {
+        thumbnail(std::string((*r)[c.picture].as_string()), 64, true);
+        ImGui::SameLine(0, 14);
+    }
+    ImGui::BeginGroup();
+    ImGui::TextColored(muted, "%s", r && !(c.list.empty() && !c.files()) ? (c.title + "  /").c_str() : c.title.c_str());
+    ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * 1.45f);
     ImGui::TextUnformatted(r ? record_label(c, record_).c_str() : c.title.c_str());
     ImGui::PopFont();
-    ImGui::SameLine();
-    bool dirty = unsaved();
-    ImGui::BeginDisabled(!dirty);
-    if (ImGui::SmallButton("Save")) save_all();
-    ImGui::EndDisabled();
-    ui::tip("Saves every changed content file; a running game picks the change up", "Ctrl+S");
-    ImGui::SameLine();
-    ImGui::BeginDisabled(schema_.play.empty());
-    if (ImGui::SmallButton("Play")) {
-        save_all();
-        play_game({});
-    }
-    ImGui::EndDisabled();
-    ui::tip(schema_.play.empty() ? "Add \"play\" to the game's schema to start the game from here" : "Saves, then starts the game");
-    if (r) {
-        ImGui::SameLine();
-        ImGui::TextDisabled("%s", file.c_str());
+    if (r) used_by(c, record_);
+    ImGui::EndGroup();
+    ImGui::EndGroup();
+    {
+        f32 bw = 30, x = ImGui::GetContentRegionMax().x - bw * 2 - 4;
+        ImVec2 back = ImGui::GetCursorPos();
+        ImGui::SetCursorPos({x, ImGui::GetStyle().WindowPadding.y});
+        if (ui::tool_button("save", ui::Icon::Save, unsaved(), unsaved() ? "Save every change; a running game picks it up|Ctrl+S"
+                                                                       : "Nothing to save|Ctrl+S", bw, unsaved()))
+            save_all();
+        ImGui::SameLine(0, 4);
+        if (ui::tool_button("play", ui::Icon::Play, false,
+                            schema_.play.empty() ? "Add \"play\" to the game's schema to start the game from here"
+                                                 : "Save, then start a new game", bw, !schema_.play.empty())) {
+            save_all();
+            play_game({});
+        }
+        ImGui::SetCursorPos(back);
     }
     if (!c.help.empty()) ui::hint(c.help);
-    problems_list(problems(c));
+    problems_list(all_problems);
     ui::rule();
     if (!r) {
         ui::hint(n ? "Pick one on the left." : "Nothing here yet.");
@@ -1087,7 +1185,19 @@ void ContentWorkspace::field(Engine& engine, const schema::Field& raw, const Slo
         return;
     }
     ImGui::SameLine(label_w);
+    auto problem = field_problems_.find(path_key(slot.doc, slot.path));
+    ImGui::BeginGroup();
     value_widget(engine, f, slot);
+    ImGui::EndGroup();
+    if (problem != field_problems_.end()) {
+        // Outlined in red, with what's wrong under it.
+        ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
+        ImGui::GetWindowDrawList()->AddRect({a.x - 2, a.y - 2}, {b.x + 2, b.y + 2}, ui::color::danger, 6, 0, 1.5f);
+        std::string_view text = problem->second;
+        if (usize colon = text.rfind(": "); colon != std::string_view::npos) text = text.substr(colon + 2);
+        ImGui::SetCursorPosX(label_w);
+        ImGui::TextColored(danger, "%.*s", static_cast<int>(text.size()), text.data());
+    }
 }
 
 std::string ContentWorkspace::item_title(const schema::Field& item, const Value& v, usize index) {
@@ -1096,6 +1206,9 @@ std::string ContentWorkspace::item_title(const schema::Field& item, const Value&
     auto show = [&](const schema::Field& field, const Value& value) -> std::string {
         schema::Field r = schema_.resolve(field);
         if (r.type == "time" && value.is_number()) return clock_text(value.as_int());
+        if (r.type == "ref" && value.is_string()) // a name reads better than an id
+            for (const auto& [id, label] : ids_of(r.to))
+                if (id == value.as_string() && !label.empty()) return label;
         if (value.is_string()) return short_text(value.as_string());
         if (value.is_number()) return std::format("{}", value.as_number());
         return {};
@@ -1133,6 +1246,29 @@ void ContentWorkspace::list_widget(Engine& engine, const schema::Field& f, const
     bool cards = t && !t->base;
     usize n = slot.value ? slot.value->size() : 0;
     std::optional<std::pair<usize, usize>> swap;
+    std::optional<std::pair<usize, usize>> moved;
+    // Items are dragged within their own list: the payload carries which list.
+    std::string list_key = path_key(slot.doc, slot.path);
+    struct Payload {
+        u64 list;
+        usize index;
+    };
+    u64 list_hash = std::hash<std::string>{}(list_key);
+    auto drag_drop = [&](usize i) {
+        if (ImGui::BeginDragDropSource()) {
+            Payload pl{list_hash, i};
+            ImGui::SetDragDropPayload("bowl.item", &pl, sizeof pl);
+            ImGui::TextUnformatted(item_title(item, (*slot.value)[i], i).c_str());
+            ImGui::EndDragDropSource();
+        }
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("bowl.item")) {
+                Payload pl = *static_cast<const Payload*>(p->Data);
+                if (pl.list == list_hash) moved = {pl.index, i};
+            }
+            ImGui::EndDragDropTarget();
+        }
+    };
     for (usize i = 0; i < n; ++i) {
         const Value& v = (*slot.value)[i];
         Slot s{slot.doc, slot.path, &v, slot.value, slot.record_dir};
@@ -1142,9 +1278,9 @@ void ContentWorkspace::list_widget(Engine& engine, const schema::Field& f, const
         auto buttons = [&] {
             float x = ImGui::GetContentRegionMax().x - 4 * 26;
             ImGui::SameLine(std::max(x, ImGui::GetCursorPosX()));
-            if (ui::tool_button("up", ui::Icon::AlignTop, false, "Move up", 22, i > 0)) swap = {i - 1, i};
+            if (ui::tool_button("up", ui::Icon::ArrowUp, false, "Move up (or drag it)", 22, i > 0)) swap = {i - 1, i};
             ImGui::SameLine(0, 4);
-            if (ui::tool_button("down", ui::Icon::AlignBottom, false, "Move down", 22, i + 1 < n)) swap = {i, i + 1};
+            if (ui::tool_button("down", ui::Icon::ArrowDown, false, "Move down (or drag it)", 22, i + 1 < n)) swap = {i, i + 1};
             ImGui::SameLine(0, 4);
             if (ui::tool_button("copy", ui::Icon::Copy, false, "Add a copy below the last", 22))
                 edits_.push_back({Edit::Insert, slot.doc, slot.path, v, {}});
@@ -1152,8 +1288,18 @@ void ContentWorkspace::list_widget(Engine& engine, const schema::Field& f, const
             if (ui::tool_button("remove", ui::Icon::Cross, false, "Remove", 22)) edits_.push_back({Edit::Erase, slot.doc, s.path, {}, {}});
         };
         if (cards) {
+            // An item with a problem inside shows red, and opens so it can be seen.
+            std::string inside = path_key(slot.doc, s.path) + "/";
+            bool bad = std::any_of(field_problems_.begin(), field_problems_.end(),
+                                   [&](const auto& e) { return e.first.starts_with(inside); });
+            if (bad) {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+                ImGui::PushStyleColor(ImGuiCol_Text, danger);
+            }
             bool open = ImGui::TreeNodeEx("##item", ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_SpanAvailWidth, "%s",
                                           item_title(item, v, i).c_str());
+            if (bad) ImGui::PopStyleColor();
+            drag_drop(i);
             buttons();
             if (open) {
                 object_widget(engine, *t, s);
@@ -1171,6 +1317,7 @@ void ContentWorkspace::list_widget(Engine& engine, const schema::Field& f, const
         }
         ImGui::PopID();
     }
+    if (moved) move_item(slot.doc, slot.path, *slot.value, moved->first, moved->second);
     if (swap) {
         const Value& a = (*slot.value)[swap->first];
         const Value& b = (*slot.value)[swap->second];
@@ -1233,15 +1380,33 @@ bool ContentWorkspace::path_combo(const char* id, std::string& value, const std:
     return changed;
 }
 
-void ContentWorkspace::thumbnail(const std::string& path, f32 box) {
-    // A picture, or the first frame of a sprite sheet, as big as fits in the box.
+void ContentWorkspace::thumbnail(const std::string& path, f32 box, bool animate) {
+    // A picture, or a frame of a sprite sheet, as big as fits in the box. Animated: the sheet's walk_down (or first)
+    // animation plays.
     const gfx::Texture* tex = nullptr;
     Rect src;
     if (path.ends_with(".json")) {
         auto sheet = assets_->load<gfx::SpriteSheet>(path);
         if (sheet && sheet->texture && !sheet->frames.empty()) {
             tex = sheet->texture.get();
-            src = sheet->frames[0].source;
+            u32 frame = 0;
+            if (animate) {
+                const gfx::SpriteAnimation* a = sheet->find("walk_down");
+                if (!a && !sheet->animations.empty()) a = &sheet->animations[0];
+                u32 from = a ? a->from : 0, to = a ? a->to : static_cast<u32>(sheet->frames.size() - 1);
+                f32 total = 0;
+                for (u32 k = from; k <= to && k < sheet->frames.size(); ++k) total += sheet->frames[k].duration;
+                f32 t = total > 0 ? std::fmod(static_cast<f32>(ImGui::GetTime()), total) : 0;
+                frame = from;
+                for (u32 k = from; k <= to && k < sheet->frames.size(); ++k) {
+                    if (t < sheet->frames[k].duration) {
+                        frame = k;
+                        break;
+                    }
+                    t -= sheet->frames[k].duration;
+                }
+            }
+            src = sheet->frames[std::min<usize>(frame, sheet->frames.size() - 1)].source;
         }
     } else if (!path.empty()) {
         auto t = assets_->load<gfx::Texture>(path);
@@ -1261,7 +1426,7 @@ void ContentWorkspace::thumbnail(const std::string& path, f32 box) {
 bool ContentWorkspace::picture_picker(const char* id, std::string& path) {
     bool changed = false;
     ImGui::PushID(id);
-    thumbnail(path, 40);
+    thumbnail(path, 40, true);
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1);
     if (ImGui::BeginCombo("##pic", path.empty() ? "(none)" : path.c_str(), ImGuiComboFlags_HeightLargest)) {
@@ -1338,7 +1503,24 @@ void ContentWorkspace::value_widget(Engine& engine, const schema::Field& f, cons
         return;
     }
 
-    if (t == "text" || t == "id") {
+    if (t == "id" && collection_ < schema_.collections.size() && !schema_.collections[collection_].files()) {
+        // Typing changes nothing until it's done (Enter, or clicking away); then the id changes everywhere it's used.
+        std::string key = path_key(slot.doc, slot.path), now(shown.as_string());
+        if (id_editing_ != key) id_text_ = now;
+        ImGui::SetNextItemWidth(-1);
+        input_text("##v", id_text_);
+        if (ImGui::IsItemActive()) id_editing_ = key;
+        if (ImGui::IsItemDeactivated() && id_editing_ == key) {
+            id_editing_.clear();
+            std::string to = id_text_;
+            if (!to.empty() && to != now) {
+                usize n = rename_id(schema_.collections[collection_], record_, now, to);
+                say_(n ? std::format("Renamed {} to {}, and {} place{} that use{} it", now, to, n, n == 1 ? "" : "s", n == 1 ? "s" : "")
+                       : std::format("Renamed {} to {}", now, to));
+            }
+        }
+        ui::tip("Changing it changes every place that names it, when you press Enter or click away");
+    } else if (t == "text" || t == "id") {
         std::string s(shown.as_string());
         ImGui::SetNextItemWidth(f.suggest.empty() ? -1 : width - 30);
         if (input_text("##v", s, f.multiline)) set(slot, s);
@@ -1622,10 +1804,11 @@ ContentWorkspace::MapInfo* ContentWorkspace::map_info(const std::string& name, c
 // --- Problems --------------------------------------------------------------------------------------------------------
 
 void ContentWorkspace::check(const schema::Field& raw, const Value* v, const std::string& where, const schema::Collection& c,
-                             usize record, std::vector<Problem>& out, const Value* parent) {
+                             usize record, std::vector<Problem>& out, const Value* parent, const std::string& doc_path,
+                             const Path& path) {
     schema::Field f = schema_.resolve(raw);
     std::string here = where.empty() ? f.title() : where + " · " + f.title();
-    auto problem = [&](std::string text) { out.push_back({c.id, record, std::format("{}: {}", here, text)}); };
+    auto problem = [&](std::string text) { out.push_back({c.id, record, std::format("{}: {}", here, text), doc_path, path}); };
     std::error_code ec;
     if (!v || v->is_null()) {
         if (f.type == "ref" && !f.optional && !f.free && !f.has_default) problem("not set");
@@ -1653,15 +1836,27 @@ void ContentWorkspace::check(const schema::Field& raw, const Value* v, const std
             problem(std::format("{} has no spawn point \"{}\"", map, v->as_string()));
     }
     if (f.type == "list" && f.of && v->is_array())
-        for (usize i = 0; i < v->size(); ++i) check(*f.of, &(*v)[i], std::format("{} {}", here, i + 1), c, record, out);
+        for (usize i = 0; i < v->size(); ++i) {
+            Path p = path;
+            p.emplace_back(i);
+            check(*f.of, &(*v)[i], std::format("{} {}", here, i + 1), c, record, out, v, doc_path, p);
+        }
     if (const schema::Type* t = schema_.type(f.type); t && !t->base && v->is_object()) {
         for (const schema::Field& sub : t->fields)
-            if (sub.type != "variant") check(sub, v->find(sub.key), where.empty() ? std::string() : here, c, record, out, v);
+            if (sub.type != "variant") {
+                Path p = path;
+                p.emplace_back(sub.key);
+                check(sub, v->find(sub.key), where.empty() ? std::string() : here, c, record, out, v, doc_path, p);
+            }
         if (!t->tag.empty()) {
             const schema::Variant* var = t->variant((*v)[t->tag].as_string());
             if (!var) out.push_back({c.id, record, std::format("{}: \"{}\" isn't one of the kinds", here, (*v)[t->tag].as_string())});
             else
-                for (const schema::Field& sub : var->fields) check(sub, v->find(sub.key), here, c, record, out, v);
+                for (const schema::Field& sub : var->fields) {
+                    Path p = path;
+                    p.emplace_back(sub.key);
+                    check(sub, v->find(sub.key), here, c, record, out, v, doc_path, p);
+                }
         }
     }
 }
@@ -1678,15 +1873,20 @@ std::vector<ContentWorkspace::Problem> ContentWorkspace::problems(const schema::
     usize n = record_count(c);
     std::map<std::string, usize> seen;
     for (usize i = 0; i < n; ++i) {
-        const Value* r = record(c, i, nullptr, nullptr);
+        std::string doc_path;
+        Path path;
+        const Value* r = record(c, i, &doc_path, &path);
         if (!r) continue;
         std::string label = record_label(c, i);
-        check(schema::Field{.type = c.type}, r, "", c, i, out);
+        check(schema::Field{.type = c.type}, r, "", c, i, out, nullptr, doc_path, path);
         for (Problem& p : out)
             if (p.record == i && p.collection == c.id && !p.text.starts_with(label)) p.text = label + ": " + p.text;
         if (!c.files() && !c.list.empty()) {
             std::string id(r->find(c.id_key) ? (*r)[c.id_key].as_string() : "");
-            if (!id.empty() && !seen.emplace(id, i).second) out.push_back({c.id, i, std::format("{}: another one has the id \"{}\"", label, id)});
+            Path idp = path;
+            idp.emplace_back(c.id_key);
+            if (!id.empty() && !seen.emplace(id, i).second)
+                out.push_back({c.id, i, std::format("{}: another one has the id \"{}\"", label, id), doc_path, idp});
         }
     }
     return out;
