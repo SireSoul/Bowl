@@ -61,7 +61,20 @@ std::optional<std::vector<u8>> compile_hlsl_to_dxbc([[maybe_unused]] const Shade
 } // namespace
 
 Texture::~Texture() {
-    if (texture_ && device_ && device_->handle()) SDL_ReleaseGPUTexture(device_->handle(), texture_);
+    if (texture_ && device_ && device_->handle()) device_->release(texture_);
+}
+
+void GpuDevice::release(SDL_GPUTexture* texture) {
+    if (holding_) held_.push_back(texture);
+    else SDL_ReleaseGPUTexture(device_, texture);
+}
+
+void GpuDevice::hold_releases() { holding_ = true; }
+
+void GpuDevice::let_go_releases() {
+    holding_ = false;
+    for (SDL_GPUTexture* t : held_) SDL_ReleaseGPUTexture(device_, t);
+    held_.clear();
 }
 
 Shader::~Shader() {
@@ -147,6 +160,7 @@ bool GpuDevice::init(SDL_Window* window, const GpuDeviceDesc& desc) {
 
 void GpuDevice::shutdown() {
     if (!device_) return;
+    let_go_releases();
     SDL_WaitForGPUIdle(device_);
     if (window_) SDL_ReleaseWindowFromGPUDevice(device_, window_);
     SDL_DestroyGPUDevice(device_);

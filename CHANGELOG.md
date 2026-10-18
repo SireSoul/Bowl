@@ -44,6 +44,11 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 - The Content workspace's records list can be made taller or shorter by dragging the bar between it and the
   collections (double-click: back as it was); the collections scroll when squeezed. Remembered between runs.
 
+### Fixed
+- A texture destroyed while a frame was being drawn (the editor replacing the Paint canvas, a picture reloaded from
+  the dev tools) no longer crashes the renderer: draws keep the GPU texture itself, and the device holds destroyed
+  textures until the frame is submitted.
+
 ## [0.3.0] - 2026-10-17
 
 ### Added
