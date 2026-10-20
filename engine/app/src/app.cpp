@@ -276,6 +276,7 @@ struct AppRunner {
                 else error("screenshot: could not write {}", path);
             });
         }
+        e.renderer_.set_time(e.time_);
         if (e.renderer_.begin_frame()) {
             BOWL_PROFILE_SCOPE("game render");
             game->render(e);

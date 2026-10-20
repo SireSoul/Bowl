@@ -3,6 +3,7 @@
 
 add_executable(bowl-editor
     src/main.cpp
+    src/code_editor.cpp
     src/content.cpp
     src/content_maps.cpp
     src/content_tools.cpp
@@ -11,13 +12,20 @@ add_executable(bowl-editor
     src/editor.cpp
     src/data.cpp
     src/game.cpp
+    src/materials.cpp
+    src/materials_shaders.cpp
     src/paint.cpp
     src/paint_studio.cpp
     src/panels.cpp
     src/regions.cpp
     src/ui.cpp)
 bowl_add_game(bowl-editor)
-target_link_libraries(bowl-editor PRIVATE bowl_stb bowl_paint) # stb_image, to read pictures for painting
+target_link_libraries(bowl-editor PRIVATE bowl_stb bowl_paint bowl_shadergraph) # stb_image, to read pictures for painting
+# The Materials workspace compiles shaders as they're typed.
+if(TARGET bowl_shaderc)
+    target_link_libraries(bowl-editor PRIVATE bowl_shaderc)
+    target_compile_definitions(bowl-editor PRIVATE BOWL_EDITOR_SHADERC=1)
+endif()
 set_target_properties(bowl-editor PROPERTIES FOLDER tools)
 # The editor loads games' code libraries (--game) to learn their component types. Those libraries call into the
 # engine, so the editor exports it.

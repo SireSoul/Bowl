@@ -12,12 +12,14 @@
 
 #include "bowl/core/file.hpp"
 #include "bowl/gfx/bwtx.hpp"
+#include "bowl/gfx/material.hpp"
 #include "bowl/gfx/renderer.hpp"
 #include "bowl/gfx/sprite_sheet.hpp"
 #include "bowl/gfx/text.hpp"
 #include "bowl/gfx/tilemap.hpp"
 
 #include <climits>
+#include <format>
 #include <string>
 
 namespace bowl::gfx {
@@ -176,6 +178,23 @@ void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter defa
             return nullptr;
         }
         return Font::from_memory(&device, std::move(*bytes), ctx.path());
+    });
+    assets.register_loader<SpriteMaterial>([](AssetLoadContext& ctx) -> std::unique_ptr<SpriteMaterial> {
+        auto text = ctx.read_text(ctx.path());
+        if (!text) {
+            log_asset_error(ctx.path(), "SpriteMaterial", "file not found in any mount");
+            return nullptr;
+        }
+        auto doc = json::parse(*text);
+        if (!doc) {
+            log_asset_error(ctx.path(), "SpriteMaterial",
+                            std::format("line {}: {}", doc.error->line, doc.error->message));
+            return nullptr;
+        }
+        std::vector<std::string> warnings;
+        auto material = parse_material(doc.value, ctx.assets(), &warnings);
+        for (const std::string& w : warnings) warn("material '{}': {}", ctx.path(), w);
+        return material;
     });
     register_sprite_sheet_loader(assets);
     register_tilemap_loader(assets);

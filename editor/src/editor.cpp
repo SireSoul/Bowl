@@ -153,7 +153,7 @@ void Editor::init(Engine& engine) {
                 game_pane_ = pane == "systems" ? 1 : pane == "entities" ? 2 : 0;
             }
         }
-        else if (a == "--paint" && has_value && !args[i + 1].starts_with("--")) ++i; // read below
+        else if ((a == "--paint" || a == "--materials") && has_value && !args[i + 1].starts_with("--")) ++i; // read below
         else if (a == "--content") { // its collection and record are read below
             for (int k = 0; k < 2 && i + 1 < args.size() && !args[i + 1].starts_with("--"); ++k) ++i;
         }
@@ -216,9 +216,32 @@ void Editor::init(Engine& engine) {
         workspace_ = Workspace::Data;
     };
     content_.hooks.go = [this](int w) {
-        static constexpr Workspace order[] = {Workspace::Content, Workspace::Paint, Workspace::Level, Workspace::Data, Workspace::Game};
-        workspace_ = order[std::clamp(w, 0, 4)];
+        static constexpr Workspace order[] = {Workspace::Content, Workspace::Paint, Workspace::Level, Workspace::Data, Workspace::Game,
+                                              Workspace::Materials};
+        workspace_ = order[std::clamp(w, 0, 5)];
     };
+    materials_.init(engine, assets_dir_, [this](std::string m) { say(std::move(m)); });
+    materials_.hooks.pictures = [this] { return paint_.pictures(); };
+    materials_.hooks.pictures_changed = [this] { paint_.scan(); };
+    materials_.hooks.paint = [this](const std::string& p) {
+        if (paint_.open(p)) workspace_ = Workspace::Paint;
+    };
+    materials_.hooks.open_text = [this](const std::string& p) {
+        scan_data();
+        data_open_path(p);
+        workspace_ = Workspace::Data;
+    };
+    content_.hooks.looks = [this] {
+        std::vector<std::string> all = materials_.materials();
+        for (const std::string& g : materials_.graphs()) all.push_back(g);
+        for (const std::string& s : materials_.shaders())
+            if (!fs::exists(assets_dir_ / (s.substr(0, s.size() - 5) + ".shadergraph"))) all.push_back(s + ".glsl");
+        return all;
+    };
+    content_.hooks.open_look = [this](const std::string& p) {
+        if (materials_.open(p)) workspace_ = Workspace::Materials;
+    };
+    preview_light_look_ = gfx::light_material(engine.assets(), {.normals = true, .height = 0.35f, .shadows = true});
     // The Level tab is for games that lay out levels: shown when there are .world files (or one was opened).
     {
         std::error_code ec;
@@ -242,6 +265,13 @@ void Editor::init(Engine& engine) {
         workspace_ = Workspace::Data;
         if (!data_files_.empty()) data_open(0);
     }
+    // --materials [material or shader]: the Materials workspace, with that open.
+    for (usize i = 0; i < args.size(); ++i)
+        if (args[i] == "--materials") {
+            workspace_ = Workspace::Materials;
+            if (i + 1 < args.size() && !args[i + 1].starts_with("--")) materials_.open(args[i + 1]);
+            else if (!materials_.materials().empty()) materials_.open(materials_.materials()[0]);
+        }
     // --paint [picture]: that picture, or the first.
     for (usize i = 0; i < args.size(); ++i)
         if (args[i] == "--paint") {
@@ -259,13 +289,14 @@ void Editor::data_open_path(const std::string& path) {
 
 bool Editor::unsaved_anywhere() const {
     return (doc_ && doc_->modified() && !doc_->file().empty()) || content_.unsaved() || paint_.unsaved() ||
-           (data_index_ && data_doc_.text() != data_saved_);
+           materials_.unsaved() || (data_index_ && data_doc_.text() != data_saved_);
 }
 
 void Editor::save_everything(Engine& engine) {
     if (doc_ && doc_->modified() && !doc_->file().empty()) save(engine, false);
     if (content_.unsaved()) content_.save_all();
     if (paint_.unsaved()) paint_.save();
+    if (materials_.unsaved()) materials_.save();
     if (data_index_ && data_doc_.text() != data_saved_) data_save();
 }
 
@@ -274,6 +305,7 @@ void Editor::shutdown(Engine& engine) {
     doc_->write_autosave(); // unsaved work is offered back next time
     if (content_.unsaved() && content_.save_all()) info("editor: saved the content changes on the way out");
     if (paint_.unsaved() && paint_.save()) info("editor: saved the picture being painted on the way out");
+    if (materials_.unsaved() && materials_.save()) info("editor: saved {} on the way out", materials_.path());
     Settings& prefs = engine.settings();
     prefs.set("editor.grid", show_grid_);
     prefs.set("editor.snap", snap_);
@@ -321,12 +353,14 @@ void Editor::update(Engine& engine, f32) {
         if (cmd && in.pressed(Key::Num3)) workspace_ = Workspace::Level;
         if (cmd && in.pressed(Key::Num4)) workspace_ = Workspace::Game;
         if (cmd && in.pressed(Key::Num5)) workspace_ = Workspace::Data;
+        if (cmd && in.pressed(Key::Num6)) workspace_ = Workspace::Materials;
         if (cmd && in.pressed(Key::K) && !content_.searching()) content_.open_search(); // find anything, from anywhere
     }
     if (workspace_ == Workspace::Level) {
         scene_mouse(engine);
         shortcuts(engine);
     }
+    materials_.update(engine); // compiles finish, edits reach its preview: before anything is drawn
     ecs::propagate_transforms(world);
 
     // Record an undo step once an edit has settled: nothing being dragged or typed into.
@@ -614,6 +648,7 @@ void Editor::shortcuts(Engine& engine) {
     if (key(Key::B)) tool_ = Tool::Brush;
     if (key(Key::R)) tool_ = Tool::Region;
     if (key(Key::C)) show_colliders_ = !show_colliders_;
+    if (key(Key::L)) light_preview_ = !light_preview_;
     if (key(Key::G)) {
         if (shift) snap_ = !snap_;
         else show_grid_ = !show_grid_;
@@ -641,8 +676,16 @@ void Editor::shortcuts(Engine& engine) {
 // Render
 
 void Editor::render(Engine& engine) {
+    // Lighting and bloom are for the workspaces that preview them, and only while they do.
+    gfx::PostSettings& post = engine.renderer().post();
+    post.lighting = false;
+    post.bloom = false;
     if (workspace_ == Workspace::Paint) {
         paint_.render(engine);
+        return;
+    }
+    if (workspace_ == Workspace::Materials) {
+        materials_.render(engine);
         return;
     }
     if (workspace_ == Workspace::Data || workspace_ == Workspace::Game || workspace_ == Workspace::Content) return;
@@ -664,12 +707,12 @@ void Editor::render(Engine& engine) {
             return std::fmod(std::abs(std::round(v / step)), 8.0f) == 0 ? Color::hex(0xffffff, 0.11f) : Color::hex(0xffffff, 0.05f);
         };
         for (f32 x = std::floor(view.x / step) * step; x <= view.right(); x += step)
-            scene_.draw_rect({x - px * 0.5f, view.y, px, view.h}, shade(x, Color::hex(0x5ae07a, 0.45f)), -1e9f);
+            scene_.scene.draw_rect({x - px * 0.5f, view.y, px, view.h}, shade(x, Color::hex(0x5ae07a, 0.45f)), -1e9f);
         for (f32 y = std::floor(view.y / step) * step; y <= view.bottom(); y += step)
-            scene_.draw_rect({view.x, y - px * 0.5f, view.w, px}, shade(y, Color::hex(0xe05a5a, 0.45f)), -1e9f);
+            scene_.scene.draw_rect({view.x, y - px * 0.5f, view.w, px}, shade(y, Color::hex(0xe05a5a, 0.45f)), -1e9f);
     }
     auto skip = [&](ecs::Entity e) { return hidden(world, e); };
-    gfx::draw_maps(world, scene_, static_cast<f32>(engine.time()), skip);
+    gfx::draw_maps(world, scene_.scene, static_cast<f32>(engine.time()), skip);
     gfx::draw_sprites(world, scene_, skip);
 
     // What the Place tool (or art being dragged from the shelf) would put down, see-through.
@@ -688,11 +731,22 @@ void Editor::render(Engine& engine) {
                 s.origin = {0.5f, 1.0f};
                 s.depth = 1e9f;
                 s.color = Color::white().with_alpha(0.55f);
-                scene_.draw(*tex, s);
+                scene_.scene.draw(*tex, s);
             }
         }
     }
-    engine.renderer().submit(scene_);
+    scene_.submit(engine.renderer());
+    // The light preview: a light at the mouse, to see how materials' glow, normal maps and shadows look in the dark.
+    if (light_preview_) {
+        post.lighting = true;
+        post.bloom = true;
+        post.ambient = {0.3f, 0.32f, 0.42f, 1};
+        preview_light_.begin(cam, gfx::SpriteSort::None, gfx::BlendMode::Additive, &preview_light_look_);
+        f32 radius = 220 / std::max(cam.zoom, 0.05f);
+        preview_light_.draw(&engine.renderer().light_texture(),
+                            {.position = mouse_world(engine), .size = {radius * 2, radius * 2}, .color = {1.0f, 0.88f, 0.66f, 1}});
+        engine.renderer().submit_light(preview_light_);
+    }
 
     gizmos_.begin(cam, gfx::SpriteSort::None);
     Color accent = Color::hex(0xf2c45c), muted = Color::hex(0xa0a6b4);

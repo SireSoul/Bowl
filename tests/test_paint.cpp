@@ -343,3 +343,32 @@ TEST_CASE("paint: frames hold every layer's picture, undo, tags, and the sprite 
     CHECK(made.duration(1) == 60);
     CHECK_FALSE(made.modified());
 }
+
+TEST_CASE("paint: normal maps lean away from a shape's middle; emissive maps keep what glows") {
+    paint::Image disc(17, 17); // clear around it: the picture's own edges don't bevel
+    paint::ellipse({1, 1}, {15, 15}, true, [&](i32 x, i32 y) { disc.set(x, y, paint::rgba(120, 120, 120)); });
+    paint::Image n = paint::normal_map(disc, {.bevel = 4, .brightness = 0});
+    CHECK(paint::alpha(n.get(0, 0)) == 0); // outside the disc
+    paint::Pixel left = n.get(2, 8), right = n.get(14, 8), top = n.get(8, 2), bottom = n.get(8, 14), middle = n.get(8, 8);
+    CHECK(paint::red(left) < 110);
+    CHECK(paint::red(right) > 146);
+    CHECK(paint::green(top) > 146);   // green is up
+    CHECK(paint::green(bottom) < 110);
+    CHECK(std::abs(paint::red(middle) - 128) < 6);
+    CHECK(std::abs(paint::green(middle) - 128) < 6);
+    CHECK(paint::blue(middle) > 250);
+    // Inverted: dents.
+    paint::Image dent = paint::normal_map(disc, {.bevel = 4, .brightness = 0, .invert = true});
+    CHECK(paint::red(dent.get(2, 8)) > 146);
+    // A tile filling the picture stays flat at its edges.
+    paint::Image tile(8, 8, paint::rgba(90, 90, 90));
+    paint::Image flat = paint::normal_map(tile);
+    CHECK(std::abs(paint::red(flat.get(0, 4)) - 128) < 3);
+
+    paint::Image lamp(2, 1);
+    lamp.set(0, 0, paint::rgba(255, 230, 120));
+    lamp.set(1, 0, paint::rgba(40, 30, 30));
+    paint::Image glow = paint::emissive_map(lamp, [](paint::Pixel p) { return paint::to_hsv(p).v > 0.8f; });
+    CHECK(glow.get(0, 0) == lamp.get(0, 0));
+    CHECK(glow.get(1, 0) == paint::clear);
+}

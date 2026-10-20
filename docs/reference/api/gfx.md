@@ -7,6 +7,7 @@ Made by `bowl-apidoc` from the comments in the headers. Don't edit it here: chan
 - [bowl/gfx/bwtx.hpp](#bowlgfxbwtxhpp)
 - [bowl/gfx/device.hpp](#bowlgfxdevicehpp)
 - [bowl/gfx/gpu_particles.hpp](#bowlgfxgpu_particleshpp)
+- [bowl/gfx/material.hpp](#bowlgfxmaterialhpp)
 - [bowl/gfx/particles.hpp](#bowlgfxparticleshpp)
 - [bowl/gfx/renderer.hpp](#bowlgfxrendererhpp)
 - [bowl/gfx/sprite.hpp](#bowlgfxspritehpp)
@@ -165,6 +166,22 @@ Unique per shader object (never reused), for pipeline caches.
 u32 id() const;
 ```
 
+The uniform block at binding 0 member by member, and the textures by binding, with what the shader's comments
+say about them (see ShaderBundle::Uniform), so materials can set them by name.
+
+```cpp
+u32 block_size() const;
+const std::vector<ShaderBundle::Uniform>& uniforms() const;
+const std::vector<ShaderBundle::TextureSlot>& textures() const;
+const ShaderBundle::Uniform* uniform(std::string_view name) const;
+```
+
+The block filled with the shader's own defaults (zero where it gives none).
+
+```cpp
+const std::vector<u8>& defaults() const;
+```
+
 ### ComputeShader
 
 A compute shader on the GPU, ready to dispatch (Renderer::dispatch). Loaded as an asset like Shader, from a
@@ -279,6 +296,14 @@ Uploads raw bytes into a buffer through a temporary transfer buffer, on its own 
 bool upload(SDL_GPUBuffer* buffer, const void* data, u32 size, u32 offset = 0);
 ```
 
+While a frame is being recorded, textures destroyed (a hot reload, an editor replacing a picture) may still be
+drawn by it, so their GPU memory is let go only once the frame is submitted. The renderer holds and lets go.
+
+```cpp
+void hold_releases();
+void let_go_releases();
+```
+
 Cached shader code on disk, by a hash of what it was made from. Used for D3D12's DXBC; works anywhere.
 
 ```cpp
@@ -286,8 +311,8 @@ std::optional<std::vector<u8>> load_cached_shader(const std::filesystem::path& d
 void store_cached_shader(const std::filesystem::path& dir, u64 key, std::span<const u8> code);
 ```
 
-Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader, Font (.ttf/.otf), SpriteSheet (Aseprite JSON) and
-Tilemap (Tiled .tmj) loaders with the asset manager.
+Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader, Font (.ttf/.otf), SpriteMaterial (.material),
+SpriteSheet (Aseprite JSON) and Tilemap (Tiled .tmj) loaders with the asset manager.
 default_filter: Nearest for pixel art, Linear (with mipmaps) for everything else.
 
 ```cpp
@@ -357,6 +382,136 @@ Removes every particle at the next update.
 ```cpp
 void clear();
 u32 capacity() const;
+```
+
+## bowl/gfx/material.hpp
+
+`#include "bowl/gfx/material.hpp"` · namespace `bowl::gfx`
+
+How a material's sprites stand in the way of light_material lights.
+
+```cpp
+enum class Shadow : u8 {
+    None,  // light passes through
+    Shape, // the sprite's shape blocks light
+    Faint, // blocks nothing and is never shadowed itself: the upright part of something whose footprint casts the shadow
+};
+```
+
+### SpriteMaterial
+
+A sprite's whole look, from a .material file (Bowl Editor's Materials workspace makes them):
+
+```cpp
+{
+  "shader": "shaders/water.frag",                       // its own fragment shader; none: the sprite shader
+  "params": {"speed": 1.5, "tint": [0.4, 0.8, 1, 1]},   // the shader's uniforms, by name
+  "textures": {"u_noise": "textures/noise.png"},        // its extra textures, by name
+  "blend": "alpha",                                     // alpha, additive, multiply or opaque
+  "emissive": {"map": "props/lamp_emissive.png", "color": "#ffd890", "strength": 3},
+  "normal": "props/lamp_normal.png",
+  "shadow": "shape"                                     // none, shape or faint
+}
+```
+Every key is optional. Parameters the file doesn't set take the defaults the shader's comments give (see
+shaders.md). The emissive and normal maps line up with the sprite's own texture (the same layout, at any size), so
+sprite sheet frames and atlas regions find their parts. The emissive map glows over the lit scene where it's bright
+(black glows nowhere) in `color` times `strength`; with no map, a strength above 0 makes the sprite itself glow where
+it's bright. Load it as an asset; it hot-reloads, and so do the textures and shader it names:
+
+```cpp
+Asset<gfx::SpriteMaterial> lamp = engine.assets().load<gfx::SpriteMaterial>("props/lamp.material");
+world.create(ecs::Transform2D{{40, 80}}, gfx::Sprite{.texture = lamp_png, .material = lamp});
+```
+
+```cpp
+class SpriteMaterial
+```
+
+```cpp
+Asset<Shader> shader;
+std::map<std::string, std::vector<f32>, std::less<>> params; // by uniform name; vectors and colors by component
+std::map<std::string, Asset<Texture>, std::less<>> textures;  // the shader's extra textures, by its names for them
+std::optional<BlendMode> blend;
+Asset<Texture> emissive;
+Color emissive_color = Color::white();
+f32 emissive_strength = 0;
+Asset<Texture> normal;
+Shadow shadow = Shadow::None;
+std::string preview; // the picture Bowl Editor shows it on; games ignore it
+```
+
+What its sprites draw with in the scene: null when it changes nothing there (the sprite shader, alpha blending).
+Valid while the material lives.
+
+```cpp
+const Material* look() const;
+```
+
+What its glow draws with in the emissive layer (engine/shaders/emissive.frag); null when it doesn't glow.
+
+```cpp
+const Material* glow_look() const;
+bool glows() const;
+Color glow() const;
+```
+
+Sets a parameter (one number, or a vector's or color's components) for the next draw.
+
+```cpp
+void set_param(std::string_view name, std::span<const f32> value);
+```
+
+Reads a material from its JSON; the textures and shader it names load through `assets`. Problems (an unknown blend
+mode, a parameter the shader doesn't have) go in `warnings` when given; the material is made anyway.
+
+```cpp
+std::unique_ptr<SpriteMaterial> parse_material(const json::Value& doc, AssetManager& assets,
+                                               std::vector<std::string>* warnings = nullptr);
+```
+
+### SpriteLayers
+
+The four layers a scene's sprites draw into, so their materials' glow, normal maps and shadows reach the renderer:
+
+```cpp
+layers.begin(engine.camera());               // a member: it reuses its memory
+gfx::draw_maps(world, layers.scene, time);
+gfx::draw_sprites(world, layers);
+layers.submit(engine.renderer());
+```
+The glow needs nothing else; normal maps and shadows show under lights drawn with light_material.
+
+```cpp
+struct SpriteLayers
+```
+
+```cpp
+SpriteBatch scene, emissive, normals, occluders;
+```
+
+```cpp
+void begin(const Camera2D& camera, SpriteSort sort = SpriteSort::Depth, BlendMode blend = BlendMode::Alpha);
+```
+
+A sprite in its material's look (null: the plain sprite), with its glow, normal map and shadow.
+
+```cpp
+void draw(const Texture* texture, const SpriteInstance& sprite, const SpriteMaterial* material);
+```
+
+Submits each layer that has something in it.
+
+```cpp
+void submit(Renderer& renderer) const;
+```
+
+The name of a blend mode in material files ("alpha", "additive", "multiply", "opaque"), and back.
+
+```cpp
+std::string_view blend_name(BlendMode mode);
+std::optional<BlendMode> blend_from_name(std::string_view name);
+std::string_view shadow_name(Shadow shadow);
 ```
 
 ## bowl/gfx/particles.hpp
@@ -690,6 +845,13 @@ void end_frame();
 
 ```cpp
 PostSettings& post();
+```
+
+The seconds that shaders' `bowl_time` holds (the App sets it to Engine::time() each frame).
+
+```cpp
+void set_time(f64 seconds);
+f64 time() const;
 void set_clear_color(Color c);
 Color clear_color() const;
 Vec2 target_size() const;
@@ -741,6 +903,7 @@ gfx::draw_sprites(world, batch);   // after the transform systems have run
 ```cpp
 struct Sprite {
     Asset<Texture> texture; // none: a solid rectangle in `color`
+    Asset<SpriteMaterial> material; // its shader, glow, normal map and shadow (a .material file); none: plain
     Rect region;            // pixels of the texture to show; empty means all of it
     Vec2 size;              // world units before the transform's scale; zero means the region's pixel size
     Vec2 origin{0.5f, 0.5f};
@@ -752,7 +915,7 @@ struct Sprite {
 ```
 
 ```cpp
-BOWL_COMPONENT(Sprite, texture, region, size, origin, color, depth, y_sort, visible)
+BOWL_COMPONENT(Sprite, texture, material, region, size, origin, color, depth, y_sort, visible)
 ```
 
 The sprite's size in world units before scaling: `size`, or the region's or texture's pixel size, or 32 x 32 for a
@@ -762,10 +925,17 @@ rectangle with no size.
 Vec2 sprite_size(const Sprite& sprite);
 ```
 
-Draws every visible Sprite that has a GlobalTransform2D. `skip` leaves entities out (Bowl Editor's hidden ones).
+Draws every visible Sprite that has a GlobalTransform2D, each with its material's shader. `skip` leaves entities out
+(Bowl Editor's hidden ones).
 
 ```cpp
 void draw_sprites(ecs::World& world, SpriteBatch& batch, const std::function<bool(ecs::Entity)>& skip = {});
+```
+
+The same, with materials' glow, normal maps and shadows in their layers too.
+
+```cpp
+void draw_sprites(ecs::World& world, SpriteLayers& layers, const std::function<bool(ecs::Entity)>& skip = {});
 ```
 
 The axis-aligned world rectangle a sprite covers (enclosing it when rotated), for picking and culling. Empty if the
@@ -1032,9 +1202,11 @@ enum class BlendMode : u8 {
 
 ### Material
 
-A custom look for a batch: your own fragment shader instead of the sprite shader. It receives the sprite shader's
-outputs (location 0: vec2 uv, location 1: vec4 premultiplied color), the sprite texture at set 2 binding 0, up to
-three extra textures at bindings 1-3, and `uniforms` (std140) at set 3 binding 0.
+A custom look for a batch, or for single sprites in one: your own fragment shader instead of the sprite shader. It
+receives the sprite shader's outputs (location 0: vec2 uv, location 1: vec4 premultiplied color), the sprite texture
+at set 2 binding 0, up to three extra textures at bindings 1-3, and `uniforms` (std140) at set 3 binding 0. Where
+`uniforms` is shorter than the shader's block (or empty), the rest comes from the defaults the shader's comments
+give, and members named `bowl_time` and `bowl_screen` are filled in by the renderer (see shaders.md).
 
 ```cpp
 struct Material
@@ -1044,6 +1216,7 @@ struct Material
 Asset<Shader> fragment;
 std::array<const Texture*, 3> textures{}; // extra textures; null slots get a white texture
 std::vector<u8> uniforms;                 // at most 256 bytes; use set_uniforms with a std140-shaped struct
+std::optional<BlendMode> blend;           // instead of the batch's blend mode
 ```
 
 ```cpp
@@ -1069,6 +1242,13 @@ Null texture: a solid quad in sprite.color.
 
 ```cpp
 void draw(const Texture* texture, const SpriteInstance& sprite);
+```
+
+With a material of its own instead of the batch's (null: the batch's). Sprites with different materials still
+sort together; each change of material costs a draw call. Keep the material alive until the frame is drawn.
+
+```cpp
+void draw(const Texture* texture, const SpriteInstance& sprite, const Material* material);
 ```
 
 Convenience: a texture at its pixel size, centered at position.

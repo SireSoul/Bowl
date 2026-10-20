@@ -70,6 +70,7 @@ bowl_module(gfx
         gfx/src/device.cpp
         gfx/src/gpu_particles.cpp
         gfx/src/loaders.cpp
+        gfx/src/material.cpp
         gfx/src/particles.cpp
         gfx/src/renderer.cpp
         gfx/src/sprite.cpp

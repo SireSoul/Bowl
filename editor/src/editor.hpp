@@ -1,6 +1,7 @@
 #pragma once
 
 #include "content.hpp"
+#include "materials.hpp"
 #include "paint_studio.hpp"
 #include "document.hpp"
 #include "ui.hpp"
@@ -39,8 +40,9 @@ public:
     void shutdown(Engine& engine) override;
 
 private:
-    // The editor's rooms: levels, the game's content as forms, its data files as JSON, painting art, and a running game.
-    enum class Workspace { Level, Content, Data, Paint, Game };
+    // The editor's rooms: levels, the game's content as forms, its data files as JSON, painting art, how things look
+    // (materials and shaders), and a running game.
+    enum class Workspace { Level, Content, Data, Paint, Materials, Game };
     enum class Tool { Select, Place, Pan, Brush, Region };
     enum class Drag { None, Move, Box, Pan };
 
@@ -167,6 +169,10 @@ private:
     // content.cpp: the Content workspace, forms for the game's content from its schemas
     ContentWorkspace content_;
 
+    // materials.cpp: the Materials workspace, materials and shaders
+    MaterialsWorkspace materials_;
+    bool light_preview_ = false; // Level: a light at the mouse, to see glow, normal maps and shadows
+
     // game.cpp: the Game workspace, attached to a running game through its dev link
     void game_workspace(Engine& engine);
     void game_update(Engine& engine); // every frame, whichever workspace shows
@@ -238,7 +244,9 @@ private:
     void* game_library_ = nullptr;
     AssetManager* assets_ = nullptr; // for loading thumbnails while drawing
 
-    gfx::SpriteBatch scene_, gizmos_;
+    gfx::SpriteLayers scene_; // the level, with its materials' glow, normal maps and shadows
+    gfx::SpriteBatch gizmos_, preview_light_;
+    gfx::Material preview_light_look_;
 
     // File dialogs answer on another thread; the main thread picks the result up.
     struct DialogResult {

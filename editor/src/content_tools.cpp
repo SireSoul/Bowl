@@ -239,7 +239,13 @@ void ContentWorkspace::palette(Engine& engine) {
         all.push_back({"Paint", "workspace", nullptr, [this] { hooks.go(1); }});
         all.push_back({"Levels", "workspace", nullptr, [this] { hooks.go(2); }});
         all.push_back({"Files as text", "workspace: every data file as JSON", nullptr, [this] { hooks.go(3); }});
+        all.push_back({"Materials", "workspace: materials and shaders", nullptr, [this] { hooks.go(5); }});
     }
+    if (hooks.looks && hooks.open_look)
+        for (const std::string& p : hooks.looks()) {
+            std::string kind = p.ends_with(".material") ? "material: " : p.ends_with(".shadergraph") ? "shader graph: " : "shader: ";
+            all.push_back({fs::path(p).filename().string(), kind + p, nullptr, [this, p] { hooks.open_look(p); }});
+        }
     if (hooks.pictures && hooks.open_picture)
         for (const std::string& p : hooks.pictures()) all.push_back({fs::path(p).filename().string(), "picture: " + p, nullptr, [this, p] { hooks.open_picture(p); }});
     for (usize ci = 0; ci < schema_.collections.size(); ++ci) {

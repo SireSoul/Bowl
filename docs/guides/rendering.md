@@ -9,6 +9,7 @@ renderer draws the batches with post-processing and 2D lighting on top. This pag
 - [Color and blending](#color-and-blending)
 - [Textures](#textures)
 - [Materials](#materials)
+- [Material files](#material-files)
 - [The layers: scene, lights, UI](#the-layers-scene-lights-ui)
 - [Post-processing](#post-processing)
 - [2D lighting](#2d-lighting)
@@ -188,11 +189,74 @@ void main() {
 ```
 
 - Up to three extra textures (`material.textures`, bindings 1 to 3).
-- Up to 256 bytes of uniforms, laid out as std140; `set_uniforms` checks the size is a multiple of 16.
+- Up to 256 bytes of uniforms, laid out as std140; `set_uniforms` checks the size is a multiple of 16. What they don't
+  cover takes the defaults the shader's comments give, and `bowl_time` and `bowl_screen` are filled in for you (see
+  [shaders.md](shaders.md#parameters-and-what-the-editor-shows)).
+- `blend`, when set, replaces the batch's blend mode for the material's sprites.
 - The material must outlive the frame it's submitted in; keep it as a member.
+
+A material can also be given to single sprites, so they keep their place in the batch's depth order:
+`batch.draw(texture, sprite, &material)`. Sprites at the same depth are grouped by material, and each change of material
+is a draw call.
 
 The sprites sample's [hologram shader](../../samples/sprites/assets/shaders/hologram.frag.glsl) is a complete
 example. Writing shaders is covered in [shaders.md](shaders.md).
+
+## Material files
+
+A `.material` file is a sprite's whole look as an asset: a shader with its parameters and textures, a glow (an emissive
+map), a normal map and a shadow. Bowl Editor's Materials workspace makes and edits them (and makes the maps); a game
+loads them:
+
+```json
+{
+  "shader": "shaders/water.frag",
+  "params": {"speed": 1.5, "tint": [0.4, 0.8, 1, 1]},
+  "textures": {"u_noise": "textures/noise.png"},
+  "blend": "alpha",
+  "emissive": {"map": "props/lamp_emissive.png", "color": "#ffd890", "strength": 3},
+  "normal": "props/lamp_normal.png",
+  "shadow": "shape"
+}
+```
+
+| Key | |
+| --- | --- |
+| `shader` | Its own fragment shader; none: the sprite shader |
+| `params` | The shader's parameters by name: a number, a list for a vector or color, `"#rrggbb"`, or `true`/`false`. Missing ones take the shader's defaults |
+| `textures` | The shader's extra textures, by the names the shader gives them |
+| `blend` | `alpha`, `additive`, `multiply` or `opaque` |
+| `emissive` | Its glow: `map` (bright where it glows, black or see-through where not; none: the picture glows where it's bright), `color` and `strength`. Just a path is a map at strength 1 |
+| `normal` | Its normal map, for lights drawn with `light_material` |
+| `shadow` | `none`, `shape` (blocks light) or `faint` (blocks nothing and is never shadowed) |
+| `preview` | The picture the editor shows it on; games ignore it |
+
+The maps line up with the sprite's texture (the same layout, at any size), so sprite sheet frames and atlas regions find
+their parts. A `gfx::Sprite` takes one in `material` (and a level's Art card sets it), and it hot-reloads, with the
+shader and textures it names:
+
+```cpp
+Asset<gfx::SpriteMaterial> lamp = engine.assets().load<gfx::SpriteMaterial>("props/lamp.material");
+world.create(ecs::Transform2D{{40, 80}}, gfx::Sprite{.texture = lamp_png, .material = lamp});
+```
+
+`draw_sprites(world, batch)` draws each sprite with its material's shader. Its glow, normal map and shadow each go to
+their own layer of the renderer, so draw through a `gfx::SpriteLayers` to get them too:
+
+```cpp
+gfx::SpriteLayers layers; // a member: it reuses its memory
+
+layers.begin(engine.camera());
+gfx::draw_maps(world, layers.scene, static_cast<f32>(engine.time()));
+gfx::draw_sprites(world, layers);
+layers.submit(engine.renderer());   // scene, emissive, normals, occluders
+```
+
+Drawing your own way, `layers.draw(texture, sprite, material.get())` does the same for one sprite, and
+`material->look()` is the `gfx::Material` for its shader (null when it draws as a plain sprite). The glow shows with or
+without lighting and blooms with `post().bloom`; normal maps and shadows show under lights drawn with `light_material`.
+`material->set_param("speed", values)` changes a parameter from code for the next draw (on every sprite using the
+material).
 
 ## The layers: scene, lights, UI
 

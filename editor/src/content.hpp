@@ -144,7 +144,9 @@ public:
         std::function<std::vector<std::string>()> pictures;       // every picture, for search
         std::function<void(const std::string&)> open_picture;     // in the Paint workspace
         std::function<void(const std::string&)> open_text;        // a file as JSON text (the Data workspace)
-        std::function<void(int)> go;                              // 0 Content, 1 Paint, 2 Level, 3 files as text, 4 Game
+        std::function<void(int)> go;                              // 0 Content, 1 Paint, 2 Level, 3 files as text, 4 Game, 5 Materials
+        std::function<std::vector<std::string>()> looks;          // every material, shader and shader graph, for search
+        std::function<void(const std::string&)> open_look;        // in the Materials workspace
     };
     Hooks hooks;
     // Shows a collection, and one of its records by id (or the first).

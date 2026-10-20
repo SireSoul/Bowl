@@ -71,13 +71,30 @@ public:
     // Unique per shader object (never reused), for pipeline caches.
     u32 id() const { return id_; }
 
+    // The uniform block at binding 0 member by member, and the textures by binding, with what the shader's comments
+    // say about them (see ShaderBundle::Uniform), so materials can set them by name.
+    u32 block_size() const { return block_size_; }
+    const std::vector<ShaderBundle::Uniform>& uniforms() const { return uniforms_; }
+    const std::vector<ShaderBundle::TextureSlot>& textures() const { return textures_; }
+    const ShaderBundle::Uniform* uniform(std::string_view name) const;
+    // The block filled with the shader's own defaults (zero where it gives none).
+    const std::vector<u8>& defaults() const { return defaults_; }
+
 private:
     friend class GpuDevice;
+    friend class Renderer;
     Shader() = default;
     GpuDevice* device_ = nullptr;
     SDL_GPUShader* shader_ = nullptr;
     ShaderStage stage_ = ShaderStage::Vertex;
     u32 samplers_ = 0, uniform_buffers_ = 0, id_ = 0;
+    u32 block_size_ = 0;
+    std::vector<ShaderBundle::Uniform> uniforms_;
+    std::vector<ShaderBundle::TextureSlot> textures_;
+    std::vector<u8> defaults_;
+    // Members the renderer fills in each draw (bowl_time, bowl_screen): their places, or null.
+    const ShaderBundle::Uniform* time_ = nullptr;
+    const ShaderBundle::Uniform* screen_ = nullptr;
 };
 
 // A compute shader on the GPU, ready to dispatch (Renderer::dispatch). Loaded as an asset like Shader, from a
@@ -186,8 +203,8 @@ private:
 std::optional<std::vector<u8>> load_cached_shader(const std::filesystem::path& dir, u64 key);
 void store_cached_shader(const std::filesystem::path& dir, u64 key, std::span<const u8> code);
 
-// Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader, Font (.ttf/.otf), SpriteSheet (Aseprite JSON) and
-// Tilemap (Tiled .tmj) loaders with the asset manager.
+// Registers Texture (PNG/JPG/TGA/BMP via stb_image), Shader, Font (.ttf/.otf), SpriteMaterial (.material),
+// SpriteSheet (Aseprite JSON) and Tilemap (Tiled .tmj) loaders with the asset manager.
 // default_filter: Nearest for pixel art, Linear (with mipmaps) for everything else.
 void register_asset_loaders(AssetManager& assets, GpuDevice& device, Filter default_filter = Filter::Linear);
 

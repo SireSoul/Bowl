@@ -57,6 +57,7 @@ if(NOT BOWL_HOST_TOOLS) # built for this machine; a cross build uses the host's 
     add_subdirectory(tools/cook)
     add_subdirectory(tools/apidoc)
     add_subdirectory(editor/paint)
+    add_subdirectory(editor/shadergraph)
     if(NOT IOS)
         add_subdirectory(tools/rendezvous)
     endif()

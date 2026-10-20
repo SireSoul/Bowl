@@ -9,6 +9,8 @@
 #include <spirv_msl.hpp>
 
 #include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <format>
 #include <memory>
@@ -85,6 +87,116 @@ std::vector<Resource> collect(const spirv_cross::Compiler& c, const spirv_cross:
                        c.get_decoration(r.id, spv::DecorationBinding)});
     std::sort(out.begin(), out.end(), [](const Resource& a, const Resource& b) { return a.binding < b.binding; });
     return out;
+}
+
+std::string_view trim(std::string_view s) {
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.front()))) s.remove_prefix(1);
+    while (!s.empty() && std::isspace(static_cast<unsigned char>(s.back()))) s.remove_suffix(1);
+    return s;
+}
+
+bool is_ident(char c) { return std::isalnum(static_cast<unsigned char>(c)) || c == '_'; }
+
+// The comment after the declaration of `name` in the shader's own source: a line whose code is "<type> name;" (or
+// "uniform sampler2D name;", an array, a layout qualifier before it). Empty when there's none.
+std::string_view comment_of(std::string_view source, std::string_view name) {
+    usize at = 0;
+    while (at < source.size()) {
+        usize end = source.find('\n', at);
+        if (end == std::string_view::npos) end = source.size();
+        std::string_view line = source.substr(at, end - at);
+        at = end + 1;
+        usize slash = line.find("//");
+        if (slash == std::string_view::npos) continue;
+        std::string_view code = trim(line.substr(0, slash));
+        if (code.empty() || code.back() != ';') continue;
+        code = trim(code.substr(0, code.size() - 1));
+        if (code.ends_with(']')) code = trim(code.substr(0, code.rfind('[')));
+        if (code.starts_with("layout")) code = trim(code.substr(std::min(code.size(), code.find(')') + 1)));
+        if (!code.ends_with(name)) continue;
+        usize before = code.size() - name.size();
+        if (before == 0 || is_ident(code[before - 1]) || code.substr(0, before).find_first_of("=(+*/") != std::string_view::npos)
+            continue;
+        return trim(line.substr(slash + 2));
+    }
+    return {};
+}
+
+// "color = 1, 0.6, 0.2 [0, 4] What it's for": the parts in any order, then the help.
+void annotate(std::string_view text, u32 components, ShaderBundle::Uniform& u) {
+    auto number = [&](std::string_view& t, f32& out) {
+        t = trim(t);
+        std::string tmp(t.substr(0, std::min<usize>(t.size(), 32)));
+        char* end = nullptr;
+        out = std::strtof(tmp.c_str(), &end);
+        if (end == tmp.c_str()) return false;
+        t.remove_prefix(static_cast<usize>(end - tmp.c_str()));
+        t = trim(t);
+        if (!t.empty() && t.front() == ',') t = trim(t.substr(1));
+        return true;
+    };
+    for (;;) {
+        text = trim(text);
+        if (text.size() >= 5 && (text.substr(0, 5) == "color" || text.substr(0, 5) == "Color") &&
+            (text.size() == 5 || !is_ident(text[5]))) {
+            u.color = true;
+            text.remove_prefix(5);
+        } else if (!text.empty() && text.front() == '=') {
+            text.remove_prefix(1);
+            u32 n = 0;
+            f32 v = 0;
+            while (n < 4 && number(text, v)) u.value[n++] = v;
+            if (n == 0) break;
+            u.has_default = true;
+            if (n == 1)
+                for (u32 i = 1; i < 4; ++i) u.value[i] = u.value[0];
+            else if (u.color && n == 3 && components == 4) u.value[3] = 1;
+        } else if (!text.empty() && text.front() == '[') {
+            std::string_view t = text.substr(1);
+            f32 lo = 0, hi = 0;
+            if (!number(t, lo) || !number(t, hi) || t.empty() || t.front() != ']') break;
+            u.min = lo;
+            u.max = hi;
+            text = t.substr(1);
+        } else {
+            break;
+        }
+    }
+    u.help = std::string(trim(text));
+}
+
+// The uniform block at binding 0 member by member, and the sampled textures by binding, for materials to fill by
+// name (ShaderBundle::uniforms, ::textures).
+void reflect(const spirv_cross::Compiler& c, const spirv_cross::ShaderResources& resources, std::string_view source,
+             ShaderBundle& bundle) {
+    for (const auto& r : resources.uniform_buffers) {
+        if (c.get_decoration(r.id, spv::DecorationBinding) != 0) continue;
+        const spirv_cross::SPIRType& block = c.get_type(r.base_type_id);
+        bundle.block_size = (static_cast<u32>(c.get_declared_struct_size(block)) + 15) & ~15u; // std140 pads to 16
+        for (u32 i = 0; i < block.member_types.size(); ++i) {
+            const spirv_cross::SPIRType& t = c.get_type(block.member_types[i]);
+            ShaderBundle::Uniform u;
+            u.name = c.get_member_name(r.base_type_id, i);
+            u.offset = c.type_struct_member_offset(block, i);
+            u.size = static_cast<u32>(c.get_declared_struct_member_size(block, i));
+            u.count = t.array.empty() ? 1 : std::max(1u, t.array[0]);
+            using T = ShaderBundle::ValueType;
+            u32 n = t.vecsize;
+            if (t.columns == 4 && n == 4 && t.basetype == spirv_cross::SPIRType::Float) u.type = T::Mat4;
+            else if (t.columns > 1) u.type = T::Other;
+            else if (t.basetype == spirv_cross::SPIRType::Float) u.type = static_cast<T>(static_cast<u32>(T::Float) + n - 1);
+            else if (t.basetype == spirv_cross::SPIRType::Int) u.type = static_cast<T>(static_cast<u32>(T::Int) + n - 1);
+            else if (t.basetype == spirv_cross::SPIRType::UInt && n == 1) u.type = T::UInt;
+            else u.type = T::Other;
+            annotate(comment_of(source, u.name), n, u);
+            bundle.uniforms.push_back(std::move(u));
+        }
+    }
+    std::vector<std::pair<u32, std::string>> sampled;
+    for (const auto& r : resources.sampled_images) sampled.emplace_back(c.get_decoration(r.id, spv::DecorationBinding), r.name);
+    std::sort(sampled.begin(), sampled.end());
+    for (auto& [binding, name] : sampled)
+        bundle.textures.push_back({name, std::string(comment_of(source, name))});
 }
 
 // Compute shaders, in SDL_GPU's layout for them:
@@ -284,6 +396,7 @@ CompileResult compile_glsl(std::string_view source, const CompileOptions& option
     bundle.storage_textures = static_cast<u32>(storage_images.size());
     bundle.storage_buffers = static_cast<u32>(storage_buffers.size());
     bundle.uniform_buffers = static_cast<u32>(uniforms.size());
+    reflect(msl, resources, source, bundle);
 
     ShaderBundle::Blob spirv_blob{ShaderBlobFormat::SpirV, "main", {}};
     spirv_blob.code.resize(spirv.size() * sizeof(u32));

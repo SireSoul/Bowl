@@ -7,6 +7,7 @@ fraction of a second.
 - [Files and names](#files-and-names)
 - [Resource bindings](#resource-bindings)
 - [Writing a sprite material](#writing-a-sprite-material)
+- [Parameters and what the editor shows](#parameters-and-what-the-editor-shows)
 - [Includes](#includes)
 - [Live editing](#live-editing)
 - [bowl-shaderc](#bowl-shaderc)
@@ -112,6 +113,48 @@ everywhere, as above, avoids surprises.
 
 Colors in the pipeline are premultiplied: multiply RGB by alpha whenever you build a color from scratch.
 
+A [material file](rendering.md#material-files) does the same without code: it names the shader, its textures and its
+parameters, by name.
+
+## Parameters and what the editor shows
+
+The members of a shader's uniform block at binding 0 are its parameters. The compiler records each one's place in the
+block, and a comment after its declaration says more about it:
+
+```glsl
+layout(std140, set = 3, binding = 0) uniform Params {
+    vec4 glow;       // color = 1, 0.6, 0.2   The glow's color
+    float speed;     // = 2 [0, 10]           How fast it scrolls
+    vec2 scale;      // = 3
+    int steps;       // [1, 8]
+    float bowl_time; // filled in by the renderer
+};
+layout(set = 2, binding = 1) uniform sampler2D u_noise; // Clouds to scroll
+```
+
+| In the comment | Means |
+| --- | --- |
+| `color` | Shown as a color picker |
+| `= a, b, c, d` | Its value when a material doesn't set it. One number fills every part; a color's missing alpha is 1. Without one it's 0 |
+| `[lo, hi]` | A slider from `lo` to `hi` |
+| the rest | What it's for, shown on its name |
+
+The parts can come in any order, before the help. A texture's comment is its help.
+
+Those defaults count everywhere: the renderer fills any part of the block that a material's `uniforms` don't cover with
+them, so a `Material` with no `set_uniforms` call at all draws with the shader's defaults. Two names are filled in by
+the renderer for every draw, in sprite materials and post effects alike:
+
+| Member | Holds |
+| --- | --- |
+| `float bowl_time` | Seconds (`Engine::time()`, so it stops while the game is paused) |
+| `vec4 bowl_time` | Seconds, the frame's step, the frame number, 0 |
+| `vec2`/`vec4 bowl_screen` | The target's width and height in pixels, then one over each |
+
+Bowl Editor's Materials workspace reads all of this: a material's form shows each parameter with its control, default
+and help, and the shader's extra textures by name (see [the editor guide](editor.md#the-materials-workspace)).
+`gfx::Shader::uniforms()`, `textures()` and `defaults()` give the same to your own tools.
+
 ## Includes
 
 `#include "file.glsl"` works, resolved relative to the including file, then to the folder of the shader being
@@ -170,6 +213,8 @@ A `.bowlsh` file holds, for one shader stage:
 - HLSL source (Shader Model 5.1), for Direct3D 12, compiled to DXBC when the game loads it
 - the resource counts SDL_GPU needs to create the shader (samplers, storage textures, storage buffers, uniform
   buffers) and, for compute shaders, the read-write counts and the thread-group size
+- the uniform block's layout (each member's name, type, place, default, range and help) and the textures' names, for
+  materials (format 3)
 
 The device picks the right blob for its backend. On Direct3D 12 the HLSL is compiled to DXBC the first time a
 shader loads and kept in the player's data folder (`shader-cache/`), so later runs skip the compile; a changed shader
@@ -187,6 +232,7 @@ with a message to rebuild shaders.
 | `post/bloom_down.frag.glsl`, `post/bloom_up.frag.glsl` | The bloom blur chain |
 | `post/final.frag.glsl` | Bloom, grading, tonemapping, LUT, lens effects, vignette |
 | `post/composite.frag.glsl` | Lighting: the scene times the light map, with emissive sprites over it |
+| `emissive.frag.glsl` | A material's glow: its emissive map in the glow's color, see-through where the map is dark |
 | `light.frag.glsl` | Lights with normal mapping and shadows (`light_material`) |
 | `text_sdf.frag.glsl` | Distance-field text (`sdf_text_material`) |
 | `particles.comp.glsl` | GPU particles (`GpuParticles`) |
@@ -239,6 +285,12 @@ particles work that way (see [particles](particles-and-tweens.md#gpu-particles))
 
 Buffers are read and written by compute shaders and read by sprite drawing. Storage textures aren't bound by
 `ComputeDispatch` yet.
+
+## Shader graphs
+
+Bowl Editor's shader graphs (`.shadergraph` files) write a `.frag.glsl` beside themselves when saved, so a game builds
+and loads them like any other shader; nothing at runtime knows they came from a graph. The generated file says so at
+the top: change the graph, not the file. See [the editor guide](editor.md#shader-graphs).
 
 ## Limitations
 

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <numeric>
 
 namespace bowl::gfx {
@@ -47,12 +48,10 @@ void SpriteBatch::begin(const Camera2D& camera, SpriteSort sort, BlendMode blend
     material_ = material;
     sprites_.clear();
     textures_.clear();
+    materials_.clear();
 }
 
-void SpriteBatch::draw(const Texture& texture, const SpriteInstance& sprite) {
-    sprites_.push_back(sprite);
-    textures_.push_back(&texture);
-}
+void SpriteBatch::draw(const Texture& texture, const SpriteInstance& sprite) { push(&texture, sprite, nullptr); }
 
 void SpriteBatch::draw(const Texture& texture, Vec2 position, Color color, f32 depth) {
     SpriteInstance s;
@@ -125,15 +124,18 @@ void sprite_order(const SpriteBatch& batch, std::vector<u32>& order) {
     order.resize(n);
     std::iota(order.begin(), order.end(), 0u);
     auto tex_id = [&](u32 i) { return batch.textures_[i] ? batch.textures_[i]->id() : 0u; };
+    // Grouped by material, then texture: each change of either is a draw call.
+    auto group = [&](u32 a, u32 b) {
+        auto ma = reinterpret_cast<uintptr_t>(batch.material_of(a)), mb = reinterpret_cast<uintptr_t>(batch.material_of(b));
+        return ma != mb ? ma < mb : tex_id(a) < tex_id(b);
+    };
     switch (batch.sort_) {
     case SpriteSort::None: break;
-    case SpriteSort::Texture:
-        std::stable_sort(order.begin(), order.end(), [&](u32 a, u32 b) { return tex_id(a) < tex_id(b); });
-        break;
+    case SpriteSort::Texture: std::stable_sort(order.begin(), order.end(), group); break;
     case SpriteSort::Depth:
         std::stable_sort(order.begin(), order.end(), [&](u32 a, u32 b) {
             f32 da = batch.sprites_[a].depth, db = batch.sprites_[b].depth;
-            return da != db ? da < db : tex_id(a) < tex_id(b);
+            return da != db ? da < db : group(a, b);
         });
         break;
     }
@@ -162,8 +164,9 @@ bool StaticSprites::build(GpuDevice& device, const SpriteBatch& batch) {
     for (u32 i : order) {
         const SpriteInstance& s = batch.sprites_[i];
         const Texture* t = batch.textures_[i];
-        if (!runs_.empty() && runs_.back().texture == t) ++runs_.back().count;
-        else runs_.push_back({static_cast<u32>(sprites.size()), 1, t});
+        const Material* m = batch.material_of(i);
+        if (!runs_.empty() && runs_.back().texture == t && runs_.back().material == m) ++runs_.back().count;
+        else runs_.push_back({static_cast<u32>(sprites.size()), 1, t, m});
         sprites.push_back(s);
         // Rotation turns the quad about its pivot; the circle through its farthest corner bounds every angle.
         Vec2 lo = s.position - s.size * s.origin, hi = lo + s.size;

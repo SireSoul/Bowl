@@ -51,6 +51,7 @@ Every public header, by module. The [guides](../../README.md#guides) explain how
 | [bowl/gfx/bwtx.hpp](gfx.md#bowlgfxbwtxhpp) | BWTX: the picture format bowl-cook turns PNG and JPEG files into. |
 | [bowl/gfx/device.hpp](gfx.md#bowlgfxdevicehpp) | A rectangle of whole pixels in a texture, top-left origin. |
 | [bowl/gfx/gpu_particles.hpp](gfx.md#bowlgfxgpu_particleshpp) | How a GpuParticles emitter behaves. |
+| [bowl/gfx/material.hpp](gfx.md#bowlgfxmaterialhpp) | How a material's sprites stand in the way of light_material lights. |
 | [bowl/gfx/particles.hpp](gfx.md#bowlgfxparticleshpp) | What an emitter spawns. |
 | [bowl/gfx/renderer.hpp](gfx.md#bowlgfxrendererhpp) | Whole-screen look. |
 | [bowl/gfx/sprite.hpp](gfx.md#bowlgfxspritehpp) | An entity that looks like something: a texture (or a plain rectangle) drawn at the entity's GlobalTransform2D. |

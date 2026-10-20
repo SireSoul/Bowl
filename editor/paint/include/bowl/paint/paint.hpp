@@ -175,6 +175,21 @@ Box painted_bounds(const Image& img);
 // The colors in a picture, most used first.
 std::vector<Pixel> colors_of(const Image& img, usize most);
 
+// --- Maps for materials: a picture's normal map and emissive map ---------------------------------------------------
+
+struct NormalOptions {
+    i32 bevel = 3;          // how far in from its edge a shape rises, in pixels (0: flat, only brightness counts)
+    f32 brightness = 0.25f; // how much brighter pixels stand out, 0 to 1
+    f32 strength = 2;       // how steep the slopes look
+    bool smooth = true;     // soften the heights before taking their slopes
+    bool invert = false;    // dents instead of bumps
+};
+// A normal map for a picture (OpenGL's convention: red right, green up), see-through where the picture is: its shape
+// bevels down at the edges (the picture's own edges don't count, so tiles join up), and brighter pixels stand out.
+Image normal_map(const Image& picture, const NormalOptions& options = {});
+// An emissive map: the picture's pixels that `glows` picks, at full alpha, and nothing elsewhere.
+Image emissive_map(const Image& picture, const std::function<bool(Pixel)>& glows);
+
 // --- A picture in layers, with a selection and undo ----------------------------------------------------------------
 
 struct Layer {

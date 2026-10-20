@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstring>
 #include <filesystem>
 #include <string>
 
@@ -154,6 +155,72 @@ TEST_CASE("shaderc: wrong descriptor set gets a helpful message") {
         options);
     CHECK_FALSE(r.ok);
     CHECK(r.log.find("set = 2") != std::string::npos);
+}
+
+TEST_CASE("shaderc: a material's parameters, their defaults and its textures come with the bundle") {
+    const char* source = R"(#version 450
+layout(location = 0) in vec2 v_uv;
+layout(location = 0) out vec4 out_color;
+layout(set = 2, binding = 0) uniform sampler2D u_texture;
+layout(set = 2, binding = 1) uniform sampler2D u_noise; // Clouds to scroll
+layout(std140, set = 3, binding = 0) uniform Params {
+    vec4 glow;       // color = 1, 0.5, 0.25   The glow's color
+    float speed;     // = 2 [0, 10] How fast it moves
+    float bowl_time;
+    vec2 scale;      // = 3
+    int steps;       // [1, 8]
+};
+void main() {
+    vec4 n = texture(u_noise, v_uv * scale + vec2(bowl_time * speed));
+    out_color = texture(u_texture, v_uv) * glow * n.r * float(steps);
+})";
+    shaderc::CompileOptions options;
+    options.name = "glow.frag";
+    options.stage = ShaderStage::Fragment;
+    auto r = shaderc::compile_glsl(source, options);
+    INFO(r.log);
+    REQUIRE(r.ok);
+    const ShaderBundle& b = r.bundle;
+    CHECK(b.block_size == 48);
+    REQUIRE(b.uniforms.size() == 5);
+    const auto* glow = b.uniform("glow");
+    REQUIRE(glow);
+    CHECK(glow->type == ShaderBundle::ValueType::Vec4);
+    CHECK(glow->color);
+    CHECK(glow->has_default);
+    CHECK(glow->value[1] == doctest::Approx(0.5f));
+    CHECK(glow->value[3] == doctest::Approx(1)); // a color's missing alpha
+    CHECK(glow->help == "The glow's color");
+    const auto* speed = b.uniform("speed");
+    REQUIRE(speed);
+    CHECK(speed->offset == 16);
+    CHECK(speed->value[0] == doctest::Approx(2));
+    CHECK(speed->min == doctest::Approx(0));
+    CHECK(speed->max == doctest::Approx(10));
+    CHECK(speed->help == "How fast it moves");
+    CHECK_FALSE(b.uniform("bowl_time")->has_default);
+    CHECK(b.uniform("scale")->value[1] == doctest::Approx(3)); // one number fills every component
+    CHECK(b.uniform("scale")->offset == 24);
+    CHECK(b.uniform("steps")->type == ShaderBundle::ValueType::Int);
+    CHECK(b.uniform("steps")->max == doctest::Approx(8));
+    REQUIRE(b.textures.size() == 2);
+    CHECK(b.textures[1].name == "u_noise");
+    CHECK(b.textures[1].help == "Clouds to scroll");
+
+    // It all survives the file, and writes into a block.
+    auto again = ShaderBundle::parse(b.serialize());
+    REQUIRE(again);
+    CHECK(again->block_size == 48);
+    REQUIRE(again->uniforms.size() == 5);
+    CHECK(again->uniforms[1].help == "How fast it moves");
+    CHECK(again->uniforms[0].color);
+    CHECK(again->textures[1].name == "u_noise");
+    std::vector<u8> block(again->block_size, 0);
+    const f32 three[] = {3.6f};
+    ShaderBundle::write(block, *again->uniform("steps"), three);
+    i32 steps = 0;
+    std::memcpy(&steps, block.data() + again->uniform("steps")->offset, 4);
+    CHECK(steps == 4);
 }
 
 TEST_CASE("shaderc: stage from file name") {

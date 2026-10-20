@@ -88,6 +88,8 @@ void Editor::dev_ui(Engine& engine) {
         data_workspace(engine);
     } else if (workspace_ == Workspace::Game) {
         game_workspace(engine);
+    } else if (workspace_ == Workspace::Materials) {
+        materials_.draw(engine, {0, top_h, io.DisplaySize.x, std::max(1.0f, io.DisplaySize.y - top_h - status_h)});
     } else {
         paint_.draw(engine, {0, top_h, io.DisplaySize.x, std::max(1.0f, io.DisplaySize.y - top_h - status_h)});
     }
@@ -116,6 +118,10 @@ void Editor::top_bar(Engine& engine) {
         workspace_ = Workspace::Content;
     ImGui::SameLine(0, 2);
     if (segment("Paint", workspace_ == Workspace::Paint, "The pixel-art studio|Ctrl+2")) workspace_ = Workspace::Paint;
+    ImGui::SameLine(0, 2);
+    if (segment("Materials", workspace_ == Workspace::Materials,
+                "How things look: materials (shaders, glow, normal maps, shadows) and shaders, as code or graphs|Ctrl+6"))
+        workspace_ = Workspace::Materials;
     if (has_levels_ || workspace_ == Workspace::Level) {
         ImGui::SameLine(0, 2);
         if (segment("Level", workspace_ == Workspace::Level, "Lay out levels (.world files)|Ctrl+3")) workspace_ = Workspace::Level;
@@ -218,6 +224,10 @@ void Editor::top_bar(Engine& engine) {
     ImGui::SameLine(0, 6);
     if (ui::tool_button("colliders", ui::Icon::Eye, show_colliders_, "Show collision shapes and regions|C"))
         show_colliders_ = !show_colliders_;
+    ImGui::SameLine(0, 4);
+    if (ui::tool_button("light_preview", ui::Icon::Light, light_preview_,
+                        "Light preview: dark, with a light at the mouse, to see materials' glow, normal maps and shadows|L"))
+        light_preview_ = !light_preview_;
 
     // Right end: help.
     ImGui::SameLine(io.DisplaySize.x - 44);
@@ -622,6 +632,35 @@ void Editor::art_card(Engine& engine, ecs::Entity e) {
     }
     art_picker(engine, e);
 
+    // Its material: its own shader, a glow, a normal map, a shadow.
+    {
+        std::string current(s.material.path());
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextDisabled("Material");
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-36);
+        if (ImGui::BeginCombo("##material", current.empty() ? "None (plain)" : current.c_str())) {
+            if (ImGui::Selectable("None (plain)", current.empty())) s.material = {};
+            for (const std::string& m : materials_.materials())
+                if (ImGui::Selectable(m.c_str(), m == current)) s.material = engine.assets().load<gfx::SpriteMaterial>(m);
+            ImGui::EndCombo();
+        }
+        ui::tip("How it looks beyond its picture: a shader of its own, a glow, a normal map for lights, a shadow. The "
+                "Materials workspace makes them; the light preview (L) shows them in the dark.");
+        ImGui::SameLine(0, 4);
+        if (current.empty()) {
+            if (ui::tool_button("new_material", ui::Icon::Plus, false, "A new material for this picture", 26, bool(s.texture))) {
+                std::string made = materials_.new_material(std::string(s.texture.path()));
+                if (!made.empty()) {
+                    s.material = engine.assets().load<gfx::SpriteMaterial>(made);
+                    workspace_ = Workspace::Materials;
+                }
+            }
+        } else if (ui::tool_button("edit_material", ui::Icon::Material, false, "Change it in the Materials workspace", 26)) {
+            if (materials_.open(current)) workspace_ = Workspace::Materials;
+        }
+    }
+
     ImGui::ColorEdit4("Color", &s.color.r, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_AlphaBar);
     ui::tip("Tints the picture (white keeps its own colors). Values above 1 glow when the game uses bloom.");
     ImGui::SameLine();
@@ -786,6 +825,8 @@ void Editor::status_bar(Engine& engine) {
         what = link_.connected() ? "Attached: changes here happen in the running game." : "Pick a running game on the left to attach.";
     else if (workspace_ == Workspace::Paint)
         what = "Left button: the first color, right: the second. Alt picks a color. Space-drag or the middle button moves, the wheel zooms. Ctrl+S saves.";
+    else if (workspace_ == Workspace::Materials)
+        what = "Pick a material or a shader on the left. Drag in the preview to move the light; right-drag moves it, the wheel zooms. Ctrl+S saves.";
     else if (tool_ == Tool::Brush) what = "Paint on a picture where it stands. Colors and tools are in the Paint workspace.";
     else if (tool_ == Tool::Region) what = "Drag out a region (a click makes a square one). Esc: back to selecting.";
     else if (tool_ == Tool::Place)
@@ -903,8 +944,12 @@ void Editor::help_window() {
         {"V / P / H", "Select, Place, Move the view"},
         {"B / R", "Brush (paint on art in the level), Region (drag out an area)"},
         {"C", "Show or hide collision shapes and regions"},
-        {"Ctrl+1 / 2 / 3 / 4 / 5", "Content, Paint, Level, Game, and the data files as text"},
-        {"Ctrl+K", "Find anything: records, pictures, maps, sounds, commands"},
+        {"Ctrl+1 / 2 / 3 / 4 / 5 / 6", "Content, Paint, Level, Game, the data files as text, Materials"},
+        {"Ctrl+K", "Find anything: records, pictures, maps, sounds, materials, shaders, commands"},
+        {"L", "Level: the light preview (a light at the mouse)"},
+        {"Materials: drag in the preview", "Move the light (right or middle drag moves the view)"},
+        {"Graph: right-click, drag from a pin", "Add a node; join pins (into nothing: add a node there)"},
+        {"Graph: Delete, Ctrl+D, F", "Remove, copy the picked nodes; show them all"},
         {"G / Shift+G", "Show the grid / snap to it"},
         {"Arrows (Shift)", "Nudge one unit (a grid step)"},
         {"Q / E (Shift)", "Turn 15 degrees (1 degree)"},

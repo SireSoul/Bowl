@@ -26,13 +26,14 @@ add_executable(bowl_tests
     test_settings.cpp
     test_schedule.cpp
     test_shaderc.cpp
+    test_shadergraph.cpp
     test_sprite.cpp
     test_sprite_sheet.cpp
     test_text.cpp
     test_tilemap.cpp
     test_xml.cpp
     test_ui.cpp)
-target_link_libraries(bowl_tests PRIVATE bowl::engine bowl_atlas bowl_cook bowl_icon bowl_apidoc bowl_paint doctest::doctest)
+target_link_libraries(bowl_tests PRIVATE bowl::engine bowl_atlas bowl_cook bowl_icon bowl_apidoc bowl_paint bowl_shadergraph doctest::doctest)
 target_compile_definitions(bowl_tests PRIVATE BOWL_ENGINE_ASSET_SOURCE_DIR="${BOWL_ENGINE_ASSET_SOURCE_DIR}"
     BOWL_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 if(BOWL_BOX2D)

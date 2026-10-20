@@ -592,6 +592,89 @@ Box painted_bounds(const Image& img) {
     return x1 < 0 ? Box{} : Box{x0, y0, x1 - x0 + 1, y1 - y0 + 1};
 }
 
+Image normal_map(const Image& picture, const NormalOptions& o) {
+    i32 w = picture.width(), h = picture.height();
+    Image out(w, h);
+    if (w <= 0 || h <= 0) return out;
+    auto at = [&](i32 x, i32 y) { return static_cast<usize>(y) * static_cast<usize>(w) + static_cast<usize>(x); };
+    auto inside = [&](i32 x, i32 y) { return alpha(picture.get(x, y)) >= 128; };
+    // Distance to the nearest pixel outside the shape (a 3-4 chamfer, in thirds of a pixel). Beyond the picture's
+    // edge counts as inside, so a tile's edges stay flat.
+    constexpr i32 far = 1 << 20;
+    std::vector<i32> dist(static_cast<usize>(w) * static_cast<usize>(h));
+    for (i32 y = 0; y < h; ++y)
+        for (i32 x = 0; x < w; ++x) dist[at(x, y)] = inside(x, y) ? far : 0;
+    auto relax = [&](i32 x, i32 y, i32 nx, i32 ny, i32 cost) {
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) return;
+        dist[at(x, y)] = std::min(dist[at(x, y)], dist[at(nx, ny)] + cost);
+    };
+    for (i32 y = 0; y < h; ++y)
+        for (i32 x = 0; x < w; ++x) {
+            relax(x, y, x - 1, y, 3), relax(x, y, x, y - 1, 3), relax(x, y, x - 1, y - 1, 4), relax(x, y, x + 1, y - 1, 4);
+        }
+    for (i32 y = h - 1; y >= 0; --y)
+        for (i32 x = w - 1; x >= 0; --x) {
+            relax(x, y, x + 1, y, 3), relax(x, y, x, y + 1, 3), relax(x, y, x + 1, y + 1, 4), relax(x, y, x - 1, y + 1, 4);
+        }
+    // Heights: a bevel from the edge, mixed with brightness.
+    f32 lit = std::clamp(o.brightness, 0.0f, 1.0f);
+    std::vector<f32> height(dist.size(), 0.0f);
+    for (i32 y = 0; y < h; ++y)
+        for (i32 x = 0; x < w; ++x) {
+            if (!inside(x, y)) continue;
+            f32 shape = 1;
+            if (o.bevel > 0 && dist[at(x, y)] < far) {
+                f32 t = std::min(1.0f, static_cast<f32>(dist[at(x, y)]) / 3.0f / static_cast<f32>(o.bevel));
+                shape = t * (2 - t); // steepest at the edge, levelling off
+            }
+            Pixel p = picture.get(x, y);
+            f32 luma = (0.299f * red(p) + 0.587f * green(p) + 0.114f * blue(p)) / 255.0f;
+            height[at(x, y)] = shape * (1 - lit) + luma * lit;
+        }
+    if (o.smooth) {
+        std::vector<f32> soft = height;
+        for (i32 y = 0; y < h; ++y)
+            for (i32 x = 0; x < w; ++x) {
+                if (!inside(x, y)) continue;
+                f32 sum = 0;
+                i32 n = 0;
+                for (i32 dy = -1; dy <= 1; ++dy)
+                    for (i32 dx = -1; dx <= 1; ++dx) {
+                        i32 sx = std::clamp(x + dx, 0, w - 1), sy = std::clamp(y + dy, 0, h - 1);
+                        sum += height[at(sx, sy)];
+                        ++n;
+                    }
+                soft[at(x, y)] = sum / static_cast<f32>(n);
+            }
+        height.swap(soft);
+    }
+    // Slopes (Sobel), and the normal that leans away from them. The image's y runs down; green points up.
+    auto hh = [&](i32 x, i32 y) { return height[at(std::clamp(x, 0, w - 1), std::clamp(y, 0, h - 1))]; };
+    f32 k = o.strength * (o.invert ? -1.0f : 1.0f) / 8.0f;
+    for (i32 y = 0; y < h; ++y)
+        for (i32 x = 0; x < w; ++x) {
+            u8 a = alpha(picture.get(x, y));
+            if (a == 0) continue;
+            f32 dx = (hh(x + 1, y - 1) + 2 * hh(x + 1, y) + hh(x + 1, y + 1)) - (hh(x - 1, y - 1) + 2 * hh(x - 1, y) + hh(x - 1, y + 1));
+            f32 dy = (hh(x - 1, y + 1) + 2 * hh(x, y + 1) + hh(x + 1, y + 1)) - (hh(x - 1, y - 1) + 2 * hh(x, y - 1) + hh(x + 1, y - 1));
+            f32 nx = -dx * k, ny = dy * k, nz = 1;
+            f32 len = std::sqrt(nx * nx + ny * ny + nz * nz);
+            auto enc = [&](f32 v) { return static_cast<u8>(std::clamp((v / len * 0.5f + 0.5f) * 255.0f + 0.5f, 0.0f, 255.0f)); };
+            out.set(x, y, rgba(enc(nx), enc(ny), enc(nz), a));
+        }
+    return out;
+}
+
+Image emissive_map(const Image& picture, const std::function<bool(Pixel)>& glows) {
+    Image out(picture.width(), picture.height());
+    for (i32 y = 0; y < picture.height(); ++y)
+        for (i32 x = 0; x < picture.width(); ++x) {
+            Pixel p = picture.get(x, y);
+            if (alpha(p) > 0 && glows(p)) out.set(x, y, p);
+        }
+    return out;
+}
+
 std::vector<Pixel> colors_of(const Image& img, usize most) {
     std::map<Pixel, usize> counts;
     for (Pixel p : img.pixels())

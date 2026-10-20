@@ -168,6 +168,18 @@ bool PaintStudio::open(const std::string& path) {
     }
     if (!layered) open_sheet(path, img, c);
     canvas_ = std::move(c);
+    // A material's map: its picture beneath, to paint over.
+    reference_.clear();
+    {
+        fs::path p(path);
+        std::string stem = p.stem().string();
+        for (std::string_view suffix : {"_emissive", "_glow", "_normal", "_n", "_mask"})
+            if (stem.size() > suffix.size() && stem.ends_with(suffix)) {
+                std::string base = (p.parent_path() / (stem.substr(0, stem.size() - suffix.size()) + ".png")).generic_string();
+                if (fs::exists(assets_dir_ / base)) reference_ = base;
+                break;
+            }
+    }
     fit_pending_ = true;
     stroke_ = {};
     path_.clear();
@@ -1033,6 +1045,13 @@ void PaintStudio::options_bar(Engine& engine, Rect area) {
         ImGui::Separator();
         ImGui::MenuItem("Tiled mode", nullptr, &tiled_);
         ui::tip("The picture repeated around itself, and strokes wrapping round its edges: for tiles that join up");
+        if (!reference_.empty()) {
+            ImGui::Separator();
+            ImGui::MenuItem(std::format("Show {} beneath", fs::path(reference_).filename().string()).c_str(), nullptr, &show_reference_);
+            ui::tip("This is a material's map: its picture shows faintly beneath, to paint over");
+            ImGui::SetNextItemWidth(160);
+            ImGui::SliderFloat("##refopacity", &reference_opacity_, 0.05f, 1, "Beneath: %.2f");
+        }
     });
     menu("Frame", [&] {
         ImGui::TextColored(muted, "Frame %zu of %zu", d->frame() + 1, d->frame_count());
@@ -1785,6 +1804,13 @@ void PaintStudio::render(Engine& engine) {
     gfx::SpriteInstance s;
     s.size = {w, h};
     s.origin = {0, 0};
+    // A material's map is painted over its picture, shown beneath.
+    if (!reference_.empty() && show_reference_)
+        if (auto ref = assets_->load<gfx::Texture>(reference_)) {
+            gfx::SpriteInstance r = s;
+            r.color = Color::white().with_alpha(reference_opacity_);
+            batch_.draw(*ref, r);
+        }
     if (onion_view_) batch_.draw(*onion_view_, s); // behind: it shows where this frame is see-through
     batch_.draw(*canvas_->view, s);
     // Tiled mode: the picture around itself, a little dimmer, so seams show.

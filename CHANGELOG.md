@@ -6,6 +6,29 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
 ## [Unreleased]
 
 ### Added
+- Bowl Editor's **Materials** workspace (Ctrl+6, or `--materials [file]`): materials as forms beside a live preview the
+  game's renderer draws under a light you drag around, with bloom and views of the color, glow and normal map alone.
+  Glow (emissive) maps are made by clicking a picture's glowing colors, normal maps from a picture's shape and
+  brightness; either can be painted in the Paint workspace over the picture, shown faintly beneath. Shaders are written
+  in a code editor (syntax colors, line numbers, auto-indent) that compiles as you type and marks problems on their
+  lines, or built from nodes in a **shader graph** (`.shadergraph`, 66 kinds of node: textures, time, math, UV
+  tricks, noise and cells, color adjustments, outline, dissolve, flicker, parameters), which writes its GLSL beside it.
+  Both preview live on a picture with test values for their parameters. The Level's Art card picks a sprite's material,
+  and its **light preview** (L) shows the level in the dark with a light at the mouse.
+- **Material files** (`.material`, `gfx::SpriteMaterial`): a sprite's shader, parameters by name, extra textures by
+  name, blend mode, glow (an emissive map, color and strength), normal map and shadow, as a hot-reloading asset.
+  `gfx::Sprite` has a `material`; `gfx::SpriteLayers` and `draw_sprites(world, layers)` send each material's glow,
+  normal map and shadow to the renderer's emissive, normal and occluder layers. See
+  [Material files](docs/guides/rendering.md#material-files).
+- A sprite can have a material of its own within a batch (`SpriteBatch::draw(texture, sprite, &material)`), keeping its
+  place in the depth order; `Material::blend` overrides the batch's blend mode.
+- Shader parameters describe themselves: a comment after each member of the uniform block gives its default, its range,
+  whether it's a color, and what it's for (`float speed; // = 2 [0, 10] How fast`). Bundles (format 3) carry the block's
+  layout and the texture names; `gfx::Shader::uniforms()`, `textures()` and `defaults()` read them. The renderer fills
+  in what a material's uniforms don't cover with those defaults, and fills `bowl_time` and `bowl_screen` for every
+  draw. See [Parameters](docs/guides/shaders.md#parameters-and-what-the-editor-shows).
+- `bowl::paint::normal_map` and `emissive_map` make a picture's normal map (from its shape and brightness) and emissive
+  map.
 - Bowl Editor's Paint workspace takes tools from Aseprite, LibreSprite, Piskel and Paintbrush: a lasso (dragged or
   clicked corner by corner) and ellipse selection, a dither pen, a spray can, recolor-all-of-a-color (in every layer
   and frame), blur and jumble, curves bent by the mouse, rounded boxes, polygons and freehand contours, and text in a

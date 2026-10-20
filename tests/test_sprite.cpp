@@ -56,6 +56,77 @@ TEST_CASE("sprite: saves and loads with its texture path") {
     CHECK_FALSE(s.y_sort);
 }
 
+TEST_CASE("sprite batches: a sprite's own material keeps it in depth order, grouped at equal depths") {
+    gfx::SpriteBatch batch;
+    gfx::Material glow, water;
+    batch.begin(gfx::Camera2D{});
+    batch.draw(nullptr, {.depth = 2});
+    batch.draw(nullptr, {.depth = 1}, &glow);
+    batch.draw(nullptr, {.depth = 2}, &water);
+    batch.draw(nullptr, {.depth = 2});
+    batch.draw(nullptr, {.depth = 0});
+    std::vector<u32> order;
+    gfx::sprite_order(batch, order);
+    REQUIRE(order.size() == 5);
+    CHECK(order[0] == 4);
+    CHECK(order[1] == 1);
+    // At depth 2, the two without a material together, then the water one.
+    CHECK(order[2] == 0);
+    CHECK(order[3] == 3);
+    CHECK(order[4] == 2);
+}
+
+TEST_CASE("materials: read from their file, with warnings for what doesn't fit") {
+    AssetManager assets; // no loaders: nothing named loads, which is fine for reading the settings
+    auto doc = json::parse(R"({
+        "blend": "additive",
+        "params": {"speed": 1.5, "tint": [0.5, 0.25, 1], "on": true, "glow": "#ff8000"},
+        "emissive": {"color": "#ffd890", "strength": 3},
+        "shadow": "faint",
+        "preview": "props/lamp.png"
+    })");
+    REQUIRE(doc);
+    std::vector<std::string> warnings;
+    auto m = gfx::parse_material(doc.value, assets, &warnings);
+    REQUIRE(m);
+    CHECK(m->blend == gfx::BlendMode::Additive);
+    CHECK(m->params.at("speed") == std::vector<f32>{1.5f});
+    CHECK(m->params.at("tint").size() == 3);
+    CHECK(m->params.at("on") == std::vector<f32>{1.0f});
+    REQUIRE(m->params.at("glow").size() == 4);
+    CHECK(m->params.at("glow")[1] == doctest::Approx(128.0f / 255.0f));
+    CHECK(m->emissive_strength == doctest::Approx(3));
+    CHECK(m->emissive_color.r == doctest::Approx(1));
+    CHECK(m->glow().g == doctest::Approx(3 * 216.0f / 255.0f));
+    CHECK(m->shadow == gfx::Shadow::Faint);
+    CHECK(m->preview == "props/lamp.png");
+    CHECK(m->look() != nullptr); // the blend mode changes how it draws
+    CHECK(m->look()->blend == gfx::BlendMode::Additive);
+
+    auto bad = json::parse(R"({"blend": "glitter", "shadow": "huge", "emissive": {"color": "red"}})");
+    warnings.clear();
+    auto b = gfx::parse_material(bad.value, assets, &warnings);
+    CHECK(warnings.size() == 3);
+    CHECK_FALSE(b->blend);
+    CHECK(b->look() == nullptr); // nothing it changes in the scene
+    CHECK(gfx::blend_from_name("multiply") == gfx::BlendMode::Multiply);
+    CHECK(gfx::blend_name(gfx::BlendMode::Opaque) == "opaque");
+}
+
+TEST_CASE("materials: sprite layers put the glow, normals and shadow in their own batches") {
+    AssetManager assets;
+    auto doc = json::parse(R"({"shadow": "shape"})");
+    auto m = gfx::parse_material(doc.value, assets);
+    gfx::SpriteLayers layers;
+    layers.begin(gfx::Camera2D{});
+    layers.draw(nullptr, {.position = {1, 2}}, m.get());
+    layers.draw(nullptr, {.position = {3, 4}}, nullptr);
+    CHECK(layers.scene.size() == 2);
+    CHECK(layers.occluders.size() == 1);
+    CHECK(layers.emissive.size() == 0); // no glow without its shader (no loaders here) or a strength
+    CHECK(layers.normals.size() == 0);
+}
+
 namespace {
 struct Note {
     std::string text;

@@ -146,6 +146,12 @@ public:
     void end_frame();
 
     PostSettings& post() { return post_; }
+    // The seconds that shaders' `bowl_time` holds (the App sets it to Engine::time() each frame).
+    void set_time(f64 seconds) {
+        time_delta_ = static_cast<f32>(seconds - time_);
+        time_ = seconds;
+    }
+    f64 time() const { return time_; }
     void set_clear_color(Color c) { clear_color_ = c; }
     Color clear_color() const { return clear_color_; }
     Vec2 target_size() const { return target_size_; }
@@ -167,8 +173,11 @@ private:
         u32 count;
         SDL_GPUTexture* texture;
         Filter filter;
+        const Material* material; // the sprites' own, or null for the pass's
     };
-    static Draw draw_of(u32 first, u32 count, const Texture& t) { return {first, count, t.handle(), t.filter()}; }
+    static Draw draw_of(u32 first, u32 count, const Texture& t, const Material* m = nullptr) {
+        return {first, count, t.handle(), t.filter(), m};
+    }
     struct Pass {
         Mat4 view_projection;
         u32 first_draw, draw_count;
@@ -206,6 +215,9 @@ private:
                     BlendMode blend, std::span<const SDL_GPUTexture* const> inputs, const void* uniforms, u32 size,
                     SDL_GPURenderPass** keep_open = nullptr);
     void run_bloom(SDL_GPUTexture* input);
+    // A material's uniform block as the shader gets it: its bytes over the shader's defaults, with bowl_time and
+    // bowl_screen filled in. Empty when the shader takes none.
+    std::span<const u8> uniforms_for(const Shader& shader, const std::vector<u8>& bytes);
     void release_targets();
     // A full-size target made the first time it's needed (most games never need some of them).
     SDL_GPUTexture* lazy_target(SDL_GPUTexture*& target, SDL_GPUTextureFormat format, const char* name);
@@ -246,6 +258,9 @@ private:
     Color clear_color_ = Color::hex(0x101018);
     PostSettings post_;
     u64 frame_ = 0;
+    f64 time_ = 0;
+    f32 time_delta_ = 0;
+    std::vector<u8> uniform_scratch_;
 
     std::vector<SpriteInstance> frame_sprites_;
     std::vector<Draw> draws_;

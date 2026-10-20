@@ -285,10 +285,12 @@ void Renderer::record(const SpriteBatch& batch, std::vector<Pass>& passes) {
     for (u32 k = 0; k < n; ++k) {
         u32 i = order_[k];
         const Texture* t = batch.textures_[i] ? batch.textures_[i] : white_.get();
+        const Material* m = batch.material_of(i);
         frame_sprites_.push_back(batch.sprites_[i]);
-        if (draws_.size() > pass.first_draw && draws_.back().texture == t->handle() && draws_.back().filter == t->filter())
+        if (draws_.size() > pass.first_draw && draws_.back().texture == t->handle() && draws_.back().filter == t->filter() &&
+            draws_.back().material == m)
             ++draws_.back().count;
-        else draws_.push_back(draw_of(base + k, 1, *t));
+        else draws_.push_back(draw_of(base + k, 1, *t, m));
     }
     pass.draw_count = static_cast<u32>(draws_.size()) - pass.first_draw;
     passes.push_back(pass);
@@ -304,7 +306,7 @@ void Renderer::submit(const StaticSprites& sprites, const Camera2D& camera, Blen
     if (!swapchain_ || sprites.empty() || !sprites.buffer_) return;
     Pass pass{camera.view_projection(), static_cast<u32>(draws_.size()), 0, blend, material, sprites.buffer_};
     for (const StaticSprites::Run& run : sprites.runs_)
-        draws_.push_back(draw_of(run.first, run.count, run.texture ? *run.texture : *white_));
+        draws_.push_back(draw_of(run.first, run.count, run.texture ? *run.texture : *white_, run.material));
     pass.draw_count = static_cast<u32>(sprites.runs_.size());
     passes_.push_back(pass);
     stats_.sprites += sprites.count_;
@@ -337,40 +339,68 @@ void Renderer::draw_into(SDL_GPUTexture* target, Color clear, const std::vector<
     SDL_EndGPURenderPass(pass);
 }
 
+std::span<const u8> Renderer::uniforms_for(const Shader& shader, const std::vector<u8>& bytes) {
+    if (shader.uniform_buffers() == 0) return {};
+    // Older bundles don't describe their block: the material's bytes as they are.
+    if (shader.block_size() == 0) return bytes;
+    uniform_scratch_ = shader.defaults();
+    if (uniform_scratch_.size() < bytes.size()) uniform_scratch_.resize(bytes.size());
+    std::memcpy(uniform_scratch_.data(), bytes.data(), bytes.size());
+    if (shader.time_) {
+        f32 t[4] = {static_cast<f32>(time_), time_delta_, static_cast<f32>(frame_ % 16777216), 0};
+        ShaderBundle::write(uniform_scratch_, *shader.time_, t);
+    }
+    if (shader.screen_) {
+        f32 w = std::max(target_size_.x, 1.0f), h = std::max(target_size_.y, 1.0f);
+        f32 v[4] = {w, h, 1.0f / w, 1.0f / h};
+        ShaderBundle::write(uniform_scratch_, *shader.screen_, v);
+    }
+    return uniform_scratch_;
+}
+
 void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& passes, SDL_GPUTextureFormat format,
                             std::array<SDL_GPUTexture*, 3> extras) {
+    static const std::vector<u8> no_uniforms;
     SDL_GPUGraphicsPipeline* bound = nullptr;
     SDL_GPUBuffer* bound_buffer = nullptr;
     for (const Pass& p : passes) {
         SDL_GPUBuffer* buffer = p.buffer ? p.buffer : sprite_buffer_;
         if (!buffer) continue;
-        const Shader* fs = sprite_fs_.get();
-        if (p.material && p.material->fragment) fs = p.material->fragment.get();
-        SDL_GPUGraphicsPipeline* pipe = pipeline(*sprite_vs_, *fs, format, p.blend);
-        if (!pipe) continue;
-        if (pipe != bound) {
-            SDL_BindGPUGraphicsPipeline(pass, pipe);
-            bound = pipe;
-            bound_buffer = nullptr;
-        }
-        if (buffer != bound_buffer) {
-            SDL_BindGPUVertexStorageBuffers(pass, 0, &buffer, 1);
-            bound_buffer = buffer;
-        }
         struct {
             Mat4 view_projection;
             u32 draw[4];
         } camera{p.view_projection, {0, 0, 0, 0}};
-        if (p.material && !p.material->uniforms.empty() && fs->uniform_buffers() > 0)
-            SDL_PushGPUFragmentUniformData(cmd_, 0, p.material->uniforms.data(),
-                                           static_cast<u32>(p.material->uniforms.size()));
-        u32 sampler_count = std::clamp(fs->samplers(), 1u, 4u);
+        const Material* pushed = nullptr; // whose uniforms the shader has now
+        bool any_pushed = false;
         for (u32 i = p.first_draw; i < p.first_draw + p.draw_count; ++i) {
             const Draw& draw = draws_[i];
+            // The sprites' own material, or the pass's.
+            const Material* m = draw.material ? draw.material : p.material;
+            const Shader* fs = m && m->fragment ? m->fragment.get() : sprite_fs_.get();
+            BlendMode blend = m && m->blend && &passes != &light_passes_ ? *m->blend : p.blend;
+            SDL_GPUGraphicsPipeline* pipe = pipeline(*sprite_vs_, *fs, format, blend);
+            if (!pipe) continue;
+            if (pipe != bound) {
+                SDL_BindGPUGraphicsPipeline(pass, pipe);
+                bound = pipe;
+                bound_buffer = nullptr;
+                any_pushed = false;
+            }
+            if (buffer != bound_buffer) {
+                SDL_BindGPUVertexStorageBuffers(pass, 0, &buffer, 1);
+                bound_buffer = buffer;
+            }
+            if (fs->uniform_buffers() > 0 && (!any_pushed || pushed != m)) {
+                auto u = uniforms_for(*fs, m ? m->uniforms : no_uniforms);
+                if (!u.empty()) SDL_PushGPUFragmentUniformData(cmd_, 0, u.data(), static_cast<u32>(u.size()));
+                pushed = m;
+                any_pushed = true;
+            }
+            u32 sampler_count = std::clamp(fs->samplers(), 1u, 4u);
             SDL_GPUTextureSamplerBinding bindings[4];
             bindings[0] = {draw.texture, draw.filter == Filter::Nearest ? nearest_ : linear_};
             for (u32 b = 1; b < sampler_count; ++b) {
-                const Texture* extra = p.material ? p.material->textures[b - 1] : nullptr;
+                const Texture* extra = m ? m->textures[b - 1] : nullptr;
                 if (extra) bindings[b] = {extra->handle(), extra->filter() == Filter::Nearest ? nearest_ : linear_};
                 else if (extras[b - 1]) bindings[b] = {extras[b - 1], linear_};
                 else bindings[b] = {white_->handle(), nearest_};
@@ -536,7 +566,7 @@ void Renderer::end_frame() {
                 const SDL_GPUTexture* in[4] = {current, white_->handle(), white_->handle(), white_->handle()};
                 for (int i = 0; i < 3; ++i)
                     if (e.material->textures[i]) in[i + 1] = e.material->textures[i]->handle();
-                const auto& uniforms = e.material->uniforms;
+                auto uniforms = uniforms_for(*e.material->fragment, e.material->uniforms);
                 usize samplers = std::clamp(e.material->fragment->samplers(), 1u, 4u);
                 fullscreen(out, true, *e.material->fragment, format, BlendMode::Opaque, std::span(in, samplers),
                            uniforms.empty() ? nullptr : uniforms.data(), static_cast<u32>(uniforms.size()));

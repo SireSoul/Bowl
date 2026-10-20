@@ -39,7 +39,8 @@ The engine handles graphics, audio, input, physics, saving, and other core syste
 - **Live asset updates:** Change textures, maps, and shaders without restarting the game.
 - **Game code hot reload:** Update C++ code while keeping the current world loaded.
 - **In-game developer overlay:** Inspect objects, monitor performance, view logs, and control game execution.
-- **Bowl Editor:** Create levels, edit game data, and work with pixel art.
+- **Bowl Editor:** Create levels, edit game data, work with pixel art, and make materials (glow and normal maps) and
+  shaders, as code that compiles as you type or as a graph of nodes, previewed live under a light.
 - **Attach to a running game:** Bowl Editor's Game tab shows its profiler, which systems read and write what, and its
   entities, whose components change as you edit them.
 - **Built-in profiling:** Find performance problems and monitor how the engine runs.

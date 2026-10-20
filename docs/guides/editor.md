@@ -1,7 +1,8 @@
 # Bowl Editor
 
 Bowl Editor is where a game's content is made without code: its items, people, events and maps as forms (from a
-schema the game writes), its pixel art in a painting studio, and, for games that use them, levels (`.world` files).
+schema the game writes), its pixel art in a painting studio, how things look (materials with glow and normal maps, and
+shaders written as code or joined as nodes), and, for games that use them, levels (`.world` files).
 It draws with the game's own renderer, so what you see is what the game shows, and a running game picks up every save.
 
 <p align="center"><img src="../images/editor.png" width="90%" alt="Bowl Editor with a level open and a pillar selected"></p>
@@ -20,6 +21,7 @@ The editor is built with the engine in dev builds (`build/dev/editor/bowl-editor
 | `--assets <folder>` | Where the art is. By default, the `assets` folder the level is in, or `./assets` |
 | `--game <library>` | The game's hot-reload code library, so the game's own components can be added and edited. On Windows, `<game>_editor_code.dll` |
 | `--paint [picture]` | Start in the Paint workspace with that picture (an asset path) open, or the first |
+| `--materials [file]` | Start in the Materials workspace with that material, shader or shader graph open, or the first material |
 | `--data` | Start with the data files as text, the first one open |
 | `--content [collection [id]]` | Start in the Content workspace, on that collection and record |
 | `--select <name>` | Select the thing with this name at startup |
@@ -31,13 +33,13 @@ key; **F1** lists every key.
 
 ## The screen
 
-The tabs at the top left are the workspaces a project uses: **Content** (Ctrl+1) and **Paint** (Ctrl+2) always,
-**Level** (Ctrl+3) when the assets have `.world` files (or one was opened), and **Game** (Ctrl+4) while a game is
-running. The data files as JSON text (Ctrl+5) open from a record's text button or the search. Without a level to open,
+The tabs at the top left are the workspaces a project uses: **Content** (Ctrl+1), **Paint** (Ctrl+2) and
+**Materials** (Ctrl+6) always, **Level** (Ctrl+3) when the assets have `.world` files (or one was opened), and **Game**
+(Ctrl+4) while a game is running. The data files as JSON text (Ctrl+5) open from a record's text button or the search. Without a level to open,
 the editor starts in Content.
 
-At the top right: **Search** (**Ctrl+K**, from any workspace) finds any record, picture, map or sound by name, and
-commands; **Save all** appears when anything, anywhere, is unsaved; and help (F1).
+At the top right: **Search** (**Ctrl+K**, from any workspace) finds any record, picture, map, sound, material or shader
+by name, and commands; **Save all** appears when anything, anywhere, is unsaved; and help (F1).
 
 The rest of this section is the Level workspace.
 
@@ -115,9 +117,9 @@ the Outline shows that thing.
 
 - **Name**, at the top: shown in the Outline, and a way for the game to find things.
 - **Place:** position, turn (in degrees) and scale, with Mirror and Reset.
-- **Art:** the picture (Change..., or drop one from the shelf onto the preview), a tint color, shown or hidden, natural
-  size or a size of its own, where it stands, whether it sorts by height (lower on screen draws in front), and its
-  draw order.
+- **Art:** the picture (Change..., or drop one from the shelf onto the preview), its **material** (a menu of them; **+**
+  makes one for the picture and opens it in the Materials workspace), a tint color, shown or hidden, natural size or a
+  size of its own, where it stands, whether it sorts by height (lower on screen draws in front), and its draw order.
 - **Other components** each get a card with their fields and a remove button. **+ Add** gives the thing any component
   the editor knows: the engine's (Art, Particles) and, with `--game`, the game's own.
 
@@ -147,6 +149,12 @@ Every `physics::Collider` in the level is drawn on it: triggers (regions) tinted
 - **Resizing:** select a box or circle collider and drag its handles; the opposite corner stays put, and the grid
   applies.
 - Everything else about a collider (its kind, a polygon's points, triggers, layers) is in its card on the right.
+
+## Seeing it in the dark
+
+The level draws materials as the game does: their shaders, and their glow over everything. The **light preview** (the
+bulb in the top bar, or **L**) darkens the level and puts a light at the mouse, so glow blooms, normal maps catch the
+light and shadows fall the way they will at night.
 
 ## Painting where it stands
 
@@ -385,6 +393,9 @@ the right the second; **X** swaps them.
   **K** the pixel grid. A **tile grid** draws brighter lines every 8 to 64 pixels; **tiled mode** (Aseprite's) shows
   the picture repeated around itself and wraps strokes round its edges, for tiles that join up.
 
+A material's map (a picture named `..._emissive`, `_glow`, `_normal`, `_n` or `_mask`, with its picture beside it) shows
+that picture faintly beneath it, to paint over; **Image** turns it off and sets how faint.
+
 **Ctrl+S** writes the PNG the game reads; every stroke already shows in a level and on the game's texture. An
 animation saves as a **sprite sheet**: its frames side by side, with Aseprite's JSON beside it (`hero.png` and
 `hero.json`: frames, times and tags), which the engine's sprite sheets read, so a character drawn here walks in the
@@ -392,6 +403,85 @@ game. Opening a PNG with such a JSON beside it (from Aseprite too) opens its fra
 JSON (slices, a pivot for the feet) is kept when it's saved. A picture with more than one layer keeps them (and its
 frames) in `art-layers/` beside the assets folder (never shipped), with a fingerprint of its PNG: if the PNG is
 repainted in another program, it opens as it is instead. Switching pictures or closing the editor saves unsaved paint.
+
+## The Materials workspace
+
+The **Materials** tab (**Ctrl+6**) is how things look. Materials and shaders are listed on the left (**+** makes one);
+what's open is in the middle, and on the right.
+
+### Materials
+
+A material (a `.material` file) is a picture's look beyond its pixels: a shader of its own, a glow, a normal map and a
+shadow. Put it on a placed picture from the Level's Art card, or name it in the game (see
+[rendering.md](rendering.md#material-files)). It opens as a form beside a **preview** drawn by the game's renderer:
+
+- **The preview** shows it on its picture (**Shown on**, which only the editor reads; in the game it's the sprite's own
+  picture), lit, under a light: **drag** in the preview to move the light, right or middle drag moves the view, the
+  wheel zooms. Across the top: **Lit** (as the game draws it), **Color** (without the light and glow), **Glow** and
+  **Normals** (each map on its own), the light on or off, **bloom** on or off, and the light's color, size and height
+  and the dark around it (the gear).
+- **Shader:** the plain sprite shader, or one of yours; the code button opens it, **+** makes a new one for this
+  material. **Blend:** alpha, additive, multiply or opaque.
+- **Parameters:** the shader's, each with the control its comment asks for (a color, a slider with its range) and its
+  help on the name. A name in a dimmer color isn't in the file: the shader's default shows, and changing it writes it.
+  Right-click a name to go back to the default. The shader's extra textures are picked below them.
+- **Glow:** where it shines in the dark and blooms: lamps, eyes, screens, lava. A glow **map** (bright where it glows,
+  black or see-through where it doesn't) or none, when the picture itself glows where it's bright; its **color** and
+  **strength** (above 1 is brighter than white). **Make from the picture...** makes the map by clicking the picture's
+  colors that glow, or everything above a brightness, shown in the preview as you choose; **Save** writes
+  `<picture>_emissive.png` beside the picture. **New blank** makes an empty one to paint, and **Paint** opens the map in
+  the Paint workspace with the picture faintly beneath it.
+- **Normal map:** which way each pixel faces, so lights shade its bumps. **Make from the picture...** builds one from
+  the picture's shape (its edges bevel down: how far, how steep, bumps or dents) and brightness, shown under the light
+  as you change it, and saves `<picture>_normal.png`. Paint it like the glow map.
+- **Shadow:** none, its shape blocks light, or faint (blocks nothing and is never shadowed: the upright part of
+  something whose footprint casts the shadow).
+
+**Ctrl+S** saves, **Ctrl+Z** and **Ctrl+Shift+Z** undo and redo, and the text button opens the file as JSON. Edits keep
+the file's comments and layout, and a running game picks up the save.
+
+### Shaders as code
+
+A `.frag.glsl` shader opens in a **code editor**: colored, with line numbers, auto-indent, and tabs typed as spaces. It
+compiles as you type: problems are marked on their lines (rest the mouse on the line number for the message) and
+listed under the code (click one to go there), and the preview beside it shows the last version that compiled, on a
+picture you pick (or a test gem). Its parameters have test values under the preview; **Make a material with it** makes
+a material using the shader with those values. **Ctrl+S** saves, and every material using it changes, in the editor and
+in a running game. A new shader starts from an example: a tint, a shimmer and its speed, as parameters.
+
+Members of the shader's `Params` block are its parameters, described by the comment after each (see
+[shaders.md](shaders.md#parameters-and-what-the-editor-shows)).
+
+### Shader graphs
+
+A **shader graph** (a `.shadergraph` file) is a shader made by joining nodes, without code. **Right-click** the canvas
+to add a node (type to find one), drag from an output to an input to join them (dragging into nothing adds a node
+there, already joined), drag a joined input to move or remove its link. Click a node to change its settings and the
+values of inputs nothing's joined to, on the right; drag nodes to move them, drag on empty space to pick several,
+**Delete** removes them, **Ctrl+D** copies them, **F** shows everything; the wheel zooms, the middle or right button
+moves the view.
+
+The nodes:
+
+| Group | Nodes |
+| --- | --- |
+| Input | UV, sprite color, texture (the sprite's own, or an extra one the material picks), time, screen position, texture size, number, color, vector |
+| Parameters | A number, color or vector each material sets for itself, with its name, default, slider range and help |
+| Math | Add, subtract, multiply, divide, power, minimum, maximum, modulo, step, smooth step, clamp, mix, remap, one minus, negate, absolute, floor, ceiling, round, fraction, square root, sine, cosine, saturate, sign, length, distance, dot product, normalize |
+| Vector | Split, combine |
+| UV | Tiling and offset, rotate, scroll, wave, polar, pixelate |
+| Pattern | Noise (smooth or cloudy), cells (Voronoi), random, checkerboard, gradient, circle, stripes |
+| Color | Hue, saturation and brightness, brightness, desaturate, posterize, contrast, rainbow, blend (normal, multiply, screen, add, overlay) |
+| Effect | Outline, dissolve (with a glowing edge), flicker |
+| Output | The sprite's color, its alpha, and glow added on top |
+
+Pins are colored by what they carry: grey a number, green a vector (like a UV), yellow a color without alpha, pink a
+color. Any output joins any input, the way GLSL's own arithmetic works: a number with a color affects every part of it,
+and a vector feeding a number gives its first part. Colors are straight (not premultiplied) inside a graph.
+
+Saving writes the graph and, beside it, the GLSL it makes (`water.shadergraph` writes `water.frag.glsl`, which is
+`shaders/water.frag` to a material); the build compiles it like any other shader. **The code it makes** shows that
+GLSL. The preview, test values and **Make a material with it** work as for code.
 
 ## Saving and safety
 

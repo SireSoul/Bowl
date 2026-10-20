@@ -4,6 +4,7 @@
 #include "bowl/gfx/device.hpp"
 
 #include <array>
+#include <optional>
 #include <type_traits>
 #include <vector>
 
@@ -52,13 +53,16 @@ enum class BlendMode : u8 {
     Opaque,   // overwrite
 };
 
-// A custom look for a batch: your own fragment shader instead of the sprite shader. It receives the sprite shader's
-// outputs (location 0: vec2 uv, location 1: vec4 premultiplied color), the sprite texture at set 2 binding 0, up to
-// three extra textures at bindings 1-3, and `uniforms` (std140) at set 3 binding 0.
+// A custom look for a batch, or for single sprites in one: your own fragment shader instead of the sprite shader. It
+// receives the sprite shader's outputs (location 0: vec2 uv, location 1: vec4 premultiplied color), the sprite texture
+// at set 2 binding 0, up to three extra textures at bindings 1-3, and `uniforms` (std140) at set 3 binding 0. Where
+// `uniforms` is shorter than the shader's block (or empty), the rest comes from the defaults the shader's comments
+// give, and members named `bowl_time` and `bowl_screen` are filled in by the renderer (see shaders.md).
 struct Material {
     Asset<Shader> fragment;
     std::array<const Texture*, 3> textures{}; // extra textures; null slots get a white texture
     std::vector<u8> uniforms;                 // at most 256 bytes; use set_uniforms with a std140-shaped struct
+    std::optional<BlendMode> blend;           // instead of the batch's blend mode
 
     template <class T> void set_uniforms(const T& data) {
         static_assert(std::is_trivially_copyable_v<T> && sizeof(T) <= 256 && sizeof(T) % 16 == 0,
@@ -75,9 +79,11 @@ public:
                const Material* material = nullptr);
     void draw(const Texture& texture, const SpriteInstance& sprite);
     // Null texture: a solid quad in sprite.color.
-    void draw(const Texture* texture, const SpriteInstance& sprite) {
-        sprites_.push_back(sprite);
-        textures_.push_back(texture);
+    void draw(const Texture* texture, const SpriteInstance& sprite) { push(texture, sprite, nullptr); }
+    // With a material of its own instead of the batch's (null: the batch's). Sprites with different materials still
+    // sort together; each change of material costs a draw call. Keep the material alive until the frame is drawn.
+    void draw(const Texture* texture, const SpriteInstance& sprite, const Material* material) {
+        push(texture, sprite, material);
     }
     // Convenience: a texture at its pixel size, centered at position.
     void draw(const Texture& texture, Vec2 position, Color color = Color::white(), f32 depth = 0);
@@ -107,7 +113,15 @@ private:
     BlendMode blend_ = BlendMode::Alpha;
     const Material* material_ = nullptr;
     std::vector<SpriteInstance> sprites_;
-    std::vector<const Texture*> textures_; // nullptr = the renderer's white texture
+    std::vector<const Texture*> textures_;   // nullptr = the renderer's white texture
+    std::vector<const Material*> materials_; // each sprite's own; empty until one has one
+    void push(const Texture* texture, const SpriteInstance& sprite, const Material* material) {
+        if (material && materials_.empty()) materials_.resize(sprites_.size(), nullptr);
+        sprites_.push_back(sprite);
+        textures_.push_back(texture);
+        if (!materials_.empty()) materials_.push_back(material);
+    }
+    const Material* material_of(usize i) const { return materials_.empty() ? nullptr : materials_[i]; }
 };
 
 // Sprites uploaded to GPU memory once and then drawn every frame without being sent again: the ground of a big map,
@@ -129,7 +143,8 @@ private:
     friend class Renderer;
     struct Run {
         u32 first, count;
-        const Texture* texture; // null: the white texture
+        const Texture* texture;   // null: the white texture
+        const Material* material; // null: the one it's drawn with
     };
     GpuDevice* device_ = nullptr;
     SDL_GPUBuffer* buffer_ = nullptr;

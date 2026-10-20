@@ -33,7 +33,15 @@ SpriteInstance instance_of(const Sprite& s, const ecs::GlobalTransform2D& g) {
 void draw_sprites(ecs::World& world, SpriteBatch& batch, const std::function<bool(ecs::Entity)>& skip) {
     world.each<const Sprite, const ecs::GlobalTransform2D>(
         [&](ecs::Entity e, const Sprite& s, const ecs::GlobalTransform2D& g) {
-            if (s.visible && !(skip && skip(e))) batch.draw(s.texture.get(), instance_of(s, g));
+            if (s.visible && !(skip && skip(e)))
+                batch.draw(s.texture.get(), instance_of(s, g), s.material ? s.material->look() : nullptr);
+        });
+}
+
+void draw_sprites(ecs::World& world, SpriteLayers& layers, const std::function<bool(ecs::Entity)>& skip) {
+    world.each<const Sprite, const ecs::GlobalTransform2D>(
+        [&](ecs::Entity e, const Sprite& s, const ecs::GlobalTransform2D& g) {
+            if (s.visible && !(skip && skip(e))) layers.draw(s.texture.get(), instance_of(s, g), s.material.get());
         });
 }
 

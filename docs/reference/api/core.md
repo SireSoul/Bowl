@@ -1273,7 +1273,7 @@ void warn(std::string message);
 ```
 
 What can be saved: bool, numbers, enums (as numbers), std::string, Vec2/3/4, Color, Rect, std::vector, std::array,
-std::optional, Asset&lt;T> (as its path), reflected structs (as objects), and any type with ADL hooks
+std::set (as a list), std::map with string keys (as an object), std::optional, Asset&lt;T> (as its path), reflected structs (as objects), and any type with ADL hooks
 ```cpp
 json::Value bowl_to_json(const T&, serial::Context&);
 bool bowl_from_json(const json::Value&, T&, serial::Context&);
@@ -1310,6 +1310,34 @@ template <class T> struct is_array : std::false_type {
 
 ```cpp
 template <class T, usize N> struct is_array<std::array<T, N>> : std::true_type {
+};
+```
+
+### is_set
+
+```cpp
+template <class T> struct is_set : std::false_type {
+};
+```
+
+### is_set
+
+```cpp
+template <class T, class C, class A> struct is_set<std::set<T, C, A>> : std::true_type {
+};
+```
+
+### is_string_map
+
+```cpp
+template <class T> struct is_string_map : std::false_type {
+};
+```
+
+### is_string_map
+
+```cpp
+template <class T, class C, class A> struct is_string_map<std::map<std::string, T, C, A>> : std::true_type {
 };
 ```
 
@@ -1355,7 +1383,7 @@ concept Serializable = std::is_same_v<T, json::Value> || std::is_arithmetic_v<T>
                        std::is_same_v<T, std::string> ||
                        std::is_same_v<T, Vec2> || std::is_same_v<T, Vec3> || std::is_same_v<T, Vec4> ||
                        std::is_same_v<T, Color> || std::is_same_v<T, Rect> || is_vector<T>::value ||
-                       is_array<T>::value || is_optional<T>::value || is_asset<T>::value || reflect::Reflected<T> ||
+                       is_array<T>::value || is_set<T>::value || is_string_map<T>::value || is_optional<T>::value || is_asset<T>::value || reflect::Reflected<T> ||
                        HasHooks<T>;
 ```
 
@@ -1428,7 +1456,12 @@ struct ShaderBundle
 
 ```cpp
 static constexpr u32 magic = 0x48535742; // "BWSH"
-static constexpr u32 format_version = 2; // 2 added the compute fields; version 1 bundles still load
+```
+
+2 added the compute fields, 3 the uniform block's layout and texture names; older bundles still load.
+
+```cpp
+static constexpr u32 format_version = 3;
 ```
 
 #### Blob
@@ -1456,6 +1489,67 @@ u32 readwrite_storage_textures = 0;
 u32 readwrite_storage_buffers = 0;
 u32 threads[3] ={1, 1, 1}; // local_size_x/y/z
 std::vector<Blob> blobs;
+```
+
+What a material needs to fill the uniform block at binding 0 and the textures by name, read from the shader:
+each member's place in the block, and what a comment after its declaration says about it:
+
+```cpp
+vec4 glow;    // color = 1, 0.6, 0.2, 1   The glow's color
+float speed;  // = 2 [0, 10]              How fast it moves
+```
+`color` shows it as a color, `= ...` is its value when a material doesn't set it (one number fills every
+component; a color's missing alpha is 1), `[lo, hi]` its range, and the rest says what it's for.
+
+```cpp
+enum class ValueType : u32 { Float, Vec2, Vec3, Vec4, Int, IVec2, IVec3, IVec4, UInt, Mat4, Other };
+```
+
+#### Uniform
+
+```cpp
+struct Uniform {
+    std::string name;
+    ValueType type = ValueType::Float;
+    u32 offset = 0, size = 0; // bytes within the block (size covers every element of an array)
+    u32 count = 1;            // array elements
+    bool has_default = false;
+    bool color = false;
+    f32 value[4] ={};        // the default
+    f32 min = 0, max = 0;     // a range when max > min
+    std::string help;
+};
+```
+
+#### TextureSlot
+
+```cpp
+struct TextureSlot {
+    std::string name; // as the shader calls it ("u_noise")
+    std::string help;
+};
+```
+
+```cpp
+u32 block_size = 0;                // bytes in the uniform block at binding 0 (0: none)
+std::vector<Uniform> uniforms;     // its members, in order
+std::vector<TextureSlot> textures; // sampled textures, by binding
+```
+
+```cpp
+const Uniform* uniform(std::string_view name) const;
+```
+
+Numbers in a value of this type (16 for a mat4; 0 for types a material can't set).
+
+```cpp
+static u32 components(ValueType t);
+```
+
+Writes a value (as many numbers as its type has; missing ones are 0) into a uniform block at its offset.
+
+```cpp
+static void write(std::span<u8> block, const Uniform& u, std::span<const f32> values);
 ```
 
 ```cpp

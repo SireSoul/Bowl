@@ -397,6 +397,47 @@ void draw_icon(ImDrawList* l, Icon icon, ImVec2 c, float size, ImU32 col) {
         line(-0.35f, -0.15f, 0.25f, 0.45f);
         break;
     }
+    case Icon::Material: // a lit ball: a circle with a highlight
+        l->AddCircle(c, h * 0.78f, col, 24, t);
+        l->AddCircleFilled(P(-0.28f, -0.28f), h * 0.2f, col, 12);
+        l->PathArcTo(c, h * 0.5f, 0.3f, 1.6f, 10);
+        l->PathStroke(col, 0, t);
+        break;
+    case Icon::Code: // </>
+        line(-0.35f, -0.55f, -0.8f, 0);
+        line(-0.8f, 0, -0.35f, 0.55f);
+        line(0.35f, -0.55f, 0.8f, 0);
+        line(0.8f, 0, 0.35f, 0.55f);
+        line(0.15f, -0.7f, -0.15f, 0.7f);
+        break;
+    case Icon::Graph: // two nodes joined by a curve
+        box(-0.9f, -0.75f, -0.25f, -0.2f);
+        box(0.25f, 0.2f, 0.9f, 0.75f);
+        l->AddBezierCubic(P(-0.25f, -0.47f), P(0.2f, -0.47f), P(-0.2f, 0.47f), P(0.25f, 0.47f), col, t);
+        break;
+    case Icon::Light: // a bulb
+        l->AddCircle(P(0, -0.2f), h * 0.55f, col, 20, t);
+        line(-0.25f, 0.45f, 0.25f, 0.45f);
+        line(-0.18f, 0.72f, 0.18f, 0.72f);
+        break;
+    case Icon::Glow: // a sun: a disc and rays
+        l->AddCircleFilled(c, h * 0.32f, col, 16);
+        for (int k = 0; k < 8; ++k) {
+            float a = static_cast<float>(k) * 0.785398f, ca = std::cos(a), sa = std::sin(a);
+            line(ca * 0.55f, sa * 0.55f, ca * 0.85f, sa * 0.85f);
+        }
+        break;
+    case Icon::Bump: { // a bumpy surface lit from one side
+        ImVec2 pts[7];
+        for (int k = 0; k < 7; ++k) {
+            float x = -0.85f + static_cast<float>(k) * 0.283f;
+            pts[k] = P(x, 0.25f - 0.35f * std::abs(std::sin(x * 3.6f)));
+        }
+        l->AddPolyline(pts, 7, col, 0, t);
+        line(-0.85f, 0.6f, 0.85f, 0.6f);
+        line(0.55f, -0.85f, 0.25f, -0.45f);
+        break;
+    }
     case Icon::Region: // a dashed area
         for (float s = -0.75f; s < 0.7f; s += 0.5f) {
             line(s, -0.75f, s + 0.25f, -0.75f);

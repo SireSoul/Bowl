@@ -388,7 +388,21 @@ std::unique_ptr<Shader> GpuDevice::create_shader(const ShaderBundle& bundle, std
     s->samplers_ = bundle.samplers;
     s->uniform_buffers_ = bundle.uniform_buffers;
     s->id_ = next_texture_id.fetch_add(1, std::memory_order_relaxed); // shared counter: ids just need to be unique
+    s->block_size_ = bundle.block_size;
+    s->uniforms_ = bundle.uniforms;
+    s->textures_ = bundle.textures;
+    s->defaults_.assign(bundle.block_size, 0);
+    for (const ShaderBundle::Uniform& u : s->uniforms_)
+        if (u.has_default) ShaderBundle::write(s->defaults_, u, u.value);
+    s->time_ = s->uniform("bowl_time");
+    s->screen_ = s->uniform("bowl_screen");
     return s;
+}
+
+const ShaderBundle::Uniform* Shader::uniform(std::string_view name) const {
+    for (const ShaderBundle::Uniform& u : uniforms_)
+        if (u.name == name) return &u;
+    return nullptr;
 }
 
 bool GpuDevice::upload(SDL_GPUBuffer* buffer, const void* data, u32 size, u32 offset) {

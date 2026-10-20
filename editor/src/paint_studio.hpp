@@ -164,6 +164,10 @@ private:
     bool tiled_ = false;     // the picture repeated around itself, strokes wrapping round its edges (for tiles)
     i32 tile_grid_ = 0;      // brighter lines every so many pixels (0: none)
     bool onion_ = false;     // the frames before and after, faint
+    // A material's map (x_emissive.png, x_normal.png) is painted over its picture (x.png), shown faintly beneath.
+    std::string reference_;
+    bool show_reference_ = true;
+    f32 reference_opacity_ = 0.45f;
     std::unique_ptr<gfx::Texture> onion_view_;
     std::vector<std::unique_ptr<gfx::Texture>> thumbs_; // each frame's picture, for the timeline and preview
     bool thumbs_stale_ = true;

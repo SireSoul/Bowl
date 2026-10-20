@@ -31,7 +31,9 @@ enum class Icon {
     Person, Bag, Shop, Bolt, Map, Note, Gear, Search, ArrowUp, ArrowDown, Play, Link,
     // Paint tools
     Wand, Bucket, Pipette, Line, Rect, Circle, Gradient, Shade, Eraser, Lasso, Recolor, Dither, Spray, Blur, Polygon, Curve,
-    Text, Onion, Tiles, Frames
+    Text, Onion, Tiles, Frames,
+    // The Materials workspace
+    Material, Code, Graph, Light, Glow, Bump
 };
 
 void apply_theme();
