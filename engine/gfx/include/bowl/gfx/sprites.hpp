@@ -103,6 +103,10 @@ public:
 
     usize size() const { return sprites_.size(); }
     const Camera2D& camera() const { return camera_; }
+    // Samples every texture in the batch (a material's too) with this filter instead of the texture's own; none goes
+    // back to each texture's. Kept until changed. Nearest shows small pixel art sharp however far it's zoomed in.
+    void set_filter(std::optional<Filter> filter) { filter_ = filter; }
+    std::optional<Filter> filter() const { return filter_; }
 
 private:
     friend class Renderer;
@@ -112,6 +116,7 @@ private:
     SpriteSort sort_ = SpriteSort::Depth;
     BlendMode blend_ = BlendMode::Alpha;
     const Material* material_ = nullptr;
+    std::optional<Filter> filter_;
     std::vector<SpriteInstance> sprites_;
     std::vector<const Texture*> textures_;   // nullptr = the renderer's white texture
     std::vector<const Material*> materials_; // each sprite's own; empty until one has one

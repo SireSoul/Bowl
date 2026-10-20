@@ -280,6 +280,7 @@ void Renderer::record(const SpriteBatch& batch, std::vector<Pass>& passes) {
     usize n = batch.sprites_.size();
     sprite_order(batch, order_);
     Pass pass{batch.camera_.view_projection(), static_cast<u32>(draws_.size()), 0, batch.blend_, batch.material_};
+    pass.filter = batch.filter_;
     u32 base = static_cast<u32>(frame_sprites_.size());
     frame_sprites_.reserve(frame_sprites_.size() + n);
     for (u32 k = 0; k < n; ++k) {
@@ -398,10 +399,11 @@ void Renderer::draw_sprites(SDL_GPURenderPass* pass, const std::vector<Pass>& pa
             }
             u32 sampler_count = std::clamp(fs->samplers(), 1u, 4u);
             SDL_GPUTextureSamplerBinding bindings[4];
-            bindings[0] = {draw.texture, draw.filter == Filter::Nearest ? nearest_ : linear_};
+            auto sampler = [&](Filter own) { return p.filter.value_or(own) == Filter::Nearest ? nearest_ : linear_; };
+            bindings[0] = {draw.texture, sampler(draw.filter)};
             for (u32 b = 1; b < sampler_count; ++b) {
                 const Texture* extra = m ? m->textures[b - 1] : nullptr;
-                if (extra) bindings[b] = {extra->handle(), extra->filter() == Filter::Nearest ? nearest_ : linear_};
+                if (extra) bindings[b] = {extra->handle(), sampler(extra->filter())};
                 else if (extras[b - 1]) bindings[b] = {extras[b - 1], linear_};
                 else bindings[b] = {white_->handle(), nearest_};
             }

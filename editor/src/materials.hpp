@@ -181,6 +181,10 @@ private:
     bool fit_ = true;
     View view_ = View::Lit;
     bool lighting_ = true, bloom_ = true;
+    // Sharp pixels (nearest filtering) or smooth; none: sharp for pictures up to 256 pixels across. sharp_now_ is which,
+    // for the picture shown.
+    std::optional<bool> sharp_;
+    bool sharp_now_ = true;
     Color ambient_{0.32f, 0.34f, 0.42f, 1};
     Color light_color_{1.0f, 0.86f, 0.62f, 1};
     f32 light_radius_ = 96, light_height_ = 0.35f;

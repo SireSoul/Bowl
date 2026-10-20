@@ -506,6 +506,12 @@ Submits each layer that has something in it.
 void submit(Renderer& renderer) const;
 ```
 
+SpriteBatch::set_filter for every layer.
+
+```cpp
+void set_filter(std::optional<Filter> filter);
+```
+
 The name of a blend mode in material files ("alpha", "additive", "multiply", "opaque"), and back.
 
 ```cpp
@@ -1293,6 +1299,14 @@ void draw_nine_slice(const Texture& texture, Rect source, Rect dest, Vec4 insets
 ```cpp
 usize size() const;
 const Camera2D& camera() const;
+```
+
+Samples every texture in the batch (a material's too) with this filter instead of the texture's own; none goes
+back to each texture's. Kept until changed. Nearest shows small pixel art sharp however far it's zoomed in.
+
+```cpp
+void set_filter(std::optional<Filter> filter);
+std::optional<Filter> filter() const;
 ```
 
 ### StaticSprites

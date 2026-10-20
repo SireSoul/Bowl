@@ -186,6 +186,10 @@ void SpriteLayers::draw(const Texture* texture, const SpriteInstance& sprite, co
     }
 }
 
+void SpriteLayers::set_filter(std::optional<Filter> filter) {
+    for (SpriteBatch* b : {&scene, &emissive, &normals, &occluders}) b->set_filter(filter);
+}
+
 void SpriteLayers::submit(Renderer& renderer) const {
     if (scene.size()) renderer.submit(scene);
     if (emissive.size()) renderer.submit_emissive(emissive);

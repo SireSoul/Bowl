@@ -103,6 +103,8 @@ struct SpriteLayers {
     void draw(const Texture* texture, const SpriteInstance& sprite, const SpriteMaterial* material);
     // Submits each layer that has something in it.
     void submit(Renderer& renderer) const;
+    // SpriteBatch::set_filter for every layer.
+    void set_filter(std::optional<Filter> filter);
 };
 
 // The name of a blend mode in material files ("alpha", "additive", "multiply", "opaque"), and back.

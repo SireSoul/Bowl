@@ -195,6 +195,10 @@ void main() {
 - `blend`, when set, replaces the batch's blend mode for the material's sprites.
 - The material must outlive the frame it's submitted in; keep it as a member.
 
+`batch.set_filter(gfx::Filter::Nearest)` samples every texture in a batch (and its material's) with that filter
+instead of each texture's own, until it's changed: small pixel art stays sharp in a zoomed-in view of a game that
+otherwise smooths its textures.
+
 A material can also be given to single sprites, so they keep their place in the batch's depth order:
 `batch.draw(texture, sprite, &material)`. Sprites at the same depth are grouped by material, and each change of material
 is a draw call.

@@ -20,6 +20,8 @@ Notable changes to the engine. The format follows [Keep a Changelog](https://kee
   `gfx::Sprite` has a `material`; `gfx::SpriteLayers` and `draw_sprites(world, layers)` send each material's glow,
   normal map and shadow to the renderer's emissive, normal and occluder layers. See
   [Material files](docs/guides/rendering.md#material-files).
+- `SpriteBatch::set_filter` (and `SpriteLayers::set_filter`) samples a batch's textures with a filter of its choosing.
+  The Materials workspace's preview uses it to show small pictures with sharp pixels (a toggle in its bar).
 - A sprite can have a material of its own within a batch (`SpriteBatch::draw(texture, sprite, &material)`), keeping its
   place in the depth order; `Material::blend` overrides the batch's blend mode.
 - Shader parameters describe themselves: a comment after each member of the uniform block gives its default, its range,

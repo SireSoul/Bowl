@@ -96,6 +96,7 @@ void MaterialsWorkspace::init(Engine& engine, fs::path assets_dir, std::function
     Settings& prefs = engine.settings();
     lighting_ = prefs.get("editor.materials.lighting", true);
     bloom_ = prefs.get("editor.materials.bloom", true);
+    if (prefs.has("editor.materials.sharp")) sharp_ = prefs.get("editor.materials.sharp", true);
     ambient_ = prefs.get("editor.materials.ambient", ambient_);
     light_color_ = prefs.get("editor.materials.light_color", light_color_);
     light_radius_ = prefs.get("editor.materials.light_radius", light_radius_);
@@ -1075,7 +1076,7 @@ gfx::Camera2D MaterialsWorkspace::camera(Engine& engine) const {
     gfx::Camera2D cam = engine.camera();
     cam.zoom = zoom_;
     cam.rotation = 0;
-    cam.pixel_snap = false;
+    cam.pixel_snap = sharp_now_; // whole screen pixels, so sharp pixels stay even
     const ImGuiIO& io = ImGui::GetIO();
     Vec2 screen_center{io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f};
     cam.position = pan_ - (stage_.center() - screen_center) / zoom_;
@@ -1091,6 +1092,7 @@ const gfx::Texture* MaterialsWorkspace::stage_texture() {
 
 void MaterialsWorkspace::stage_panel(Engine& engine, Rect area) {
     const gfx::Texture* tex = stage_texture();
+    sharp_now_ = sharp_.value_or(!tex || std::max(tex->width(), tex->height()) <= 256);
     if (fit_ && tex && area.w > 32) {
         fit_ = false;
         f32 k = std::min(area.w * 0.55f / static_cast<f32>(tex->width()), (area.h - 40) * 0.55f / static_cast<f32>(tex->height()));
@@ -1152,6 +1154,15 @@ void MaterialsWorkspace::stage_panel(Engine& engine, Rect area) {
         ImGui::EndPopup();
     }
     ImGui::SameLine(0, 2);
+    if (ui::tool_button("sharp", ui::Icon::Grid, sharp_now_,
+                        "Sharp pixels: each picture pixel a crisp square however far it's zoomed in, as pixel-art games "
+                        "draw them. Off: smooth, for drawn or painted art. Small pictures start sharp",
+                        26)) {
+        sharp_ = !sharp_now_;
+        sharp_now_ = *sharp_;
+        engine.settings().set("editor.materials.sharp", *sharp_);
+    }
+    ImGui::SameLine(0, 2);
     if (ui::tool_button("fit", ui::Icon::Search, false, "Fit the picture in the preview", 26)) fit_ = true;
     if (area.w > 440) {
         ImGui::SameLine(0, 8);
@@ -1205,6 +1216,7 @@ void MaterialsWorkspace::render(Engine& engine) {
     const gfx::SpriteMaterial* m = kind_ == Kind::Material ? preview_.get() : try_material_.get();
     gfx::Camera2D cam = camera(engine);
     layers_.begin(cam);
+    layers_.set_filter(sharp_now_ ? std::optional<gfx::Filter>(gfx::Filter::Nearest) : std::nullopt);
 
     // A checkerboard behind it, over the preview's area.
     Vec2 a = cam.screen_to_world({stage_.x, stage_.y}), b = cam.screen_to_world({stage_.right(), stage_.bottom()});

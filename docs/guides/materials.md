@@ -52,8 +52,9 @@ and to bloom.
 7. **Save** with **Ctrl+S**.
 
 The preview's bar switches between **Lit** (as the game draws it), **Color** (no light or glow), **Glow** and
-**Normals** (each map alone). The bulb turns the light off and on, the sun turns bloom off and on, and the gear sets the
-light's color, size and height and how dark the rest is.
+**Normals** (each map alone). The bulb turns the light off and on, the sun turns bloom off and on, the gear sets the
+light's color, size and height and how dark the rest is, and the grid switches between sharp pixels (small pictures
+start that way) and smooth ones.
 
 To see it in a level, put the material on a placed picture (Level tab, Art card, **Material**) and press **L** for the
 light preview: the level goes dark and a light follows the mouse.

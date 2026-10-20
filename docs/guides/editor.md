@@ -421,8 +421,10 @@ shadow. Put it on a placed picture from the Level's Art card, or name it in the 
 - **The preview** shows it on its picture (**Shown on**, which only the editor reads; in the game it's the sprite's own
   picture), lit, under a light: **drag** in the preview to move the light, right or middle drag moves the view, the
   wheel zooms. Across the top: **Lit** (as the game draws it), **Color** (without the light and glow), **Glow** and
-  **Normals** (each map on its own), the light on or off, **bloom** on or off, and the light's color, size and height
-  and the dark around it (the gear).
+  **Normals** (each map on its own), the light on or off, **bloom** on or off, the light's color, size and height
+  and the dark around it (the gear), and **sharp pixels** (the grid): picture pixels as crisp squares however far it's
+  zoomed in, as pixel-art games draw them, or smooth. Pictures up to 256 pixels across start sharp; a choice is
+  remembered.
 - **Shader:** the plain sprite shader, or one of yours; the code button opens it, **+** makes a new one for this
   material. **Blend:** alpha, additive, multiply or opaque.
 - **Parameters:** the shader's, each with the control its comment asks for (a color, a slider with its range) and its

@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -184,6 +185,7 @@ private:
         BlendMode blend;
         const Material* material;
         SDL_GPUBuffer* buffer = nullptr; // null: this frame's sprites
+        std::optional<Filter> filter;    // instead of each texture's own (SpriteBatch::set_filter)
     };
     struct PipelineKey {
         u32 vertex, fragment;
