@@ -204,6 +204,8 @@ example. Writing shaders is covered in [shaders.md](shaders.md).
 
 ## Material files
 
+[Materials and shaders](materials.md) walks through making them in Bowl Editor and using them in a game.
+
 A `.material` file is a sprite's whole look as an asset: a shader with its parameters and textures, a glow (an emissive
 map), a normal map and a shadow. Bowl Editor's Materials workspace makes and edits them (and makes the maps); a game
 loads them:

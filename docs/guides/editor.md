@@ -407,7 +407,10 @@ repainted in another program, it opens as it is instead. Switching pictures or c
 ## The Materials workspace
 
 The **Materials** tab (**Ctrl+6**) is how things look. Materials and shaders are listed on the left (**+** makes one);
-what's open is in the middle, and on the right.
+what's open is in the middle, and on the right. [Materials and shaders](materials.md) walks through making a glowing
+lamp, a normal-mapped wall, a shader and a shader graph step by step; this section lists every control.
+
+<p align="center"><img src="../images/editor-materials.png" width="80%" alt="The Materials workspace with a lantern glowing under the preview's light"></p>
 
 ### Materials
 

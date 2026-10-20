@@ -18,7 +18,7 @@ One page per system.
 | [ECS](guides/ecs.md) | Entities, components, queries, command buffers, hooks, resources, hierarchy |
 | [Systems and scheduling](guides/systems.md) | Schedules, parallel systems, declared access, barriers, determinism |
 | [Rendering](guides/rendering.md) | Sprite batches, cameras, sorting, blend modes, materials, post-processing, 2D lighting |
-| [Shaders](guides/shaders.md) | Writing GLSL for the engine, descriptor sets, `bowl-shaderc`, live editing |
+| [Shaders](guides/shaders.md) | Writing GLSL for the engine, descriptor sets, parameters, `bowl-shaderc`, live editing |
 | [Assets](guides/assets.md) | Virtual paths, mounts, loaders, `Asset<T>`, hot reload, custom asset types |
 | [Text](guides/text.md) | Fonts, `draw_text`, sizing on high-DPI screens, wrapping, typewriter reveals |
 | [Sprite sheets and animation](guides/sprite-animation.md) | Aseprite export, `SpriteSheet`, `SpriteAnimator`, `draw_frame` |
@@ -35,7 +35,8 @@ One page per system.
 | [Jobs, logging and profiling](guides/jobs-and-profiling.md) | `JobSystem`, `parallel_for`, logging, profiler zones |
 | [Dev tools](guides/dev-tools.md) | The F1 overlay, the inspector, your own tool windows |
 | [Hot reload](guides/hot-reload.md) | Assets, shaders and game code while the game runs |
-| [Bowl Editor](guides/editor.md) | Laying out levels: placing art, groups, the inspector, the game's own components |
+| [Bowl Editor](guides/editor.md) | Content as forms, painting, materials and shaders, levels, attaching to a running game |
+| [Materials and shaders](guides/materials.md) | Glow and normal maps, writing shaders and building them from nodes, using them in a game |
 | [Packaging and shipping](guides/packaging.md) | Release builds, icons, signing and notarization, installers, AppImage, Flatpak, Steam Deck |
 | [Platforms](guides/platforms.md) | Backends, OS support, what's planned |
 | [Performance](guides/performance.md) | Where time goes and how to keep it low |
